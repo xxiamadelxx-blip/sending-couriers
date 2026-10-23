@@ -22,6 +22,7 @@ if android_jar is None or tools is None:
     raise SystemExit('Install Android platform 35 and build-tools 35.0.0; pass --sdk /path/to/sdk.')
 build = ROOT / 'build'
 if build.exists(): shutil.rmtree(build)
+subprocess.run(['python3', str(ROOT / 'tools/generate_forecast_worker.py')], check=True)
 for path in ['assets/www', 'generated', 'classes', 'dex']: (build / path).mkdir(parents=True)
 for path in (ROOT / 'web').iterdir():
     if path.is_file(): shutil.copy2(path, build / 'assets/www' / path.name)
