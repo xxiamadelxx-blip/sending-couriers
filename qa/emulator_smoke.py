@@ -67,6 +67,16 @@ def wait_node(name, seconds=20):
     raise AssertionError(f"UI node not found: {name}")
 
 
+def wait_home(seconds=20):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        root = dump("home-current")
+        if find_node(root, "Главная") is not None and find_node(root, "Сохранить слот") is None:
+            return root
+        time.sleep(1)
+    raise AssertionError("Slot form did not return to home")
+
+
 def tap_node(name):
     _, node = wait_node(name)
     coords = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
@@ -99,7 +109,7 @@ def add_slot(hours=None, orders=None, reward=0):
         fill_field(1, orders)
     fill_field(2, reward)
     tap_node("Сохранить слот")
-    wait_node("Темп периода")
+    wait_home()
 
 
 def main():
@@ -115,6 +125,10 @@ def main():
     adb("shell", "am", "start", "-n", ACTIVITY)
     wait_node("Главная", 45)
     add_slot(reward=0)
+    tap_node("Период")
+    tap_node("Записи периода")
+    assert any(re.sub(r"\s+", " ", n.get("text", "")).strip() == "0 ₽" for n in dump("rest-history").iter("node")), "Zero reward did not persist"
+    tap_node("Главная")
     add_slot(hours=4, orders=8, reward=1200)
     add_slot(hours=5, orders=10, reward=2000)
     screenshot("00-three-slots-before-upgrade")
@@ -123,9 +137,14 @@ def main():
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-n", ACTIVITY)
     wait_node("Главная", 45)
-    root = dump("after-upgrade")
+    tap_node("Период")
+    root = dump("after-upgrade-period")
     visible = " ".join(n.get("text", "") for n in root.iter("node"))
-    assert "9 ч" in visible and "18 заказов" in visible, "Slots were lost or not summed after APK upgrade"
+    assert "9 ч" in visible and "18" in visible, "Slots were lost or not summed after APK upgrade"
+    tap_node("Записи периода")
+    history = re.sub(r"\s+", " ", " ".join(n.get("text", "") for n in dump("after-upgrade-history").iter("node")))
+    assert "9 ч · 18 заказов" in history and "3 200" in history, "Day totals changed after APK upgrade"
+    tap_node("Главная")
     screenshot("01-home-360-dark")
 
     pages = [("Период", "02-period-360-dark"), ("Прогноз", "03-forecast-360-dark"),
