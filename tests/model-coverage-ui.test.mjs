@@ -23,7 +23,8 @@ try{for(const width of [360,390])for(const theme of ['dark','light']){
   const state=emptyState();state.settings.theme=theme;state.settings.soundEnabled=false;state.settings.hapticsEnabled=false;
   for(let i=1;i<=10;i++)state.forecast=saveDay(state.forecast,{date:addDays(date,-i),orders:24,ordersConfirmed:true,workingMin:480,workConfirmed:true,precision:'total',completed:true});
   state.forecast=saveForecastHours(state.forecast,date,840,480);
-  const context=await browser.newContext({viewport:{width,height:820},locale:'ru-RU',timezoneId:'Europe/Moscow',isMobile:true,hasTouch:true});
+  // Android reserves roughly 48 dp for status and system navigation bars.
+  const context=await browser.newContext({viewport:{width,height:width===360?752:796},locale:'ru-RU',timezoneId:'Europe/Moscow',isMobile:true,hasTouch:true});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(s=>{
     if(!localStorage.getItem('qa-simple'))localStorage.setItem('qa-simple',JSON.stringify(s));window.importRequests=0;
@@ -35,6 +36,12 @@ try{for(const width of [360,390])for(const theme of ['dark','light']){
   assert.equal(await page.locator('#todayWorkHours').inputValue(),'8');
   assert.equal(await page.locator('.forecast-tabs,.forecast-tools,#todayModelStatus,#todayPlanResult,#remainingForecast,#workDayForm').count(),0);
   assert.doesNotMatch(await page.locator('.forecast-page').innerText(),/рабочих окон|снимок|модель|источник|профиль|факт дня/i);
+  const layout=await page.evaluate(()=>({
+    button:document.querySelector('#importForecast').getBoundingClientRect().bottom,
+    nav:document.querySelector('.bottom-nav').getBoundingClientRect().top,
+    viewport:innerHeight
+  }));
+  assert.ok(layout.button<=layout.nav-8,`Import action is hidden by the bottom navigation: ${JSON.stringify(layout)}`);
   await page.screenshot({path:`${out}/Simple-forecast-${width}-${theme}.png`});
   await page.locator('#todayWorkHours').fill('6');
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('qa-simple')).forecast.weekConfig?.workingMin===360);

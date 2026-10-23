@@ -17,7 +17,7 @@ OUT.mkdir(exist_ok=True)
 OLD_APK = ROOT / "qa" / "Courier-Finance-1.7.8.apk"
 OLD_HASH = "e6b24ecddf0c728f146b85522e86b2d2b9b340af006b9da4908c0b157f500644"
 APK = ROOT / "qa" / "Courier-Finance-1.7.10.apk"
-EXPECTED = "dbaf2486455bc412ecbe28b9b3edbc8e7b37d13a54012b33f7c383f03b228c0b"
+EXPECTED = "9ac8eb1ec984f433975bc8bde743e4f1b9059aa6ba1bc8f75f4b61039a2104e1"
 PACKAGE = "ru.courier.finance"
 ACTIVITY = f"{PACKAGE}/.MainActivity"
 
@@ -179,6 +179,12 @@ def main():
                 root = dump("forecast-ready")
                 text = " ".join(n.get("text", "") for n in root.iter("node"))
             assert "Готовим прогноз" not in text, "Forecast Worker did not finish after APK upgrade"
+            import_button = find_node(root, "Импортировать отчёт")
+            home_tab = find_node(root, "Главная")
+            assert import_button is not None and home_tab is not None, "Forecast import or navigation is missing"
+            import_bottom = list(map(int, re.findall(r"\d+", import_button.get("bounds", ""))))[3]
+            nav_top = list(map(int, re.findall(r"\d+", home_tab.get("bounds", ""))))[1]
+            assert import_bottom <= nav_top - 12, f"Forecast import overlaps navigation: {import_bottom=} {nav_top=}"
         screenshot(picture)
 
     adb("shell", "input", "keyevent", "4")
