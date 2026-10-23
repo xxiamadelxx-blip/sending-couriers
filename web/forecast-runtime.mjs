@@ -4,7 +4,7 @@ setCountTraining(false); // The UI is inference-only; preparation belongs to the
 let worker=null,sequence=0;const jobs=new Map(),pending=new Map();
 function getWorker(){if(worker)return worker;worker=new Worker(new URL('./forecast-worker.mjs',import.meta.url),{type:'module'});
  worker.onmessage=event=>{const {id,artifact,error}=event.data,job=jobs.get(id);if(!job)return;jobs.delete(id);if(error)job.reject(new Error(error));else{installCountModels([artifact]);job.resolve(artifact);}};
- worker.onerror=()=>{for(const job of jobs.values())job.reject(new Error('Не удалось подготовить прогноз. Откройте приложение повторно.'));jobs.clear();worker.terminate();worker=null;};return worker;}
+ worker.onerror=event=>{console.error('Forecast worker',event.message,event.filename,event.lineno,event.colno);for(const job of jobs.values())job.reject(new Error('Не удалось подготовить прогноз. Откройте приложение повторно.'));jobs.clear();worker.terminate();worker=null;};return worker;}
 export function prepareForecast(data){
  const date=forecastClock(data).date,zone=planDay(data,date).zone??profileFor(data,date)?.zone??'',key=countModelKey(data.days,date,zone);
  installCountModels(data.trainedModel?[data.trainedModel]:[]);

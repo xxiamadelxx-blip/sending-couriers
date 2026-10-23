@@ -18,6 +18,7 @@ import android.view.WindowManager;
 import android.view.SoundEffectConstants;
 import android.view.HapticFeedbackConstants;
 import android.webkit.JavascriptInterface;
+import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -29,6 +30,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.util.Log;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -102,6 +104,10 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33) settings.setAlgorithmicDarkeningAllowed(false);
         web.addJavascriptInterface(new NativeBridge(), "CourierNative");
         web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                Log.e("CourierWeb", message.message() + " at " + message.sourceId() + ":" + message.lineNumber());
+                return true;
+            }
             @Override public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
                 new AlertDialog.Builder(MainActivity.this).setMessage(message)
                     .setPositiveButton("Удалить", (dialog, which) -> result.confirm())
@@ -113,6 +119,7 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
+                if (uri.getPath() != null && uri.getPath().contains("forecast-worker")) Log.i("CourierAsset", "Worker request " + uri);
                 if ("https".equals(uri.getScheme()) && "appassets.androidplatform.net".equals(uri.getHost()) && uri.getPath() != null && uri.getPath().startsWith("/assets/")) {
                     String path = uri.getPath().substring(8);
                     if (path.contains("..") || !request.getMethod().equals("GET")) return blocked();
