@@ -71,6 +71,7 @@ function openForecast(initial = 'today') {
   }
   view='forecast';editingId=null;
   forecastScreen=mountForecast({root:app,getState:()=>state,commit:persist,heading,nav:()=>bottomNav('forecast'),leave:summary,notify,Native,initial});
+  warmForecast();
 }
 window.receiveForecastImport = text => { if(view!=='forecast')openForecast(); forecastScreen.receiveImport(text); };
 window.receiveWeather = text => {
