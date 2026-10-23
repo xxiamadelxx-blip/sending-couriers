@@ -294,7 +294,7 @@ export function syncSlots(data,entries) {
   // Only offer slot totals as unconfirmed observations. No inference of availability.
   const byDate=new Map();
   for(const entry of entries){const list=byDate.get(entry.date)??[];list.push(entry);byDate.set(entry.date,list);}
-  const days={...data.days};
+  const days={...data.days},clock=forecastClock(data);
   for(const [date,list] of byDate) {
     const old=days[date];
     if(old && old.source!=='finance-slots') continue;
@@ -302,11 +302,12 @@ export function syncSlots(data,entries) {
     const appAccountedMin=list.every(e=>e.dailyHours!=null)?list.reduce((n,e)=>n+e.dailyHours*60,0):null;
     if(appAccountedMin>1440) continue; // Legacy cumulative intervals are not a work day.
     const sourceHash=fingerprint(list.map(e=>[e.id,e.date,e.dailyOrders,e.dailyHours]));
-    const clock=forecastClock(data),complete=date<clock.date,reliable=list.every(e=>!e.legacyReading);
+    const complete=date<clock.date,reliable=list.every(e=>!e.legacyReading);
     if(old?.sourceHash===sourceHash&&old.ordersConfirmed===(orders!=null)&&old.accountedConfirmed===(appAccountedMin!=null&&reliable)&&old.completed===complete)continue;
     const fieldSources={...old?.fieldSources};
     delete fieldSources.orders;delete fieldSources.appAccountedMin;
-    days[date]=day({...old,date,zone:old?.zone??profileFor(data,date)?.zone??'',timezone:old?.timezone??profileFor(data,date)?.timezone??'Europe/Moscow',orders,appAccountedMin,ordersConfirmed:orders!=null,accountedConfirmed:appAccountedMin!=null&&reliable,fieldSources,completed:complete,asOfMinute:date===clock.date?clock.minute:null,source:'finance-slots',sourceHash,revision:(old?.revision??0)+1});
+    const profile=old?.zone&&old?.timezone?null:profileFor(data,date);
+    days[date]=day({...old,date,zone:old?.zone??profile?.zone??'',timezone:old?.timezone??profile?.timezone??'Europe/Moscow',orders,appAccountedMin,ordersConfirmed:orders!=null,accountedConfirmed:appAccountedMin!=null&&reliable,fieldSources,completed:complete,asOfMinute:date===clock.date?clock.minute:null,source:'finance-slots',sourceHash,revision:(old?.revision??0)+1});
   }
   for(const [date,d] of Object.entries(days)) if(d.source==='finance-slots'&&!byDate.has(date)){
     if(!d.manualTime){delete days[date];continue;}

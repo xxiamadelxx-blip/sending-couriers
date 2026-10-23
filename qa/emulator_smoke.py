@@ -17,7 +17,7 @@ OUT.mkdir(exist_ok=True)
 OLD_APK = ROOT / "qa" / "Courier-Finance-1.7.8.apk"
 OLD_HASH = "e6b24ecddf0c728f146b85522e86b2d2b9b340af006b9da4908c0b157f500644"
 APK = ROOT / "qa" / "Courier-Finance-1.7.9.apk"
-EXPECTED = "60676c25abf05a787544e4d85ee222efa58eb10e063b3d093b2fff30a15faa97"
+EXPECTED = "f357bdc3962f6b4350a5385b8ad4a343f6b0462bf7fcfab56e58c964f05676fd"
 PACKAGE = "ru.courier.finance"
 ACTIVITY = f"{PACKAGE}/.MainActivity"
 
@@ -52,6 +52,12 @@ def wait_node(name, seconds=20):
     while time.monotonic() < end:
         try:
             root = dump("current")
+            if find_node(root, "Pixel Launcher isn't responding") is not None:
+                wait = find_node(root, "Wait")
+                coords = list(map(int, re.findall(r"\d+", wait.get("bounds", ""))))
+                adb("shell", "input", "tap", str((coords[0] + coords[2]) // 2), str((coords[1] + coords[3]) // 2))
+                time.sleep(1)
+                continue
             found = find_node(root, name)
             if found is not None:
                 return root, found
@@ -84,6 +90,7 @@ def fill_field(index, value):
 
 
 def add_slot(hours=None, orders=None, reward=0):
+    print(f"Add slot: {hours=} {orders=} {reward=}", flush=True)
     tap_node("Добавить слот")
     wait_node("Сохранить слот")
     if hours is not None:
@@ -103,6 +110,7 @@ def main():
     adb("shell", "wm", "density", "480")
     adb("shell", "settings", "put", "system", "font_scale", "1.0")
     adb("install", "-r", str(OLD_APK))
+    print("Installed 1.7.8", flush=True)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-n", ACTIVITY)
     wait_node("Главная", 45)
@@ -111,6 +119,7 @@ def main():
     add_slot(hours=5, orders=10, reward=2000)
     screenshot("00-three-slots-before-upgrade")
     adb("install", "-r", str(APK))
+    print("Updated to 1.7.9", flush=True)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-n", ACTIVITY)
     wait_node("Главная", 45)

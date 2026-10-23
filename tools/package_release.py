@@ -21,7 +21,11 @@ with zipfile.ZipFile(source, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as arch
             continue
         if path.name == 'import-training-results.json':
             continue
-        if relative.parts[0] == 'verification' and path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp', '.mp4'}:
+        if relative.parts[0] in {'qa-results', 'build', 'signing'}:
+            continue
+        if relative.parts[0] == 'qa' and path.suffix.lower() == '.apk':
+            continue
+        if relative.parts[0] == 'verification' and (len(relative.parts) < 2 or relative.parts[1] != version or path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp', '.mp4'}):
             continue
         archive.write(path, f'courier-finance/{relative.as_posix()}')
 with zipfile.ZipFile(source) as archive:
