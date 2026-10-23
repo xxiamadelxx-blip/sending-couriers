@@ -47,16 +47,26 @@ def find_node(root, name):
     return None
 
 
+def dismiss_launcher_anr(root):
+    title = next((n for n in root.iter("node") if any(t in n.get("text", "") for t in
+                  ("Pixel Launcher isn't responding", "Quickstep isn't responding"))), None)
+    if title is None:
+        return False
+    button = find_node(root, "Close app")
+    if button is None:
+        button = find_node(root, "Wait")
+    coords = list(map(int, re.findall(r"\d+", button.get("bounds", ""))))
+    adb("shell", "input", "tap", str((coords[0] + coords[2]) // 2), str((coords[1] + coords[3]) // 2))
+    time.sleep(1)
+    return True
+
+
 def wait_node(name, seconds=20):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         try:
             root = dump("current")
-            if find_node(root, "Pixel Launcher isn't responding") is not None:
-                wait = find_node(root, "Wait")
-                coords = list(map(int, re.findall(r"\d+", wait.get("bounds", ""))))
-                adb("shell", "input", "tap", str((coords[0] + coords[2]) // 2), str((coords[1] + coords[3]) // 2))
-                time.sleep(1)
+            if dismiss_launcher_anr(root):
                 continue
             found = find_node(root, name)
             if found is not None:
@@ -71,6 +81,8 @@ def wait_home(seconds=20):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         root = dump("home-current")
+        if dismiss_launcher_anr(root):
+            continue
         if find_node(root, "Главная") is not None and find_node(root, "Сохранить слот") is None:
             return root
         time.sleep(1)
@@ -119,6 +131,7 @@ def main():
     adb("shell", "wm", "size", "1080x2400")
     adb("shell", "wm", "density", "480")
     adb("shell", "settings", "put", "system", "font_scale", "1.0")
+    time.sleep(8)  # Let the system launcher finish cold boot before driving WebView.
     adb("install", "-r", str(OLD_APK))
     print("Installed 1.7.8", flush=True)
     adb("shell", "am", "force-stop", PACKAGE)
