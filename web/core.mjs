@@ -2,7 +2,7 @@ import { emptyForecast, normalizeForecast, mergeForecast, forecastReport, weekPl
 export const RATE = 360;
 export const THRESHOLD = 1.8;
 export const SCHEMA_VERSION = 6;
-export const APP_VERSION = '1.7.9';
+export const APP_VERSION = '1.7.10';
 export const MIN_PAYMENT_HOURS = 80;
 export const PREMIUM_PACE = 2.8;
 export const PREMIUM_PERCENT = 5;

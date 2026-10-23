@@ -33,6 +33,7 @@ badging = run(tools / 'aapt', 'dump', 'badging', args.apk)
 assert "package: name='ru.courier.finance' versionCode='24' versionName='1.7.10'" in badging
 assert "sdkVersion:'26'" in badging and "targetSdkVersion:'35'" in badging
 assert "application-label:'Доход курьера'" in badging
+assert "export const APP_VERSION = '1.7.10';" in (ROOT / 'web/core.mjs').read_text(), 'Displayed version must match package version'
 assert "package: name='ru.courier.finance'" in run(tools / 'aapt', 'dump', 'badging', args.previous_apk)
 permissions = run(tools / 'aapt', 'dump', 'permissions', args.apk)
 assert permissions.count('uses-permission') == 1 and 'android.permission.INTERNET' in permissions

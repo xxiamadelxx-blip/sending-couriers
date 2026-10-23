@@ -41,7 +41,8 @@ try{for(const width of [360,390])for(const theme of ['dark','light']){
     nav:document.querySelector('.bottom-nav').getBoundingClientRect().top,
     viewport:innerHeight
   }));
-  assert.ok(layout.button<=layout.nav-8,`Import action is hidden by the bottom navigation: ${JSON.stringify(layout)}`);
+  // Native WebView uses a taller heading than headless Chromium; keep spare room.
+  assert.ok(layout.button<=layout.nav-56,`Import action is too close to the bottom navigation: ${JSON.stringify(layout)}`);
   await page.screenshot({path:`${out}/Simple-forecast-${width}-${theme}.png`});
   await page.locator('#todayWorkHours').fill('6');
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('qa-simple')).forecast.weekConfig?.workingMin===360);

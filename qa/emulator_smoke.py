@@ -17,7 +17,7 @@ OUT.mkdir(exist_ok=True)
 OLD_APK = ROOT / "qa" / "Courier-Finance-1.7.8.apk"
 OLD_HASH = "e6b24ecddf0c728f146b85522e86b2d2b9b340af006b9da4908c0b157f500644"
 APK = ROOT / "qa" / "Courier-Finance-1.7.10.apk"
-EXPECTED = "9ac8eb1ec984f433975bc8bde743e4f1b9059aa6ba1bc8f75f4b61039a2104e1"
+EXPECTED = "2de029f73a84d4dae608785e36e8ee8992af6a681abf34979c1f38d8b9b73ce4"
 PACKAGE = "ru.courier.finance"
 ACTIVITY = f"{PACKAGE}/.MainActivity"
 

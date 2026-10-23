@@ -197,9 +197,10 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
 
 /* Keep both duration controls and the report import above Android's bottom nav. */
 @media (max-width:400px) and (max-height:800px){
-  .forecast-simple-hero{padding:18px;margin:8px 0 10px}
-  .forecast-simple-hero h2{margin-bottom:8px}
-  .forecast-simple-plan{padding:14px}
-  .forecast-simple-plan .duration-control{margin:10px 0!important}
-  .forecast-import-button{margin:8px 0 14px}
+  .forecast-simple-hero{padding:14px 18px;margin:4px 0 8px}
+  .forecast-simple-hero h2{margin-bottom:6px}
+  .forecast-page .forecast-simple-plan{padding:12px;margin-bottom:8px}
+  .forecast-simple-plan h2{margin-bottom:8px}
+  .forecast-simple-plan .duration-control{margin:8px 0!important}
+  .forecast-import-button{margin:4px 0 10px}
 }
