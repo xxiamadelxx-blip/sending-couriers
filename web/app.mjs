@@ -61,7 +61,7 @@ function warmForecast() {
   prepareForecast(state.forecast).then(artifact=>{
     if(forecastKey(state.forecast)!==key){warmForecast();return;}
     try{persist({...state,forecast:{...state.forecast,trainedModel:artifact}},true);if(view==='forecast')forecastScreen?.modelReady?.();}catch(error){notify(error.message);}
-  }).catch(error=>notify(error.message));
+  }).catch(error=>{if(requestedModel===key)requestedModel=null;notify(error.message);});
 }
 function openForecast(initial = 'today') {
   const synced=syncSlots(state.forecast,state.entries);
@@ -85,6 +85,7 @@ window.weatherFailed = () => { if(view==='summary' && $('#weatherStatus')) $('#w
 function weatherWidget() {
   const p=weatherLocation(state.forecast),w=weatherParts(state.forecast.weather,p);
   const status=w.available?w.stale?'Кэш погоды устарел':'Open-Meteo':'Погода недоступна';
+  if(!w.available)return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${p.weatherCity?'Погода недоступна':'Не указана местность для погоды'}. Обновить погоду" title="${esc(status)}"><span id="weatherStatus" class="weather-unavailable">Погода —</span></button>`;
   return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${esc(status)}. Обновить погоду" title="${esc(status)}"><span class="weather-icons">${w.parts.map(v=>`<span class="weather-mini" data-weather-code="${v.code??''}" aria-label="${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}" title="${v.label} · ${weatherDescription(v.code)}"><span aria-hidden="true">${weatherSymbol(v.code)}</span><strong>${v.temp==null?'—':Math.round(v.temp)+'°'}</strong></span>`).join('')}</span><span id="weatherStatus" class="${w.available&&w.stale?'weather-cache':'sr-only'}">${w.available&&w.stale?'Кэш':esc(status)}</span></button>`;
 }
 function refreshWeather(force=false) {

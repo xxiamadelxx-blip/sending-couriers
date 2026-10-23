@@ -11,7 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--sdk', type=Path, default=ROOT.parent / 'tools/android-sdk')
-parser.add_argument('--apk', type=Path, default=ROOT.parent / 'artifacts/Courier-Finance-1.7.8.apk')
+parser.add_argument('--apk', type=Path, default=ROOT.parent / 'artifacts/Courier-Finance-1.7.9.apk')
 parser.add_argument('--previous-apk', type=Path, required=True)
 parser.add_argument('--previous-source', type=Path, required=True)
 args = parser.parse_args()
@@ -30,7 +30,7 @@ def signature(path):
 certificate = signature(args.apk)
 assert certificate == signature(args.previous_apk), 'Update certificate differs'
 badging = run(tools / 'aapt', 'dump', 'badging', args.apk)
-assert "package: name='ru.courier.finance' versionCode='22' versionName='1.7.8'" in badging
+assert "package: name='ru.courier.finance' versionCode='23' versionName='1.7.9'" in badging
 assert "sdkVersion:'26'" in badging and "targetSdkVersion:'35'" in badging
 assert "application-label:'Доход курьера'" in badging
 assert "package: name='ru.courier.finance'" in run(tools / 'aapt', 'dump', 'badging', args.previous_apk)
@@ -65,13 +65,13 @@ main_source = (ROOT / 'android/src/ru/courier/finance/MainActivity.java').read_t
 assert 'getSharedPreferences("courier_finance", MODE_PRIVATE)' in main_source
 assert 'preferences.getString("state", "")' in main_source
 assert '(schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 && schemaVersion != 6)' in main_source
-native_report = json.loads((ROOT / 'verification/1.7.8/native-results.json').read_text())
+native_report = json.loads((ROOT / 'verification/1.7.9/native-results.json').read_text())
 assert native_report['result'] == 'PASS' and native_report['actualProductionMethodExecuted']
 assert native_report['mainActivitySHA256'] == hashlib.sha256((ROOT / 'android/src/ru/courier/finance/MainActivity.java').read_bytes()).hexdigest()
 assert native_report['nativeBridgeClassSHA256'] == hashlib.sha256((ROOT / 'build/classes/ru/courier/finance/MainActivity$NativeBridge.class').read_bytes()).hexdigest()
 
 report = {
-    'result': 'PASS', 'versionName': '1.7.8', 'versionCode': 22,
+    'result': 'PASS', 'versionName': '1.7.9', 'versionCode': 23,
     'package': 'ru.courier.finance', 'minSdk': 26, 'targetSdk': 35,
     'signatureSchemes': ['v2', 'v3'], 'sameCertificateAsPrevious': True,
     'certificateSHA256': certificate, 'alignment': 'PASS', 'permissions': ['android.permission.INTERNET'],
@@ -81,6 +81,6 @@ report = {
     'apkSHA256': hashlib.sha256(args.apk.read_bytes()).hexdigest(), 'sizeBytes': args.apk.stat().st_size,
     'nativeRuntimeTested': False
 }
-destination = ROOT / 'verification/1.7.8/apk-results.json'
+destination = ROOT / 'verification/1.7.9/apk-results.json'
 destination.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
 print(json.dumps(report, ensure_ascii=False, indent=2))

@@ -51,7 +51,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     const preview=()=>{
       const pair=read(),result=predict(data(),date,planDay(data(),date,{[date]:pair}));
       $('#simpleCount').innerHTML=`${result.central??'—'}<span> заказов</span>`;
-      $('#simpleRange').textContent=result.central==null?(result.preparing?'Готовим прогноз…':'Для прогноза загрузите историю заказов'):`Возможный диапазон: ${result.lower}–${result.upper}`;
+      $('#simpleRange').textContent=result.central==null?(result.preparing?'Готовим прогноз…':'Пока мало данных о рабочем времени'):`Возможный диапазон: ${result.lower}–${result.upper}`;
       $('#forecastError').hidden=true;
       return pair;
     };

@@ -292,9 +292,11 @@ export function importDays(data,rows,source='history',now=new Date().toISOString
 }
 export function syncSlots(data,entries) {
   // Only offer slot totals as unconfirmed observations. No inference of availability.
-  const dates=new Set(entries.map(e=>e.date)),days={...data.days};
-  for(const date of dates) {
-    const list=entries.filter(e=>e.date===date),old=days[date];
+  const byDate=new Map();
+  for(const entry of entries){const list=byDate.get(entry.date)??[];list.push(entry);byDate.set(entry.date,list);}
+  const days={...data.days};
+  for(const [date,list] of byDate) {
+    const old=days[date];
     if(old && old.source!=='finance-slots') continue;
     const orders=list.every(e=>e.dailyOrders!=null)?list.reduce((n,e)=>n+e.dailyOrders,0):null;
     const appAccountedMin=list.every(e=>e.dailyHours!=null)?list.reduce((n,e)=>n+e.dailyHours*60,0):null;
@@ -306,7 +308,7 @@ export function syncSlots(data,entries) {
     delete fieldSources.orders;delete fieldSources.appAccountedMin;
     days[date]=day({...old,date,zone:old?.zone??profileFor(data,date)?.zone??'',timezone:old?.timezone??profileFor(data,date)?.timezone??'Europe/Moscow',orders,appAccountedMin,ordersConfirmed:orders!=null,accountedConfirmed:appAccountedMin!=null&&reliable,fieldSources,completed:complete,asOfMinute:date===clock.date?clock.minute:null,source:'finance-slots',sourceHash,revision:(old?.revision??0)+1});
   }
-  for(const [date,d] of Object.entries(days)) if(d.source==='finance-slots'&&!dates.has(date)){
+  for(const [date,d] of Object.entries(days)) if(d.source==='finance-slots'&&!byDate.has(date)){
     if(!d.manualTime){delete days[date];continue;}
     if(d.orders!=null||d.appAccountedMin!=null||d.ordersConfirmed||d.accountedConfirmed){
       const fieldSources={...d.fieldSources};delete fieldSources.orders;delete fieldSources.appAccountedMin;

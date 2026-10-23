@@ -11,7 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
 parser.add_argument('--sdk', default=os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME') or str(ROOT.parent / 'tools/android-sdk'))
-parser.add_argument('--output', default=str(ROOT.parent / 'artifacts/Courier-Finance-1.7.8.apk'))
+parser.add_argument('--output', default=str(ROOT.parent / 'artifacts/Courier-Finance-1.7.9.apk'))
 args = parser.parse_args()
 sdk = Path(args.sdk).resolve()
 platforms = [sdk / 'platforms/android-35/android.jar', sdk / 'android-35/android.jar']
