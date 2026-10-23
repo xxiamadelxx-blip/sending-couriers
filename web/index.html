@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Доход курьера</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.mjs"></script>
+</head>
+<body>
+  <main id="app" aria-live="polite">
+    <div class="splash" aria-label="Доход курьера">
+      <h1>Доход курьера</h1>
+    </div>
+  </main>
+  <nav id="bottomNav" class="bottom-nav" aria-label="Основная навигация" hidden></nav>
+  <div id="toast" role="status" class="toast" hidden></div>
+  <dialog id="exportDialog" aria-labelledby="exportTitle">
+    <h2 id="exportTitle">Экспорт для ChatGPT</h2>
+    <button id="shareReport" class="button primary" type="button">Поделиться файлом</button>
+    <button id="saveReport" class="button outline" type="button">Сохранить файл</button>
+    <button id="backupReport" class="button quiet" type="button">Резервная копия JSON</button>
+    <button id="closeExport" class="button quiet" type="button">Закрыть</button>
+  </dialog>
+  <dialog id="importDialog" aria-labelledby="importTitle">
+    <h2 id="importTitle">Импорт данных</h2>
+    <p id="importDescription"></p>
+    <p class="hint">Совпадающие идентификаторы записей будут заменены. Другие слоты сохранятся. Другая дата начала 12 недель потребует сначала выбрать нужную дату во вкладке «Период».</p>
+    <div id="importError" class="error" role="alert" hidden></div>
+    <button id="confirmImport" class="button primary" type="button">Импортировать</button>
+    <button id="cancelImport" class="button quiet" type="button">Отмена</button>
+  </dialog>
+</body>
+</html>

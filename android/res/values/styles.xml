@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="background">#f4f7f3</color>
+  <color name="accent">#176541</color>
+  <bool name="light_bars">true</bool>
+  <style name="AppThemeBase" parent="android:style/Theme.Material.Light.NoActionBar">
+    <item name="android:fontFamily">sans</item>
+    <item name="android:colorAccent">@color/accent</item>
+    <item name="android:windowBackground">@color/background</item>
+    <item name="android:statusBarColor">@color/background</item>
+    <item name="android:navigationBarColor">@color/background</item>
+    <item name="android:windowLightStatusBar">@bool/light_bars</item>
+    <item name="android:windowLightNavigationBar">@bool/light_bars</item>
+    <item name="android:windowActionModeOverlay">true</item>
+    <item name="android:forceDarkAllowed">false</item>
+  </style>
+  <style name="AppTheme" parent="AppThemeBase" />
+  <style name="AppThemeLight" parent="android:style/Theme.Material.Light.NoActionBar">
+    <item name="android:fontFamily">sans</item>
+    <item name="android:windowBackground">#f4f7f3</item>
+    <item name="android:colorAccent">#176541</item>
+    <item name="android:windowLightStatusBar">true</item>
+    <item name="android:windowLightNavigationBar">true</item>
+    <item name="android:forceDarkAllowed">false</item>
+  </style>
+  <style name="AppThemeDark" parent="android:style/Theme.Material.NoActionBar">
+    <item name="android:fontFamily">sans</item>
+    <item name="android:windowBackground">#000000</item>
+    <item name="android:colorAccent">#a4dcbc</item>
+    <item name="android:windowLightStatusBar">false</item>
+    <item name="android:windowLightNavigationBar">false</item>
+    <item name="android:forceDarkAllowed">false</item>
+  </style>
+</resources>

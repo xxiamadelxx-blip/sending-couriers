@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="background">#000000</color>
+  <color name="accent">#a4dcbc</color>
+  <bool name="light_bars">false</bool>
+  <style name="AppThemeBase" parent="android:style/Theme.Material.NoActionBar">
+    <item name="android:fontFamily">sans</item>
+    <item name="android:colorAccent">@color/accent</item>
+    <item name="android:windowBackground">@color/background</item>
+    <item name="android:statusBarColor">@color/background</item>
+    <item name="android:navigationBarColor">@color/background</item>
+    <item name="android:windowLightStatusBar">@bool/light_bars</item>
+    <item name="android:windowLightNavigationBar">@bool/light_bars</item>
+    <item name="android:windowActionModeOverlay">true</item>
+    <item name="android:forceDarkAllowed">false</item>
+  </style>
+</resources>

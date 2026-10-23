@@ -1,0 +1,163 @@
+// Local count model. One fitted artifact per immutable facts/cutoff/zone, never per plan.
+export const COUNT_CONFIG='hourly-count-3';
+const DAY=86400000,stamp=d=>Date.parse(d+'T00:00:00Z'),wd=d=>(new Date(stamp(d)).getUTCDay()+6)%7;
+const hash=v=>{let h=2166136261;for(const c of JSON.stringify(v))h=Math.imul(h^c.charCodeAt(0),16777619);return (h>>>0).toString(16);};
+const overlap=(a,b,c,d)=>Math.max(0,Math.min(b,d)-Math.max(a,c));
+const recency=(date,target)=>Math.exp(-(stamp(target)-stamp(date))/DAY/35);
+const fitsCache=new Map(),models=new Map(),indexes=new WeakMap();let trainingEnabled=true,fitRuns=0;
+const remember=(cache,key,value,max=150)=>{cache.set(key,value);if(cache.size>max)cache.delete(cache.keys().next().value);return value;};
+export function setCountTraining(enabled){trainingEnabled=enabled;}
+export function countModelKey(input,date,zone=''){return history(input,date,zone).key;}
+export function cachedCountModel(input,date,zone=''){return models.get(countModelKey(input,date,zone))??null;}
+export function countDiagnostics(){return {fitRuns,models:models.size,fits:fitsCache.size};}
+export function resetCountModels(){models.clear();fitsCache.clear();fitRuns=0;}
+function index(input){let result=indexes.get(input);if(result)return result;const days=(Array.isArray(input)?input:Object.values(input)).slice().sort((a,b)=>a.date.localeCompare(b.date));result={days,signatures:new Map(days.map(d=>[d,hash([d.date,d.revision,d.orders,d.ordersConfirmed,d.completed,d.workingMin,d.workConfirmed,d.estimatedExposureJustified,d.orderEvidence,d.intervals,d.estimatedIntervals,d.exposureBlocks,d.conflicts,d.sourceConflicts,d.fieldSources,d.zone])]))};indexes.set(input,result);return result;}
+function good(d){return !d.conflicts?.length&&!d.sourceConflicts?.length&&!Object.values(d.fieldSources??{}).some(s=>s.status==='CONFLICT');}
+function history(input,date,zone=''){
+ const idx=index(input),rows=idx.days.filter(d=>d.date<date&&d.completed&&good(d)&&(!zone||d.zone===zone)).slice(-90);
+ return {rows,key:COUNT_CONFIG+'-'+hash([zone,rows.map(d=>idx.signatures.get(d))]),totals:rows.filter(d=>d.ordersConfirmed&&d.orders!=null&&d.workingMin>0&&(d.workConfirmed||d.estimatedExposureJustified))};
+}
+function baseline(rows,date,minutes){
+ const same=rows.filter(d=>wd(d.date)===wd(date)),sample=(same.length>=3?same:rows).slice(-56);let count=0,hours=0;
+ for(const d of sample){const w=recency(d.date,date)*(d.workConfirmed?1:.3);count+=w*d.orders;hours+=w*d.workingMin/60;}
+ const rate=hours?count/hours:null;return {mean:rate==null?null:rate*minutes/60,rate,n:sample.length,sample,reconstructed:sample.filter(d=>!d.workConfirmed).length,count,hours,targetHours:minutes/60};
+}
+function union(ranges){const out=[];for(const i of ranges.slice().sort((a,b)=>a.start-b.start)){if(out.length&&i.start<=out.at(-1).end)out.at(-1).end=Math.max(out.at(-1).end,i.end);else out.push({start:i.start,end:i.end});}return out;}
+const windows=plan=>union((plan.intervals??[]).filter(i=>i.state==='WORK'));
+const eventTime=(o,kind)=>o.fieldSources?.[kind]?.status&&o.fieldSources[kind].status!=='CONFIRMED'?null:o[kind]??null;
+export function exposureBins(d,kind='deliveredMin',step=60){
+ if(!good(d)||!d.workConfirmed||!d.ordersConfirmed||d.orders==null)return [];
+ const spans=windows(d);if(!spans.length||d.orderEvidence.length!==d.orders)return [];
+ const times=d.orderEvidence.map(o=>eventTime(o,kind));
+ if(times.some(t=>t==null||!spans.some(w=>t>=w.start&&t<w.end)))return [];
+ const out=[];for(let start=0;start<1440;start+=step){const exposure=spans.reduce((n,w)=>n+overlap(start,start+step,w.start,w.end),0)/60;if(exposure>0)out.push({date:d.date,weekday:wd(d.date),hour:Math.floor(start/60),start,exposure,count:times.filter(t=>t>=start&&t<start+step).length,confirmed:true,timeKind:kind});}return out;
+}
+function allBins(rows,kind,step=60){return rows.flatMap(d=>{
+ const full=exposureBins(d,kind,step);if(full.length)return full;
+ return (d.exposureBlocks??[]).flatMap(b=>{
+  if(!good(d)||b.status!=='CONFIRMED'||b.orders==null||b.state!=='WORK')return [];
+  const events=d.orderEvidence.filter(o=>{const t=eventTime(o,kind);return t!=null&&t>=b.start&&t<b.end;});
+  if(events.length!==b.orders)return [];
+  return exposureBins({...d,workConfirmed:true,ordersConfirmed:true,intervals:[b],orders:b.orders,orderEvidence:events},kind,step);
+ });});}
+const features=b=>[0,1+b.weekday,8+b.hour];
+export function fitPoisson(bins,target,alpha=0){
+ fitRuns++;
+ const rows=bins.filter(b=>b.confirmed&&b.exposure>0&&b.date<target),dates=new Set(rows.map(b=>b.date));
+ if(dates.size<3||rows.length<16)return null;
+ const groups=Array.from({length:32},(_,j)=>rows.filter(b=>features(b).includes(j)));
+ const beta=Array(32).fill(0),count=rows.reduce((n,b)=>n+b.count,0),exposure=rows.reduce((n,b)=>n+b.exposure,0);
+ beta[0]=Math.log(Math.max(.05,count/exposure));let iterations=0;
+ for(let iter=0;iter<45;iter++){
+  let maxChange=0;
+  for(let j=0;j<beta.length;j++){
+   let g=j===0?0:-3*beta[j],h=j===0?.001:3;
+   for(const b of groups[j]){const x=features(b);const mu=b.exposure*Math.exp(x.reduce((n,k)=>n+beta[k],0)),weight=recency(b.date,target),v=1+alpha*mu;g+=weight*(b.count-mu)/v;h+=weight*mu/v;}
+   const change=Math.max(-.5,Math.min(.5,g/h));beta[j]=Math.max(-6,Math.min(6,beta[j]+change));maxChange=Math.max(maxChange,Math.abs(change));
+  }
+  iterations=iter+1;if(maxChange<.0001)break;
+ }
+ let pearson=0,excess=0,den=0;
+ for(const b of rows){const mu=b.exposure*Math.exp(features(b).reduce((n,j)=>n+beta[j],0));pearson+=(b.count-mu)**2/Math.max(.05,mu);excess+=(b.count-mu)**2-mu;den+=mu*mu;}
+ return {type:alpha>0?'negative-binomial':'poisson-offset',beta,alpha,iterations,observations:rows.length,days:dates.size,dispersion:pearson/Math.max(1,rows.length-32),estimatedAlpha:Math.max(0,excess/Math.max(1,den)),offset:'log(confirmed exposure hours)',penalty:3};
+}
+function fitSet(rows,key){
+ if(fitsCache.has(key))return fitsCache.get(key);
+ const target=rows.at(-1)?.date??'1970-01-01';
+ const series=['deliveredMin','acceptedMin','visibleMin'].map(kind=>({kind,bins:allBins(rows,kind)}));
+ // One homogeneous target series. Missing completion times never turn into acceptance times.
+ const chosen=series.find(s=>new Set(s.bins.map(b=>b.date)).size>=3)??{kind:null,bins:[]};
+ const bins=chosen.bins,poisson=fitPoisson(bins,new Date(stamp(target)+DAY).toISOString().slice(0,10));
+ const nb=poisson&&poisson.days>=28&&poisson.observations>=200&&poisson.dispersion>1.3&&poisson.estimatedAlpha>.05?fitPoisson(bins,new Date(stamp(target)+DAY).toISOString().slice(0,10),poisson.estimatedAlpha):null;
+ const step=new Set(bins.map(b=>b.date)).size>=28?30:60,hourly=step===30?allBins(rows,chosen.kind,30):bins;
+ return remember(fitsCache,key,{bins,poisson,nb,step,hourly,timeKind:chosen.kind});
+}
+function modelMean(fit,date,plan){const list=windows(plan);if(!fit||!list.length)return null;return list.reduce((n,w)=>{let sum=0;for(let h=0;h<24;h++)sum+=overlap(w.start,w.end,h*60,h*60+60)/60*Math.exp(fit.beta[0]+fit.beta[1+wd(date)]+fit.beta[8+h]);return n+sum;},0);}
+function hourlyWeights(fits,date,plan,rate){
+ const parts=windows(plan),usable=fits.hourly;if(new Set(usable.map(b=>b.date)).size<3)return parts.map(w=>({...w,weight:(w.end-w.start)*rate/60}));
+ return parts.map(w=>{let weight=0;for(let m=0;m<1440;m+=fits.step){const exposure=overlap(w.start,w.end,m,m+fits.step)/60;if(!exposure)continue;
+  const pool=usable.filter(b=>b.start===m),same=pool.filter(b=>b.weekday===wd(date)),sample=new Set(same.map(b=>b.date)).size>=3?same:pool;
+  let y=rate*6,e=6;for(const b of sample){const rw=recency(b.date,date);y+=rw*b.count;e+=rw*b.exposure;}weight+=exposure*y/e;
+ }return {...w,weight};});
+}
+function candidates(totals,rows,date,plan,key){
+ const base=baseline(totals,date,plan.workingMin),fits=fitSet(rows,key),weights=hourlyWeights(fits,date,plan,base.rate??0);
+ const precise=windows(plan).length&&Math.abs(windows(plan).reduce((n,w)=>n+w.end-w.start,0)-plan.workingMin)<1;
+ if(precise&&fits.bins.length)base.mean=weights.reduce((n,w)=>n+w.weight,0);
+ return {base,fits,weights,poisson:modelMean(fits.poisson,date,plan),nb:modelMean(fits.nb,date,plan)};
+}
+function metrics(records,key){const r=records.filter(r=>r[key]!=null),n=r.length,abs=r.reduce((s,r)=>s+Math.abs(r[key]-r.fact),0),total=r.reduce((s,r)=>s+r.fact,0);return {n,mae:n?abs/n:null,wape:total?abs/total:null,bias:n?r.reduce((s,r)=>s+r[key]-r.fact,0)/n:null};}
+function selection(totals,rows,key){
+ const results=[];
+ for(const d of totals.filter(d=>d.workConfirmed).slice(-42)){
+  const train=totals.filter(r=>r.date<d.date),raw=rows.filter(r=>r.date<d.date);if(train.length<3)continue;
+  const c=candidates(train,raw,d.date,{workingMin:d.workingMin,intervals:d.intervals},key+'-fold-'+d.date);
+  if(c.base.mean!=null)results.push({date:d.date,fact:d.orders,baseline:Math.round(c.base.mean),poisson:c.poisson==null?null:Math.round(c.poisson),nb:c.nb==null?null:Math.round(c.nb),trainCutoff:raw.at(-1)?.date??train.at(-1).date,workingMin:d.workingMin});
+ }
+ let selected='baseline';const stats={baseline:metrics(results,'baseline')};
+ for(const name of ['poisson','nb']){const common=results.filter(r=>r[name]!=null),m=metrics(common,name),b=metrics(common,'baseline'),matched=common.filter(r=>r[selected]!=null),other=metrics(matched,selected),candidate=metrics(matched,name);stats[name]={...m,baselineMAE:b.mae,comparisonN:other.n,comparedWith:selected,matchedOtherMAE:other.mae};if(m.n>=6&&m.mae<b.mae*.95&&(selected==='baseline'||candidate.n>=6&&candidate.mae<other.mae))selected=name;}
+ return {selected,stats,results,method:'walk-forward; train date < target; matched baseline dates; scenarios excluded'};
+}
+export function prepareCountModel(input,date,zone=''){
+ const h=history(input,date,zone);if(models.has(h.key))return models.get(h.key);
+ const fits=fitSet(h.rows,h.key),choice=selection(h.totals,h.rows,h.key);
+ return remember(models,h.key,{config:COUNT_CONFIG,key:h.key,zone,cutoff:h.rows.at(-1)?.date??null,fits,choice});
+}
+export function exportCountModels(){return [...models.values()];}
+export function validCountModel(a){
+ if(a?.config!==COUNT_CONFIG||typeof a.key!=='string'||!a.fits||!a.choice||!['baseline','poisson','nb'].includes(a.choice.selected))return false;
+ if(!Array.isArray(a.fits.bins)||a.fits.bins.length>5000||!Array.isArray(a.fits.hourly)||a.fits.hourly.length>5000||!Array.isArray(a.choice.results)||a.choice.results.length>90)return false;
+ const date=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(stamp(d)),nonnegative=n=>Number.isFinite(n)&&n>=0;
+ if(![30,60].includes(a.fits.step)||![null,'deliveredMin','acceptedMin','visibleMin'].includes(a.fits.timeKind))return false;
+ if([...a.fits.bins,...a.fits.hourly].some(b=>!b||!date(b.date)||!Number.isInteger(b.weekday)||b.weekday<0||b.weekday>6||!Number.isInteger(b.hour)||b.hour<0||b.hour>23||!Number.isInteger(b.start)||b.start<0||b.start>=1440||!Number.isFinite(b.exposure)||b.exposure<=0||b.exposure>1||!Number.isInteger(b.count)||b.count<0||b.confirmed!==true))return false;
+ if(a.choice.results.some(r=>!r||!date(r.date)||!nonnegative(r.fact)||!nonnegative(r.baseline)||['poisson','nb'].some(k=>r[k]!=null&&!nonnegative(r[k]))))return false;
+ if([a.fits.poisson,a.fits.nb].some(f=>f&&(!Array.isArray(f.beta)||f.beta.length!==32||f.beta.some(b=>!Number.isFinite(b)||Math.abs(b)>12)||!nonnegative(f.alpha)||!nonnegative(f.dispersion)||!nonnegative(f.estimatedAlpha))))return false;
+ if(a.validation){const q=a.validation;if(!Number.isInteger(q.n)||q.n<0||q.n>90||!Array.isArray(q.results)||q.results.length>90||q.results.some(r=>!r||!date(r.date)||!nonnegative(r.fact)||!nonnegative(r.predicted)||!nonnegative(r.baseline)||!Number.isFinite(r.error)||typeof r.covered!=='boolean'))return false;for(const k of ['mae','wape','bias','smape','baselineMAE','coverage'])if(q[k]!=null&&!Number.isFinite(q[k]))return false;}
+ return true;
+}
+export function installCountModels(artifacts){for(const a of artifacts??[]){
+ if(!validCountModel(a))continue;
+ remember(models,a.key,a);remember(fitsCache,a.key,a.fits);
+}}
+function countBand(mean,base,choice,fit){
+ const residual=choice.results.filter(r=>r[choice.selected]!=null&&r[choice.selected]>0).map(r=>(r.fact-r[choice.selected])/Math.sqrt(r[choice.selected])).sort((a,b)=>a-b);
+ const alpha=Math.max(fit?.alpha??0,1/Math.max(.5,base.count+.5)),predictiveMean=mean===0?.5*base.targetHours/Math.max(.01,base.hours):mean,variance=predictiveMean+alpha*predictiveMean*predictiveMean;
+ if(residual.length>=20){const q=p=>residual[Math.min(residual.length-1,Math.floor((residual.length-1)*p))];return {lower:Math.max(0,Math.floor(mean+Math.min(0,q(.05))*Math.sqrt(Math.max(1,mean)))),upper:Math.max(Math.round(mean),Math.ceil(mean+Math.max(0,q(.95))*Math.sqrt(Math.max(1,mean)))),bandMethod:'walk-forward residual quantiles',coverageTarget:.9};}
+ // Gamma-Poisson posterior predictive. Normal tail approximation only for large means.
+ const r=1/alpha,p=r/(r+predictiveMean);let mass=Math.pow(p,r),cdf=mass,lower=0,upper=0;
+ if(predictiveMean>200||!Number.isFinite(mass)||mass===0)return {lower:Math.max(0,Math.floor(predictiveMean-1.64485362695147*Math.sqrt(Math.max(1,variance)))),upper:Math.ceil(predictiveMean+1.64485362695147*Math.sqrt(Math.max(1,variance))),bandMethod:'gamma-poisson predictive (large mean approximation)',coverageTarget:.9};
+ const cap=Math.ceil(predictiveMean+12*Math.sqrt(Math.max(1,variance))+100);let lowFound=cdf>=.05;
+ for(let k=1;k<=cap;k++){mass*=((k-1+r)/k)*(1-p);cdf+=mass;if(!lowFound&&cdf>=.05){lower=k;lowFound=true;}if(cdf>=.95){upper=k;break;}upper=k;}
+ return {lower:Math.min(Math.round(mean),lower),upper:Math.max(Math.round(mean),upper),bandMethod:'gamma-poisson predictive',coverageTarget:.9};
+}
+export function countForecast(input,date,plan){
+ const h=history(input,date,plan.zone),workingMin=plan.workingMin,cutoff=new Date(stamp(date)-DAY).toISOString().slice(0,10);
+ const meta={comparableN:h.totals.length,modelVersion:plan.modelVersion,trainingCutoff:cutoff,sourceHash:h.key,workingMin,intervalForecasts:[]};
+ if(workingMin===0)return {...meta,central:0,lower:0,upper:0,confidence:'rest',baseline:0,reasons:['День отдыха'],selectedModel:'baseline'};
+ if(workingMin==null)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Укажите рабочие интервалы'],selectedModel:'baseline'};
+ const artifact=models.get(h.key)??(trainingEnabled?prepareCountModel(input,date,plan.zone):null);
+ if(!artifact)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Модель готовится по сохранённой истории'],preparing:true};
+ const fits=artifact.fits,partialOnly=!h.totals.length,byDate=new Map();
+ if(partialOnly)for(const b of fits.bins){const row=byDate.get(b.date)??{date:b.date,orders:0,workingMin:0,workConfirmed:true};row.orders+=b.count;row.workingMin+=b.exposure*60;byDate.set(b.date,row);}
+ const totals=partialOnly?[...byDate.values()]:h.totals;
+ if(!totals.length)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Не хватает истории с известной работой'],selectedModel:'baseline'};
+ const base=baseline(totals,date,workingMin),choice=artifact.choice,weights=hourlyWeights(fits,date,plan,base.rate),precise=windows(plan).length&&Math.abs(windows(plan).reduce((n,w)=>n+w.end-w.start,0)-workingMin)<1;
+ if(precise&&fits.bins.length)base.mean=weights.reduce((n,w)=>n+w.weight,0);
+ const candidate=choice.selected==='nb'?fits.nb:choice.selected==='poisson'?fits.poisson:null,fit=precise?candidate:null,mean=fit?modelMean(fit,date,plan):base.mean;
+ if(!Number.isFinite(mean)||mean>1000000)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Проверьте длительность работы и аномальные итоги истории']};
+ const selected=fit?choice.selected:'baseline',usedChoice={...choice,selected},b={central:Math.round(mean),...countBand(mean,base,usedChoice,fit)},parts=fit?windows(plan).map(w=>({...w,weight:modelMean(fit,date,{intervals:[{...w,state:'WORK'}]})})):weights,total=parts.reduce((n,w)=>n+w.weight,0);let cumul=0;
+ const intervalForecasts=precise?parts.map(w=>{const before=cumul;cumul+=total?w.weight/total:0;const central=Math.round(b.central*cumul)-Math.round(b.central*before),fraction=total?w.weight/total:0;return {start:w.start,end:w.end,central,lower:Math.min(central,Math.floor(b.lower*fraction)),upper:Math.max(central,Math.ceil(b.upper*fraction))};}):[];
+ const low=partialOnly||base.n<5||base.reconstructed>0||!precise||!!plan.assumption;
+ const reasons=[base.n>=3?'Личная история с учётом дня недели и свежести':'Мало сопоставимых наблюдений',base.reconstructed?`${base.reconstructed} реконструкций в baseline с весом0,3; не подтверждённые часы`:'Подтверждённая экспозиция',fits.timeKind?`Единый тип времени: ${fits.timeKind}; интервалы${fits.step}мин`:'Недостаточно данных для почасового профиля',precise?'Личные паузы исключены':'Время суток неизвестно; только дневная оценка'];
+ return {...meta,...b,intervalForecasts,confidence:low?'low':base.n<15?'limited':'moderate',baseline:Math.round(base.mean),comparableN:base.n,reasons,selectedModel:fit?.type??'weighted-count-baseline',fit:fit??fits.poisson,timeKind:fits.timeKind,selection:{...choice,selected,results:undefined},features:['exposure','weekday','recency',...(fits.bins.length?['hourly order events']:[])],estimatedExposureN:base.reconstructed};
+}
+export function validateCounts(input,cutoff,modelVersion,zone=''){
+ const cached=models.get(history(input,cutoff,zone).key);if(cached?.validation)return cached.validation;
+ if(!trainingEnabled)return {n:0,mae:null,wape:null,bias:null,smape:null,baselineMAE:null,coverage:null,results:[],preparing:true,method:'validation pending'};
+ const rows=history(input,cutoff,zone).totals,results=[];
+ for(const d of rows.filter(d=>d.workConfirmed).slice(-90)){
+  const p=countForecast(input,d.date,{workingMin:d.workingMin,intervals:d.intervals,zone:d.zone,modelVersion});if(p.central==null||p.comparableN<3)continue;
+  results.push({date:d.date,fact:d.orders,predicted:p.central,baseline:p.baseline,error:p.central-d.orders,covered:d.orders>=p.lower&&d.orders<=p.upper,trainCutoff:p.trainingCutoff,model:p.selectedModel});
+ }
+ const n=results.length,total=results.reduce((s,r)=>s+r.fact,0);return {n,mae:n?results.reduce((s,r)=>s+Math.abs(r.error),0)/n:null,wape:total?results.reduce((s,r)=>s+Math.abs(r.error),0)/total:null,bias:n?results.reduce((s,r)=>s+r.error,0)/n:null,smape:n?results.reduce((s,r)=>s+(r.fact+r.predicted?2*Math.abs(r.error)/(r.fact+r.predicted):0),0)/n:null,baselineMAE:n?results.reduce((s,r)=>s+Math.abs(r.baseline-r.fact),0)/n:null,coverage:n?results.filter(r=>r.covered).length/n:null,results,method:'walk-forward; confirmed held-out days; nested selection only earlier dates; scenarios excluded'};
+}

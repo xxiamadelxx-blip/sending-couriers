@@ -1,0 +1,10 @@
+/build/
+/signing/
+/verification/
+/qa-results/
+*.keystore
+*.jks
+*.xlsx
+*.xls
+*.apk
+!/qa/Courier-Finance-1.7.8.apk

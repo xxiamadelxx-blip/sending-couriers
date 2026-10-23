@@ -1,0 +1,9 @@
+{
+  "name": "courier-finance-preview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node preview.mjs",
+    "test": "node --test tests/core.test.mjs tests/pace.test.mjs tests/slots.test.mjs tests/premiums.test.mjs tests/preferences.test.mjs tests/payment-terms.test.mjs tests/payout-conditions.test.mjs tests/forecast.test.mjs tests/forecast-import.test.mjs tests/weather.test.mjs tests/forecast-fix.test.mjs tests/forecast-duration.test.mjs tests/model-1.7.4.test.mjs tests/slot-work.test.mjs"
+  }
+}

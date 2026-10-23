@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "closures": {},
+  "entries": [
+    { "date": "2026-10-02", "dailyHours": 14, "dailyOrders": 0, "reward": 0, "tips": 0, "separateBonus": 0 },
+    { "date": "2026-10-03", "dailyHours": 14, "dailyOrders": 36, "reward": 3600, "tips": 90, "separateBonus": 0 },
+    { "date": "2026-10-04", "dailyHours": 14.2, "dailyOrders": 40, "reward": 4000, "tips": 0, "separateBonus": 0 },
+    { "date": "2026-10-05", "dailyHours": 14, "dailyOrders": 32, "reward": 3200, "tips": 0, "separateBonus": 0 },
+    { "date": "2026-10-06", "dailyHours": 14.4, "dailyOrders": 33, "reward": 3300, "tips": 200, "separateBonus": 0 },
+    { "date": "2026-10-07", "dailyHours": 15.4, "dailyOrders": 28, "reward": 2800, "tips": 50, "separateBonus": 0 },
+    { "date": "2026-10-08", "dailyHours": 14, "dailyOrders": 31, "reward": 3100, "tips": 55, "separateBonus": 3750 },
+    { "date": "2026-10-10", "dailyHours": 14, "dailyOrders": null, "reward": 0, "tips": 0, "separateBonus": 0 },
+    { "date": "2026-10-13", "dailyHours": 6, "dailyOrders": 17, "reward": 0, "tips": 0, "separateBonus": 0 }
+  ]
+}
