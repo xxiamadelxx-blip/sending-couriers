@@ -16,8 +16,8 @@ OUT = ROOT / "qa-results"
 OUT.mkdir(exist_ok=True)
 OLD_APK = ROOT / "qa" / "Courier-Finance-1.7.8.apk"
 OLD_HASH = "e6b24ecddf0c728f146b85522e86b2d2b9b340af006b9da4908c0b157f500644"
-APK = ROOT / "qa" / "Courier-Finance-1.7.9.apk"
-EXPECTED = "f357bdc3962f6b4350a5385b8ad4a343f6b0462bf7fcfab56e58c964f05676fd"
+APK = ROOT / "qa" / "Courier-Finance-1.7.10.apk"
+EXPECTED = "dbaf2486455bc412ecbe28b9b3edbc8e7b37d13a54012b33f7c383f03b228c0b"
 PACKAGE = "ru.courier.finance"
 ACTIVITY = f"{PACKAGE}/.MainActivity"
 
@@ -37,6 +37,7 @@ def dump(name):
 
 
 def screenshot(name):
+    time.sleep(2)
     (OUT / f"{name}.png").write_bytes(adb("exec-out", "screencap", "-p", binary=True))
 
 
@@ -146,7 +147,7 @@ def main():
     add_slot(hours=5, orders=10, reward=2000)
     screenshot("00-three-slots-before-upgrade")
     adb("install", "-r", str(APK))
-    print("Updated to 1.7.9", flush=True)
+    print("Updated to 1.7.10", flush=True)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-n", ACTIVITY)
     wait_node("Главная", 45)
@@ -171,6 +172,13 @@ def main():
             assert "Сохранить слот" in text or "Вознаграждение" in text, "Slot form did not open"
         else:
             assert tab in text, f"{tab} screen did not open"
+        if tab == "Прогноз":
+            deadline = time.monotonic() + 25
+            while "Готовим прогноз" in text and time.monotonic() < deadline:
+                time.sleep(1)
+                root = dump("forecast-ready")
+                text = " ".join(n.get("text", "") for n in root.iter("node"))
+            assert "Готовим прогноз" not in text, "Forecast Worker did not finish after APK upgrade"
         screenshot(picture)
 
     adb("shell", "input", "keyevent", "4")
