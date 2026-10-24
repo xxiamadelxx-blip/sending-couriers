@@ -54,6 +54,7 @@ jobs:
       - name: Build prior transfer version with the same temporary test signer
         run: |
           mkdir -p "$RUNNER_TEMP/courier-transfer-prior"
+          git fetch --no-tags --depth=1 origin c4ffdf81fd028851774c5a01a03d07cc3a6bc909
           git archive c4ffdf81fd028851774c5a01a03d07cc3a6bc909 | tar -x -C "$RUNNER_TEMP/courier-transfer-prior"
           python3 tools/prepare_parallel.py "$RUNNER_TEMP/courier-transfer-prior"
           mkdir -p "$RUNNER_TEMP/courier-transfer-prior/signing"
