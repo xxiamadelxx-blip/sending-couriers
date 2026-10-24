@@ -16,6 +16,11 @@ device.ACTIVITY = device.PACKAGE + '/.MainActivity'
 device.OUT = device.ROOT / 'qa-results' / 'ui-transfer-upgrade'
 device.OUT.mkdir(parents=True, exist_ok=True)
 
+# The UI matrix ends at 200% font scale; start this independent flow at baseline.
+device.adb('shell', 'wm', 'size', '1080x2400')
+device.adb('shell', 'wm', 'density', '480')
+device.adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
+
 device.adb('install', str(args.old.resolve()))
 device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
 device.wait_home(45)
