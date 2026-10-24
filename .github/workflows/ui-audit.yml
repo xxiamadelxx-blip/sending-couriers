@@ -62,7 +62,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           script: |
-            python3 qa/ui_audit_matrix.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --phase after --focus "${{ inputs.focus || 'content' }}"
+            python3 qa/ui_audit_matrix.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --phase after --focus "${{ inputs.focus || 'full' }}"
             adb install "$RUNNER_TEMP/courier-transfer-test-only.apk"
             adb shell am start -n ru.courier.finance.transfer/.MainActivity
             adb shell pm list packages | grep -F 'package:ru.courier.finance.transfer'
