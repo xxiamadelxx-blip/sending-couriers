@@ -24,8 +24,10 @@ raw_dump = device.dump
 def stable_dump(name):
     for attempt in range(3):
         try:
+            device.adb('shell', 'rm', '-f', '/sdcard/window.xml')
             return raw_dump(name)
-        except ET.ParseError:
+        except (ET.ParseError, RuntimeError) as error:
+            (out / f'{name}-attempt-{attempt+1}-error.txt').write_text(str(error))
             raw = out / (name + '.xml')
             if raw.exists():
                 (out / f'{name}-parse-attempt-{attempt+1}.txt').write_text(raw.read_text())
@@ -56,6 +58,8 @@ def theme(name):
     label = 'Включить дневную тему' if name == 'light' else 'Включить ночную тему'
     if device.find_node(root, label) is not None:
         device.tap_node(label)
+    expected = 'Включить ночную тему' if name == 'light' else 'Включить дневную тему'
+    assert device.find_node(device.dump('theme-verified'), expected) is not None, 'Theme was not applied: ' + name
 
 
 def tap_payment_tab(label, previous):
@@ -97,7 +101,11 @@ def main():
             suffix = f'{width}-{mode}'
             for index, label in enumerate(['Темп', 'Доход', 'Премии']):
                 device.tap_node(label)
-                capture(f'home-{index}-{suffix}')
+                root = capture(f'home-{index}-{suffix}')
+                marker = ['Темп периода', 'Общий доход', 'Расчётные премии'][index]
+                assert any(marker in (n.get('text', '') + ' ' + n.get('content-desc', ''))
+                           and re.search(r'\[\d+,\d+\]\[\d+,\d+\]', n.get('bounds', ''))
+                           and n.get('bounds') != '[0,0][0,0]' for n in root.iter('node')), 'Wrong home page: ' + label
             device.tap_node('Период')
             capture('period-' + suffix)
             device.tap_node('Записи периода')
@@ -158,5 +166,6 @@ finally:
         'result': status, 'phase': args.phase,
         'apkSha256': hashlib.sha256(args.apk.read_bytes()).hexdigest(),
         'testSigningOnly': args.phase == 'after', 'releaseUpgradeVerified': False,
+        'visualAuditStatus': 'NOT_VERIFIED', 'imeInteractionStatus': 'CAPTURED_REQUIRES_REVIEW',
         'checks': checks, 'limits': ['TalkBack not tested', 'Screenshot review required']
     }, ensure_ascii=False, indent=2))

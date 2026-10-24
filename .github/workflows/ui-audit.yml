@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: courier-ui-audit-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   ui-audit:
     runs-on: ubuntu-latest
@@ -44,7 +47,7 @@ jobs:
           target: default
           arch: x86_64
           profile: pixel_6
-          script: python3 qa/ui_audit_matrix.py --apk qa/Courier-Finance-1.7.11.apk --phase before && python3 qa/ui_audit_matrix.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --phase after
+          script: python3 qa/run_ui_audit.py
       - name: Capture audit evidence
         if: always()
         uses: actions/upload-artifact@v4
