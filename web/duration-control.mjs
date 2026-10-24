@@ -31,13 +31,14 @@ export function bindDurations(root){
       if(Math.abs(e.clientX-thumb)>23)return; // Tapping the track never jumps to a distant value.
       drag={id:e.pointerId,x:e.clientX,y:e.clientY,base:numeric(input.value)??0,raw:input.value,step:0};
     });
-    slider.addEventListener('pointermove',e=>{
+    const move=e=>{
       if(!drag||e.pointerId!==drag.id)return;
       const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
       if(Math.abs(dy)>Math.abs(dx)+8){cancel();return;}
       const step=Math.trunc(dx/10);if(step!==drag.step){drag.step=step;set(drag.base+step*15);}
-    });
-    slider.addEventListener('pointerup',()=>{drag=null;pointer=null;});
+    };
+    slider.addEventListener('pointermove',move);
+    slider.addEventListener('pointerup',e=>{move(e);drag=null;pointer=null;});
     slider.addEventListener('pointercancel',()=>{cancel();pointer=null;sync();});
     slider.addEventListener('lostpointercapture',()=>{cancel();pointer=null;sync();});
   });

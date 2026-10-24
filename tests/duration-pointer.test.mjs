@@ -44,6 +44,11 @@ test('intentional thumb drag retains quarter-hour steps',()=>{
   f.pointer('pointermove',157,10);f.pointer('pointerup',157,10);
   assert.equal(f.input.value,'9');assert.equal(Number(f.slider.value),540);
 });
+test('pointer release uses the final coordinate when the last move stops before a detent',()=>{
+  const f=fixture();f.pointer('pointerdown',117,10);
+  f.pointer('pointermove',156,10);assert.equal(f.input.value,'8,75');
+  f.pointer('pointerup',157,10);assert.equal(f.input.value,'9');
+});
 test('keyboard or accessibility range input still works after a pointer gesture',()=>{
   const f=fixture();f.pointer('pointerdown',270,10);f.pointer('pointerup',270,10);
   f.nativeInput(495);assert.equal(f.input.value,'8,25');
