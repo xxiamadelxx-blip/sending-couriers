@@ -24,7 +24,9 @@ test('acceptance and delivery survive XLSX import while missing work keeps the h
  assert.equal(d.workConfirmed,false);
  const model=prepareCountModel(f.days,'2026-10-23');assert.equal(model.fits.timeKind,null);assert.equal(model.fits.bins.length,0);
  const p=predict(f,'2026-10-23',{workingMin:540,intervals:parseWindows('10:00–15:00;17:00–21:00')});
- assert.equal(p.selectedModel,'weighted-count-baseline');assert.equal(p.confidence,'low');assert.match(forecastModelLabel(p),/почасовая модель не обучена/);
+ assert.equal(p.central,null,'reconstructed hours alone cannot justify a numeric forecast');assert.equal(p.confidence,'insufficient');assert.equal(forecastModelLabel(p),'');
+ const anchored=saveDay(f,{date:'2026-10-03',orders:2,ordersConfirmed:true,workingMin:540,workConfirmed:true,precision:'total'});
+ const a=predict(anchored,'2026-10-23',{workingMin:540});assert.equal(a.central,2);assert.equal(a.estimatedExposureN,2);
 });
 test('confirmed note window supersedes nominal slot; mismatch cannot become confirmed hourly exposure',()=>{
  const date='2026-10-10',raw={'2':{A:date,C:'10:05',D:1,L:'10:00',M:'10:25',K:'Высокая'}};

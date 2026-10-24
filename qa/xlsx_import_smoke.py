@@ -44,6 +44,7 @@ def choose_workbook():
     ready = wait_node("История загружена: 1 дней", 20)[0]
     assert find_node(ready, "Прогноз") is not None, "Forecast did not return after XLSX import"
     assert find_node(ready, "Не удалось прочитать файл") is None
+    wait_node("Пока мало данных о рабочем времени", 25)
     screenshot("xlsx-after-import")
 
 
@@ -71,6 +72,7 @@ def exported_forecast():
         if raw:
             state = json.loads(raw)
             adb("shell", "rm", path)
+            tap_node("Закрыть")
             tap_node("Прогноз")
             return state["forecast"]
         time.sleep(.5)

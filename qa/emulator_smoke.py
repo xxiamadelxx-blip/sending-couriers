@@ -16,8 +16,8 @@ OUT = ROOT / "qa-results"
 OUT.mkdir(exist_ok=True)
 OLD_APK = ROOT / "qa" / "Courier-Finance-1.7.8.apk"
 OLD_HASH = "e6b24ecddf0c728f146b85522e86b2d2b9b340af006b9da4908c0b157f500644"
-APK = ROOT / "qa" / "Courier-Finance-1.7.10.apk"
-EXPECTED = "2de029f73a84d4dae608785e36e8ee8992af6a681abf34979c1f38d8b9b73ce4"
+APK = ROOT / "qa" / "Courier-Finance-1.7.11.apk"
+EXPECTED = "0daa53d8fa79bfd2d19c4c0a16c36a065c24ee0cbb390fec3ca0ef302b50ef58"
 PACKAGE = "ru.courier.finance"
 ACTIVITY = f"{PACKAGE}/.MainActivity"
 
@@ -147,7 +147,7 @@ def main():
     add_slot(hours=5, orders=10, reward=2000)
     screenshot("00-three-slots-before-upgrade")
     adb("install", "-r", str(APK))
-    print("Updated to 1.7.10", flush=True)
+    print("Updated to 1.7.11", flush=True)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-n", ACTIVITY)
     wait_node("Главная", 45)
@@ -189,7 +189,7 @@ def main():
         if tab == "Настройки":
             for _ in range(3):
                 adb("shell", "input", "swipe", "540", "1770", "540", "550", "360")
-            assert find_node(dump("settings-version"), "Версия 1.7.10") is not None, "Settings version differs from APK"
+            assert find_node(dump("settings-version"), "Версия 1.7.11") is not None, "Settings version differs from APK"
             tap_node("Главная")
             tap_node("Настройки")
             screenshot("04-settings-reopened-360-dark")

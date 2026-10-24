@@ -137,6 +137,10 @@ export function countForecast(input,date,plan){
  if(workingMin==null)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Укажите рабочие интервалы'],selectedModel:'baseline'};
  const artifact=models.get(h.key)??(trainingEnabled?prepareCountModel(input,date,plan.zone):null);
  if(!artifact)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Модель готовится по сохранённой истории'],preparing:true};
+ // Reconstructed day lengths may support an anchored baseline, but cannot establish
+ // a personal order rate on their own. Confirmed sub-windows provide that anchor too.
+ if(!h.totals.some(d=>d.workConfirmed)&&!artifact.fits.bins.length)
+  return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Не хватает подтверждённого рабочего времени'],selectedModel:'baseline'};
  const fits=artifact.fits,partialOnly=!h.totals.length,byDate=new Map();
  if(partialOnly)for(const b of fits.bins){const row=byDate.get(b.date)??{date:b.date,orders:0,workingMin:0,workConfirmed:true};row.orders+=b.count;row.workingMin+=b.exposure*60;byDate.set(b.date,row);}
  const totals=partialOnly?[...byDate.values()]:h.totals;

@@ -1,6 +1,6 @@
-# Приложение для курьера — Android 1.7.10
+# Приложение для курьера — Android 1.7.11
 
-Автономное приложение для Android 8+. Пакет `ru.courier.finance`, versionCode 24, прежний сертификат. Финансовая история хранится на устройстве. INTERNET используется для публичной погоды; деньги и история погодному сервису не передаются. Личной истории и демонстрационных записей в APK нет.
+Автономное приложение для Android 8+. Пакет `ru.courier.finance`, versionCode 25, прежний сертификат. Финансовая история хранится на устройстве. INTERNET используется для публичной погоды; деньги и история погодному сервису не передаются. Личной истории и демонстрационных записей в APK нет.
 
 ## Интерфейс
 
@@ -54,8 +54,8 @@ node tests/model-coverage-ui.test.mjs
 node tools/benchmark_forecast.mjs
 python3 build.py --sdk /absolute/path/to/android-sdk
 python3 tests/verify_native.py --sdk /absolute/path/to/android-sdk
-python3 tests/verify_apk.py --sdk /absolute/path/to/android-sdk --apk qa/Courier-Finance-1.7.10.apk --previous-apk qa/Courier-Finance-1.7.8.apk --previous-source /absolute/path/to/Courier-Finance-Source-1.7.8.zip
+python3 tests/verify_apk.py --sdk /absolute/path/to/android-sdk --apk qa/Courier-Finance-1.7.11.apk --previous-apk qa/Courier-Finance-1.7.10.apk --previous-source /absolute/path/to/Courier-Finance-Source-1.7.10.zip
 python3 tools/package_release.py
 ```
 
-Результаты 1.7.8: `verification/1.7.8/`. Для 1.7.10: 130 unit, браузерный прогноз 360/390 в двух темах, фактический NativeBridge на JVM, совпадение assets/dex и сертификата. Облачный Android 35 проверяет чистую установку, обновление поверх 1.7.8, три слота и снимки экранов; итог и открытые пункты перечислены в `docs/acceptance/ANDROID_QA_1.7.10.md`. APK находится в `qa/Courier-Finance-1.7.10.apk`.
+Результаты 1.7.8: `verification/1.7.8/`. Для 1.7.11: 130 unit, фактический NativeBridge на JVM, совпадение assets/dex и сертификата. Облачный Android 35 проверяет обновление поверх 1.7.8, три слота, импорт синтетического XLSX и снимки экранов; итог и открытые пункты перечислены в `docs/acceptance/ANDROID_QA_1.7.11.md`. APK находится в `qa/Courier-Finance-1.7.11.apk`.

@@ -40,7 +40,7 @@ destination.mkdir(parents=True, exist_ok=True)
 classpath = os.pathsep.join(str(p.resolve()) for p in [classes, args.json_jar, android_jar])
 compiler = [shutil.which('javac')] if shutil.which('javac') else ['java', 'com.sun.tools.javac.Main']
 subprocess.run([*compiler, '-encoding', 'UTF-8', '-cp', classpath, '-d', str(destination), str(ROOT / 'tests/NativeStateProbe.java')], check=True)
-verification = ROOT / 'verification/1.7.10'
+verification = ROOT / 'verification/1.7.11'
 verification.mkdir(parents=True, exist_ok=True)
 fixture = ROOT / 'tests/fixtures/native-state-fixture.json'
 output = subprocess.check_output(['java', '-cp', str(destination) + os.pathsep + classpath,
