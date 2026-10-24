@@ -48,7 +48,7 @@ def choose_workbook():
     screenshot("xlsx-after-import")
 
 
-def exported_forecast():
+def exported_state():
     """Read the same JSON backup a courier can save through Android's picker."""
     tap_node("Главная")
     tap_node("Экспорт для ChatGPT")
@@ -74,9 +74,13 @@ def exported_forecast():
             adb("shell", "rm", path)
             tap_node("Закрыть")
             tap_node("Прогноз")
-            return state["forecast"]
+            return state
         time.sleep(.5)
     raise AssertionError("Saved JSON backup is not present in Downloads")
+
+
+def exported_forecast():
+    return exported_state()["forecast"]
 
 
 def assert_imported(forecast):
