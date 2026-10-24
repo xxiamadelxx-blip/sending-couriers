@@ -186,6 +186,13 @@ def main():
             nav_top = list(map(int, re.findall(r"\d+", home_tab.get("bounds", ""))))[1]
             assert import_bottom <= nav_top - 12, f"Forecast import overlaps navigation: {import_bottom=} {nav_top=}"
         screenshot(picture)
+        if tab == "Настройки":
+            for _ in range(3):
+                adb("shell", "input", "swipe", "540", "1770", "540", "550", "360")
+            assert find_node(dump("settings-version"), "Версия 1.7.10") is not None, "Settings version differs from APK"
+            tap_node("Главная")
+            tap_node("Настройки")
+            screenshot("04-settings-reopened-360-dark")
 
     adb("shell", "input", "keyevent", "4")
     adb("shell", "wm", "size", "1170x2532")

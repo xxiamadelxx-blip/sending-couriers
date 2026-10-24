@@ -47,6 +47,46 @@ def choose_workbook():
     screenshot("xlsx-after-import")
 
 
+def exported_forecast():
+    """Read the same JSON backup a courier can save through Android's picker."""
+    tap_node("Главная")
+    tap_node("Экспорт для ChatGPT")
+    tap_node("Резервная копия JSON")
+    root = dump("backup-picker")
+    for word in ("Downloads", "Загрузки"):
+        node = find_node(root, word)
+        if node is not None:
+            tap(node)
+            break
+    root = dump("backup-destination")
+    save = find_node(root, "Save") or find_node(root, "Сохранить")
+    assert save is not None, "Android backup destination has no Save button"
+    tap(save)
+    filename = "courier-backup-" + adb("shell", "date", "+%Y-%m-%d").strip() + ".json"
+    path = "/sdcard/Download/" + filename
+    for _ in range(20):
+        raw = adb("exec-out", "cat", path, binary=True, check=False)
+        if raw:
+            state = json.loads(raw)
+            adb("shell", "rm", path)
+            tap_node("Прогноз")
+            return state["forecast"]
+        time.sleep(.5)
+    raise AssertionError("Saved JSON backup is not present in Downloads")
+
+
+def assert_imported(forecast):
+    day = forecast["days"]["2026-10-20"]
+    events = day["orderEvidence"]
+    assert day["orders"] == 2 and len(events) == 2, "Import did not store both orders exactly once"
+    assert sum(event.get("acceptedMin") is not None for event in events) == 1
+    assert sum(event.get("deliveredMin") is not None for event in events) == 1
+    assert sum(event.get("acceptedMin") is not None and event.get("deliveredMin") is not None for event in events) == 1
+    assert day["workConfirmed"] is False, "Reconstructed hours became confirmed work"
+    return {"orders": day["orders"], "events": [(e["id"], e.get("acceptedMin"), e.get("deliveredMin")) for e in events],
+            "workingMin": day["workingMin"], "workConfirmed": day["workConfirmed"]}
+
+
 def main():
     fixture = OUT / NAME
     create(fixture)
@@ -54,10 +94,13 @@ def main():
     adb("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", f"file://{DEVICE_PATH}")
     tap_node("Прогноз")
     choose_workbook()
+    first = assert_imported(exported_forecast())
     choose_workbook()
+    second = assert_imported(exported_forecast())
+    assert first == second, "Repeated XLSX import changed order facts"
     (OUT / "xlsx-import-result.json").write_text(json.dumps({"result": "PASS", "repeatedImports": 2,
-        "fixture": NAME, "synthetic": True, "note": "UI callback confirmed; idempotent content verified by JVM+JS separately"}, ensure_ascii=False, indent=2))
-    print("XLSX picker PASS: two synthetic imports returned to the forecast screen", flush=True)
+        "fixture": NAME, "synthetic": True, "stored": second}, ensure_ascii=False, indent=2))
+    print("XLSX picker PASS: saved backup confirms two events and repeat import is idempotent", flush=True)
 
 
 if __name__ == "__main__":
