@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
       - name: Model and finance regressions
         run: npm test
       - name: Set up Android command line tools
@@ -48,7 +50,16 @@ jobs:
           python3 "$RUNNER_TEMP/courier-transfer-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/courier-transfer-test-only.apk"
           cp "$RUNNER_TEMP/courier-transfer-source/build/aligned.apk" "$RUNNER_TEMP/courier-transfer-unsigned.apk"
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$RUNNER_TEMP/apksigner.jar"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='26' versionName='1.7.12'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='27' versionName='1.7.13'"
+      - name: Build prior transfer version with the same temporary test signer
+        run: |
+          mkdir -p "$RUNNER_TEMP/courier-transfer-prior"
+          git archive c4ffdf81fd028851774c5a01a03d07cc3a6bc909 | tar -x -C "$RUNNER_TEMP/courier-transfer-prior"
+          python3 tools/prepare_parallel.py "$RUNNER_TEMP/courier-transfer-prior"
+          mkdir -p "$RUNNER_TEMP/courier-transfer-prior/signing"
+          cp "$RUNNER_TEMP/courier-transfer-source/signing/"* "$RUNNER_TEMP/courier-transfer-prior/signing/"
+          python3 "$RUNNER_TEMP/courier-transfer-prior/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/courier-transfer-prior-test-only.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-prior-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='26' versionName='1.7.12'"
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -63,9 +74,7 @@ jobs:
           profile: pixel_6
           script: |
             python3 qa/ui_audit_matrix.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --phase after --focus "${{ inputs.focus || 'full' }}"
-            adb install "$RUNNER_TEMP/courier-transfer-test-only.apk"
-            adb shell am start -n ru.courier.finance.transfer/.MainActivity
-            adb shell pm list packages | grep -F 'package:ru.courier.finance.transfer'
+            python3 qa/transfer_upgrade_smoke.py --old "$RUNNER_TEMP/courier-transfer-prior-test-only.apk" --new "$RUNNER_TEMP/courier-transfer-test-only.apk"
       - name: Capture audit evidence
         if: always()
         uses: actions/upload-artifact@v4

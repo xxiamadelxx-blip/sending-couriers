@@ -180,6 +180,8 @@ def main():
                 tap_payment_tab(label, previous)
                 root = capture(f'settings-{index}-{suffix}')
                 assert device.find_node(root, fields[index]) is not None, 'Payment page did not change: ' + label
+                assert any(n.get('text', '').startswith('Выбрана дата: ') and n.get('bounds') != '[0,0][0,0]'
+                           for n in root.iter('node')), 'Selected tariff date is not visible on ' + label
                 previous = label
             device.tap_node('Добавить слот')
             root = capture('form-' + suffix)

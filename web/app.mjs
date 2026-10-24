@@ -266,7 +266,7 @@ function settings() {
     ${field('criticalPace','Критический темп',initial.criticalPace ?? initial.basePace,{unit:'заказа/ч',full:true})}
     ${field('paceBonusPercent','Премия за темп',initial.paceBonusPercent,{unit:'%'})}
     ${field('cycleBonusPercent','Премия за 12 недель',initial.cycleBonusPercent,{unit:'%'})}</div>
-    <div class="error" id="paymentError" role="alert" hidden></div><button class="button primary" id="savePaymentTerms" type="submit">Сохранить условия</button></form><div id="paymentHistory">${ruleHistory()}</div></section>
+    <p class="payment-effective-date" id="paymentEffectiveDate" aria-live="polite">Выбрана дата: ${esc(formatDate(chosenDate))}</p><div class="error" id="paymentError" role="alert" hidden></div><button class="button primary" id="savePaymentTerms" type="submit">Сохранить условия</button></form><div id="paymentHistory">${ruleHistory()}</div></section>
     <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
   const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
   const periodField=$('.payment-period'),fieldGrid=$('#paymentForm .form-grid');
@@ -285,6 +285,7 @@ function settings() {
   $('#paymentPeriod').addEventListener('change', event => {
     const terms = paymentTermsFor(state,event.target.value);
     for (const key of ['hourlyRate','basePace','premiumPace','paceBonusPercent','cycleBonusPercent','minimumHours','criticalPace']) $('#' + key).value = String(terms[key] ?? (key==='minimumHours'?80:terms.basePace)).replace('.',',');
+    $('#paymentEffectiveDate').textContent = `Выбрана дата: ${formatDate(event.target.value)}`;
     $('#paymentError').hidden = true;
   });
   $('#paymentForm').addEventListener('submit', event => {

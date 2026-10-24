@@ -180,6 +180,7 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
 .payment-settings .pager-panel .field input,.payment-settings .pager-panel .period-select{min-height:52px;width:100%}
 .payment-settings #savePaymentTerms{min-height:48px;margin-top:17px}
 .payment-settings #paymentHistory{margin-top:4px}
+.payment-effective-date{margin:16px 0 0;padding:10px 12px;border-radius:12px;background:var(--surface);color:var(--ink);font-size:14px;line-height:1.4}
 .slot-working{margin-top:24px}
 
 /* Compact numbers and controls stay readable on narrow Android screens. */
