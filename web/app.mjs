@@ -61,7 +61,7 @@ function warmForecast() {
   prepareForecast(state.forecast).then(artifact=>{
     if(forecastKey(state.forecast)!==key){warmForecast();return;}
     try{persist({...state,forecast:{...state.forecast,trainedModel:artifact}},true);if(view==='forecast')forecastScreen?.modelReady?.();}catch(error){notify(error.message);}
-  }).catch(error=>{if(requestedModel===key)requestedModel=null;notify(error.message);});
+  }).catch(error=>{if(requestedModel===key)requestedModel=null;forecastScreen?.modelFailed?.();notify(error.message);});
 }
 function openForecast(initial = 'today') {
   const synced=syncSlots(state.forecast,state.entries);
@@ -71,6 +71,7 @@ function openForecast(initial = 'today') {
   }
   view='forecast';editingId=null;
   forecastScreen=mountForecast({root:app,getState:()=>state,commit:persist,heading,nav:()=>bottomNav('forecast'),leave:summary,notify,Native,initial});
+  warmForecast();
 }
 window.receiveForecastImport = text => { if(view!=='forecast')openForecast(); forecastScreen.receiveImport(text); };
 window.receiveWeather = text => {

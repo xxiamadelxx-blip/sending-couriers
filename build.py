@@ -11,7 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
 parser.add_argument('--sdk', default=os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME') or str(ROOT.parent / 'tools/android-sdk'))
-parser.add_argument('--output', default=str(ROOT.parent / 'artifacts/Courier-Finance-1.7.9.apk'))
+parser.add_argument('--output', default=str(ROOT.parent / 'artifacts/Courier-Finance-1.7.11.apk'))
 args = parser.parse_args()
 sdk = Path(args.sdk).resolve()
 platforms = [sdk / 'platforms/android-35/android.jar', sdk / 'android-35/android.jar']
@@ -22,6 +22,7 @@ if android_jar is None or tools is None:
     raise SystemExit('Install Android platform 35 and build-tools 35.0.0; pass --sdk /path/to/sdk.')
 build = ROOT / 'build'
 if build.exists(): shutil.rmtree(build)
+subprocess.run(['python3', str(ROOT / 'tools/generate_forecast_worker.py')], check=True)
 for path in ['assets/www', 'generated', 'classes', 'dex']: (build / path).mkdir(parents=True)
 for path in (ROOT / 'web').iterdir():
     if path.is_file(): shutil.copy2(path, build / 'assets/www' / path.name)

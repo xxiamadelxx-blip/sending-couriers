@@ -16,8 +16,8 @@ OUT = ROOT / "qa-results"
 OUT.mkdir(exist_ok=True)
 OLD_APK = ROOT / "qa" / "Courier-Finance-1.7.8.apk"
 OLD_HASH = "e6b24ecddf0c728f146b85522e86b2d2b9b340af006b9da4908c0b157f500644"
-APK = ROOT / "qa" / "Courier-Finance-1.7.9.apk"
-EXPECTED = "f357bdc3962f6b4350a5385b8ad4a343f6b0462bf7fcfab56e58c964f05676fd"
+APK = ROOT / "qa" / "Courier-Finance-1.7.11.apk"
+EXPECTED = "0daa53d8fa79bfd2d19c4c0a16c36a065c24ee0cbb390fec3ca0ef302b50ef58"
 PACKAGE = "ru.courier.finance"
 ACTIVITY = f"{PACKAGE}/.MainActivity"
 
@@ -37,6 +37,7 @@ def dump(name):
 
 
 def screenshot(name):
+    time.sleep(2)
     (OUT / f"{name}.png").write_bytes(adb("exec-out", "screencap", "-p", binary=True))
 
 
@@ -146,7 +147,7 @@ def main():
     add_slot(hours=5, orders=10, reward=2000)
     screenshot("00-three-slots-before-upgrade")
     adb("install", "-r", str(APK))
-    print("Updated to 1.7.9", flush=True)
+    print("Updated to 1.7.11", flush=True)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-n", ACTIVITY)
     wait_node("Главная", 45)
@@ -171,7 +172,27 @@ def main():
             assert "Сохранить слот" in text or "Вознаграждение" in text, "Slot form did not open"
         else:
             assert tab in text, f"{tab} screen did not open"
+        if tab == "Прогноз":
+            deadline = time.monotonic() + 25
+            while "Готовим прогноз" in text and time.monotonic() < deadline:
+                time.sleep(1)
+                root = dump("forecast-ready")
+                text = " ".join(n.get("text", "") for n in root.iter("node"))
+            assert "Готовим прогноз" not in text, "Forecast Worker did not finish after APK upgrade"
+            import_button = find_node(root, "Импортировать отчёт")
+            home_tab = find_node(root, "Главная")
+            assert import_button is not None and home_tab is not None, "Forecast import or navigation is missing"
+            import_bottom = list(map(int, re.findall(r"\d+", import_button.get("bounds", ""))))[3]
+            nav_top = list(map(int, re.findall(r"\d+", home_tab.get("bounds", ""))))[1]
+            assert import_bottom <= nav_top - 12, f"Forecast import overlaps navigation: {import_bottom=} {nav_top=}"
         screenshot(picture)
+        if tab == "Настройки":
+            for _ in range(3):
+                adb("shell", "input", "swipe", "540", "1770", "540", "550", "360")
+            assert find_node(dump("settings-version"), "Версия 1.7.11") is not None, "Settings version differs from APK"
+            tap_node("Главная")
+            tap_node("Настройки")
+            screenshot("04-settings-reopened-360-dark")
 
     adb("shell", "input", "keyevent", "4")
     adb("shell", "wm", "size", "1170x2532")

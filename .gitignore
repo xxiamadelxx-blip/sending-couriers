@@ -9,3 +9,5 @@
 *.apk
 !/qa/Courier-Finance-1.7.8.apk
 !/qa/Courier-Finance-1.7.9.apk
+!/qa/Courier-Finance-1.7.10.apk
+!/qa/Courier-Finance-1.7.11.apk

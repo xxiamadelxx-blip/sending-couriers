@@ -21,4 +21,7 @@ time.sleep(12)
 adb('shell','uiautomator','dump','/sdcard/window.xml')
 (out/'worker-probe.xml').write_bytes(adb('exec-out','cat','/sdcard/window.xml'))
 (out/'logcat.txt').write_bytes(adb('logcat','-d','-t','9000'))
-print('Worker probe captured.',flush=True)
+screen=(out/'worker-probe.xml').read_text()
+assert 'Готовим прогноз' not in screen, 'Forecast preparation is stuck on a fresh install'
+assert 'Пока мало данных о рабочем времени' in screen, 'Empty history did not resolve to an honest no-data state'
+print('Worker probe PASS: cold forecast resolved without history.',flush=True)

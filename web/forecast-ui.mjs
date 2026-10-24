@@ -21,7 +21,7 @@ export function forecastTeaser(state) {
 }
 export function mountForecast({root,getState,commit,heading,nav,leave,notify,Native,initial='today'}) {
   const $=s=>root.querySelector(s),data=()=>getState().forecast??emptyForecast();
-  let updateModel=()=>{},screen=initial,start=forecastClock(data()).date,overrides={},dayDate=start,pending=null,weekConfig=data().weekConfig??null,weekConfigDraftValid=true;
+  let updateModel=()=>{},modelFailure=false,screen=initial,start=forecastClock(data()).date,overrides={},dayDate=start,pending=null,weekConfig=data().weekConfig??null,weekConfigDraftValid=true;
   const useWeekConfig=(force=false)=>{if(!weekConfig)return;for(let i=0;i<7;i++){const date=addDays(start,i),base=planDay(data(),date),fact=data().days[date];if(fact?.completed&&fact.ordersConfirmed&&date<=forecastClock(data()).date||!force&&data().plans[date])continue;const rest=base.rest&&(base.slotMin??base.accountedMin)===0,workingMin=rest?0:weekConfig.workingMin,same=base.workingMin===workingMin;overrides[date]={workingMin,slotMin:rest?0:weekConfig.slotMin,accountedMin:null,intervals:rest?[]:weekConfig.intervals??(same?base.intervals.filter(i=>i.state==='WORK'):[]),precision:rest?'total':weekConfig.precision??(same&&base.intervals.length?'intervals':'total'),accountingAssumption:true};}};useWeekConfig();
   const current=()=>forecastClock(data());
   const write=(next,{nowcast=true}={})=>{
@@ -51,7 +51,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     const preview=()=>{
       const pair=read(),result=predict(data(),date,planDay(data(),date,{[date]:pair}));
       $('#simpleCount').innerHTML=`${result.central??'—'}<span> заказов</span>`;
-      $('#simpleRange').textContent=result.central==null?(result.preparing?'Готовим прогноз…':'Пока мало данных о рабочем времени'):`Возможный диапазон: ${result.lower}–${result.upper}`;
+      $('#simpleRange').textContent=result.central==null?(result.preparing?(modelFailure?'Не удалось рассчитать прогноз. Откройте экран ещё раз.':'Готовим прогноз…'):'Пока мало данных о рабочем времени'):`Возможный диапазон: ${result.lower}–${result.upper}`;
       $('#forecastError').hidden=true;
       return pair;
     };
@@ -64,7 +64,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     const changed=()=>{clearTimeout(saveTimer);run(()=>{const pair=preview();saveTimer=setTimeout(()=>save(pair),500);});};
     $('#todayWorkHours').addEventListener('input',changed);
     $('#todaySlotHours').addEventListener('input',changed);
-    updateModel=()=>run(preview);run(preview);
+    updateModel=()=>{modelFailure=false;run(preview);};run(preview);
     $('#importForecast').onclick=()=>{clearTimeout(saveTimer);run(()=>save(read()));if(Native?.importForecast)Native.importForecast();else $('#forecastFile').click();};
     $('#forecastFile').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>8000000)throw new Error('Файл больше 8 МБ.');if(file.name.toLowerCase().endsWith('.xlsx'))throw new Error('Откройте XLSX в Android-приложении.');receiveImport(await file.text(),file.name);}catch(error){showError(error);}};
   }
@@ -192,5 +192,5 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     run(()=>{const parsed=parseForecastFile(text,name);const merged=applyHistory(data(),parsed);write(merged);simpleView();notify(`История загружена: ${parsed.days.length} дней`);});
   }
   function render(next=screen){updateModel=()=>{};screen=next;({today:simpleView,day:dayView,week:weekView,accuracy:accuracyView,data:dataView}[screen]??simpleView)();}
-  render();return {receiveImport,modelReady:()=>updateModel(),back:()=>{if(screen!=='today'){render('today');return true;}return false;}};
+  render();return {receiveImport,modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(screen!=='today'){render('today');return true;}return false;}};
 }
