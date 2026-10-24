@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Model and finance regressions
         run: npm test
+      - name: Set up Android command line tools
+        uses: android-actions/setup-android@v3
       - name: Prepare SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Build isolated test APK, preserve release signing
