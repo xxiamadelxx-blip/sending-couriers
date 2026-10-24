@@ -95,6 +95,21 @@ def main():
     device.tap_node('Главная')
     device.add_slot(hours=4, orders=8, reward=1200)
     device.add_slot(hours=5, orders=10, reward=2000)
+    if args.phase == 'after':
+        device.tap_node('Прогноз')
+        for _ in range(6):
+            device.tap_node('Из них буду работать: минус 15 минут')
+        device.tap_node('Главная')
+        device.adb('shell', 'am', 'force-stop', device.PACKAGE)
+        device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+        device.wait_home(30)
+        device.tap_node('Прогноз')
+        root = capture('plan-6-5-after-process-restart')
+        fields = [n.get('text', '') for n in root.iter('node') if n.get('class') == 'android.widget.EditText']
+        assert len(fields) == 2 and [float(v.replace(',', '.')) for v in fields] == [14, 6.5], fields
+        for _ in range(6):
+            device.tap_node('Из них буду работать: плюс 15 минут')
+        device.tap_node('Главная')
     for width, size in [(360, '1080x2400'), (390, '1170x2532')]:
         device.adb('shell', 'wm', 'size', size)
         for mode in ['dark', 'light']:
@@ -168,7 +183,7 @@ def main():
         assert action is not None and nav is not None, 'Large-text import action missing'
         action_bounds = list(map(int, re.findall(r'\d+', action.get('bounds', ''))))
         nav_bounds = list(map(int, re.findall(r'\d+', nav.get('bounds', ''))))
-        assert action_bounds[3] <= nav_bounds[1], 'Large-text import is covered by navigation'
+        assert action_bounds[2] > action_bounds[0] and action_bounds[3] > action_bounds[1] and action_bounds[1] >= 0 and action_bounds[3] <= nav_bounds[1], 'Large-text import is missing or covered by navigation'
         device.tap_node('Настройки')
         capture('font-' + scale + '-settings')
         device.tap_node('Добавить слот')
