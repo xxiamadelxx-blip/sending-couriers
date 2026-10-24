@@ -208,6 +208,26 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
 .nav-item{font-size:12px}
 .forecast-simple-hero .forecast-number.is-unknown{font-size:36px;font-weight:500;letter-spacing:0;line-height:1.3;color:var(--muted)}
 
+/* Native font scaling changes layout, while keeping the requested text size. */
+main{padding-bottom:calc(var(--navigation-space,104px) + var(--safe-bottom))}
+.nav-item span{max-width:100%;overflow-wrap:anywhere;line-height:1.15}
+:root[data-text-scale="large"] .overview .pace-hero{grid-template-columns:minmax(0,1fr);gap:20px}
+:root[data-text-scale="large"] .gauge,:root[data-text-scale="large"] .gauge canvas{width:160px;height:160px}
+:root[data-text-scale="large"] .gauge{justify-self:center}
+:root[data-text-scale="large"] .gauge-label strong{font-size:26px}
+:root[data-text-scale="large"] .overview .meters{grid-template-columns:minmax(0,1fr);gap:16px}
+:root[data-text-scale="large"] .meter+.meter{padding-left:0;border-left:0;border-top:1px solid var(--line);padding-top:16px}
+:root[data-text-scale="large"] .norm-row{flex-wrap:wrap;gap:12px}
+:root[data-text-scale="large"] .page-heading{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;gap:14px}
+:root[data-text-scale="large"] .page-heading h1{grid-column:1/-1;grid-row:2;overflow-wrap:anywhere}
+:root[data-text-scale="large"] .page-heading .theme-toggle{grid-column:3;grid-row:1}
+:root[data-text-scale="large"] .forecast-page .duration-control .duration-value input{height:auto;min-height:60px;width:88px;padding:8px}
+:root[data-text-scale="large"] .duration-track{grid-template-columns:56px minmax(0,1fr) 56px;gap:8px}
+:root[data-text-scale="large"] .duration-track button{width:56px;height:64px;min-height:64px;line-height:1}
+:root[data-text-scale="large"] .forecast-page .duration-control .duration-slider{height:64px;min-height:64px}
+:root[data-text-scale="large"] .form-grid{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] .field input,:root[data-text-scale="large"] .field select{height:auto;min-height:64px}
+
 /* Keep both duration controls and the report import above Android's bottom nav. */
 @media (max-width:400px) and (max-height:800px){
   .forecast-simple-hero{padding:14px 18px;margin:4px 0 8px}

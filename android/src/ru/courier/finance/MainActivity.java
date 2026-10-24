@@ -188,6 +188,7 @@ public final class MainActivity extends Activity {
         runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
     }
     public final class NativeBridge {
+        @JavascriptInterface public double fontScale() { return getResources().getConfiguration().fontScale; }
         @JavascriptInterface public void applyTheme(String mode) {
             if (!"dark".equals(mode) && !"light".equals(mode)) return;
             runOnUiThread(() -> applyAppearance("dark".equals(mode)));

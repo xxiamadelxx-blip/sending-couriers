@@ -20,6 +20,12 @@ const $ = selector => document.querySelector(selector);
 const app = $('#app');
 const Native = window.CourierNative;
 document.documentElement.classList.toggle('native-app', Boolean(Native));
+let nativeFontScale=1;
+try{const scale=Number(Native?.fontScale?.());if(Number.isFinite(scale)&&scale>0)nativeFontScale=scale;}catch{}
+document.documentElement.dataset.textScale=nativeFontScale>=1.6?'large':nativeFontScale>=1.2?'medium':'standard';
+if(typeof ResizeObserver==='function')new ResizeObserver(()=>{
+  document.documentElement.style.setProperty('--navigation-space',`${Math.max(104,Math.ceil($('#bottomNav').getBoundingClientRect().height)+24)}px`);
+}).observe($('#bottomNav'));
 const feedback = kind => emitFeedback(kind, state?.settings, Native);
 document.addEventListener('click', event => {
   const button = event.target.closest('button, summary');

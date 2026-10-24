@@ -13,11 +13,13 @@ import emulator_smoke as device
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', type=Path, required=True)
 parser.add_argument('--phase', choices=['before', 'after'], required=True)
+parser.add_argument('--focus', choices=['full', 'delta'], default='full')
 args = parser.parse_args()
 out = device.ROOT / 'qa-results' / ('ui-' + args.phase)
 out.mkdir(parents=True, exist_ok=True)
 device.OUT = out
 checks = []
+missing_content = []
 raw_dump = device.dump
 
 
@@ -103,9 +105,13 @@ def main():
                 device.tap_node(label)
                 root = capture(f'home-{index}-{suffix}')
                 marker = ['Темп периода', 'Общий доход', 'Расчётные премии'][index]
-                assert any(marker in (n.get('text', '') + ' ' + n.get('content-desc', ''))
-                           and re.search(r'\[\d+,\d+\]\[\d+,\d+\]', n.get('bounds', ''))
-                           and n.get('bounds') != '[0,0][0,0]' for n in root.iter('node')), 'Wrong home page: ' + label
+                selected = device.find_node(root, label)
+                assert selected is not None and selected.get('selected') == 'true', 'Wrong selected home page: ' + label
+                readable = any(marker in re.sub(r'\s+', ' ', n.get('text', '') + ' ' + n.get('content-desc', ''))
+                               and n.get('bounds') != '[0,0][0,0]' for n in root.iter('node'))
+                checks[-1]['contentTreeStatus'] = 'PASS' if readable else 'FAIL'
+                if not readable:
+                    missing_content.append(f'home-{index}-{suffix}')
             device.tap_node('Период')
             capture('period-' + suffix)
             device.tap_node('Записи периода')
@@ -119,7 +125,7 @@ def main():
             titles = ['Период', '₽/час', 'Темп оплаты', 'Темп премии', 'Мин. часы', 'Крит. темп', '% темп', '% 12 недель']
             fields = ['Начиная с периода', 'Ставка за час', 'Темп для оплаты', 'Темп для премии', 'Минимум часов за период', 'Критический темп', 'Премия за темп', 'Премия за 12 недель']
             previous = 'Период'
-            for index, label in enumerate(titles):
+            for index, label in enumerate(titles[:1] if args.focus == 'delta' else titles):
                 tap_payment_tab(label, previous)
                 root = capture(f'settings-{index}-{suffix}')
                 assert device.find_node(root, fields[index]) is not None, 'Payment page did not change: ' + label
@@ -141,9 +147,39 @@ def main():
         capture('font-' + scale + '-home')
         device.tap_node('Прогноз')
         capture('font-' + scale + '-forecast')
+        for attempt in range(3):
+            root = device.dump(f'font-scroll-current-{attempt}')
+            action = device.find_node(root, 'Импортировать отчёт')
+            nav = device.find_node(root, 'Главная')
+            if action is not None and nav is not None:
+                ab = list(map(int, re.findall(r'\d+', action.get('bounds', ''))))
+                nb = list(map(int, re.findall(r'\d+', nav.get('bounds', ''))))
+                if len(ab) == 4 and ab[3] > ab[1] and ab[3] <= nb[1]:
+                    break
+            scroll = next((n for n in root.iter('node') if n.get('scrollable') == 'true' and n.get('class') != 'android.widget.HorizontalScrollView'), None)
+            if scroll is None:
+                scroll = next(n for n in root.iter('node') if n.get('class') == 'android.webkit.WebView')
+            b = list(map(int, re.findall(r'\d+', scroll.get('bounds', ''))))
+            x = (b[0]+b[2])//2
+            device.adb('shell', 'input', 'swipe', str(x), str(b[1]+(b[3]-b[1])*3//4), str(x), str(b[1]+(b[3]-b[1])//4), '450')
+        root = capture('font-' + scale + '-forecast-bottom')
+        action = device.find_node(root, 'Импортировать отчёт')
+        nav = device.find_node(root, 'Главная')
+        assert action is not None and nav is not None, 'Large-text import action missing'
+        action_bounds = list(map(int, re.findall(r'\d+', action.get('bounds', ''))))
+        nav_bounds = list(map(int, re.findall(r'\d+', nav.get('bounds', ''))))
+        assert action_bounds[3] <= nav_bounds[1], 'Large-text import is covered by navigation'
+        device.tap_node('Настройки')
+        capture('font-' + scale + '-settings')
+        device.tap_node('Добавить слот')
+        capture('font-' + scale + '-form')
+        device.adb('shell', 'input', 'keyevent', '4')
+        device.tap_node('Главная')
     logs = device.adb('logcat', '-d', '-t', '4000')
     (out / 'logcat.txt').write_text(logs)
     assert not re.search(r'FATAL EXCEPTION:[\s\S]{0,300}ru\.courier\.finance', logs)
+    if args.phase == 'after' and missing_content:
+        raise AssertionError('Main content is missing from the native accessibility tree: ' + ', '.join(missing_content))
 
 
 status = 'PASS'

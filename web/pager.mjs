@@ -4,7 +4,7 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 export function pager(id,items,{steps=false,label='Страницы'}={}) {
   const tabs=steps?'':`<div class="pager-tabs" role="tablist" aria-label="${esc(label)}">${items.map((item,i)=>`<button type="button" role="tab" id="${id}-tab-${i}" aria-controls="${id}-panel-${i}" data-page="${i}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${item.icon??''}<span>${esc(item.title)}</span></button>`).join('')}</div>`;
   const controls=steps?`<div class="pager-controls"><button type="button" data-previous aria-label="Предыдущий пункт">Назад</button><output aria-live="polite"></output><button type="button" data-next aria-label="Следующий пункт">Далее</button></div>`:'';
-  return `<div class="pager" id="${id}">${tabs}<div class="pager-track" aria-label="${esc(label)}">${items.map((item,i)=>`<div class="pager-panel" id="${id}-panel-${i}" role="${steps?'group':'tabpanel'}" aria-label="${esc(item.title)}" ${steps?'':`aria-labelledby="${id}-tab-${i}"`}>${item.html}</div>`).join('')}</div>${controls}</div>`;
+  return `<div class="pager" id="${id}">${tabs}<div class="pager-track">${items.map((item,i)=>`<div class="pager-panel" id="${id}-panel-${i}" role="${steps?'group':'tabpanel'}" aria-label="${esc(item.title)}" ${steps?'':`aria-labelledby="${id}-tab-${i}"`}>${item.html}</div>`).join('')}</div>${controls}</div>`;
 }
 
 export function bindPager(host,{initial=0,onChange=()=>{}}={}) {
