@@ -59,7 +59,9 @@ def exported_forecast():
             tap(node)
             break
     root = dump("backup-destination")
-    save = find_node(root, "Save") or find_node(root, "Сохранить")
+    save = next((node for node in root.iter("node") if
+                 (node.get("text", "") or node.get("content-desc", "")).casefold() in ("save", "сохранить")
+                 and node.get("enabled") == "true"), None)
     assert save is not None, "Android backup destination has no Save button"
     tap(save)
     filename = "courier-backup-" + adb("shell", "date", "+%Y-%m-%d").strip() + ".json"
