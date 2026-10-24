@@ -15,6 +15,9 @@ jobs:
         run: npm test
       - name: Set up Android command line tools
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Prepare SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Build isolated test APK, preserve release signing
