@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import time
+import xml.etree.ElementTree as ET
 
 import emulator_smoke as device
 
@@ -17,6 +18,23 @@ out = device.ROOT / 'qa-results' / ('ui-' + args.phase)
 out.mkdir(parents=True, exist_ok=True)
 device.OUT = out
 checks = []
+raw_dump = device.dump
+
+
+def stable_dump(name):
+    for attempt in range(3):
+        try:
+            return raw_dump(name)
+        except ET.ParseError:
+            raw = out / (name + '.xml')
+            if raw.exists():
+                (out / f'{name}-parse-attempt-{attempt+1}.txt').write_text(raw.read_text())
+            if attempt == 2:
+                raise
+            time.sleep(.5)
+
+
+device.dump = stable_dump
 
 
 def capture(name):
@@ -132,6 +150,10 @@ except Exception as error:
         pass
     raise
 finally:
+    try:
+        (out / 'logcat.txt').write_text(device.adb('logcat', '-d', '-t', '4000', check=False))
+    except Exception:
+        pass
     (out / 'ui-matrix.json').write_text(json.dumps({
         'result': status, 'phase': args.phase,
         'apkSha256': hashlib.sha256(args.apk.read_bytes()).hexdigest(),
