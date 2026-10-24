@@ -64,6 +64,7 @@ function warmForecast() {
   }).catch(error=>{if(requestedModel===key)requestedModel=null;forecastScreen?.modelFailed?.();notify(error.message);});
 }
 function openForecast(initial = 'today') {
+  if(!leaveForecast())return;
   const synced=syncSlots(state.forecast,state.entries);
   const updated=evaluateForecasts(snapshotIfPossible(synced));
   if (JSON.stringify(updated) !== JSON.stringify(state.forecast)) {
@@ -87,7 +88,8 @@ function weatherWidget() {
   const p=weatherLocation(state.forecast),w=weatherParts(state.forecast.weather,p);
   const status=w.available?w.stale?'Кэш погоды устарел':'Open-Meteo':'Погода недоступна';
   if(!w.available)return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${p.weatherCity?'Погода недоступна':'Не указана местность для погоды'}. Обновить погоду" title="${esc(status)}"><span id="weatherStatus" class="weather-unavailable">Погода —</span></button>`;
-  return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${esc(status)}. Обновить погоду" title="${esc(status)}"><span class="weather-icons">${w.parts.map(v=>`<span class="weather-mini" data-weather-code="${v.code??''}" aria-label="${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}" title="${v.label} · ${weatherDescription(v.code)}"><span aria-hidden="true">${weatherSymbol(v.code)}</span><strong>${v.temp==null?'—':Math.round(v.temp)+'°'}</strong></span>`).join('')}</span><span id="weatherStatus" class="${w.available&&w.stale?'weather-cache':'sr-only'}">${w.available&&w.stale?'Кэш':esc(status)}</span></button>`;
+  const spokenWeather=w.parts.map(v=>`${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}`).join('. ');
+  return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${esc(spokenWeather)}. ${esc(status)}. Обновить погоду" title="${esc(status)}"><span class="weather-icons">${w.parts.map(v=>`<span class="weather-mini" data-weather-code="${v.code??''}" aria-label="${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}" title="${v.label} · ${weatherDescription(v.code)}"><span aria-hidden="true">${weatherSymbol(v.code)}</span><strong>${v.temp==null?'—':Math.round(v.temp)+'°'}</strong></span>`).join('')}</span><span id="weatherStatus" class="${w.available&&w.stale?'weather-cache':'sr-only'}">${w.available&&w.stale?'Кэш':esc(status)}</span></button>`;
 }
 function refreshWeather(force=false) {
   const p=weatherLocation(state.forecast);
@@ -119,6 +121,7 @@ function themeButton() {
   return `<button class="export-icon theme-toggle" id="themeToggle" type="button" aria-label="${label}" title="${label}">${dark ? icon.sun : icon.moon}</button>`;
 }
 function resetScroll() { window.scrollTo(0, 0); }
+function leaveForecast() { return view!=='forecast'||forecastScreen?.flush()!==false; }
 function heading(title) {
   return `<div class="page-heading"><button class="back" type="button" aria-label="Назад" id="goBack">${icons.back}</button><h1>${title}</h1>${themeButton()}</div>`;
 }
@@ -185,6 +188,7 @@ function paymentStatus(s) {
   return `<section class="payment-status ${c.status}" id="paymentStatus" role="status">${icon['info-circle']}<div><strong>${esc(title)}</strong><p>${esc(detail)}</p></div></section>`;
 }
 function summary() {
+  if(!leaveForecast())return;
   app.className = 'overview'; view = 'summary'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
   const gap = s.pace == null ? null : Math.max(0, s.requiredOrders - s.orders);
@@ -212,6 +216,7 @@ function summary() {
 }
 
 function periodDetails() {
+  if(!leaveForecast())return;
   app.className = ''; view = 'period'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
   app.innerHTML = `${heading('Период')}${navigation()}${paymentStatus(s)}
@@ -236,6 +241,7 @@ function periodDetails() {
   $('#periodHistory').addEventListener('click', history); resetScroll();
 }
 function settings() {
+  if(!leaveForecast())return;
   app.className = ''; view = 'settings'; editingId = null;
   const choices = [...new Set([...periods(), ...[-1,1,2,3,4].map(n => shiftPeriod(selectedPeriod,n).id)])].sort().reverse();
   const initial = paymentTermsFor(state, selectedPeriod);
@@ -297,6 +303,7 @@ function field(key, label, value = '', { unit = '₽', full = false, integer = f
   return `<div class="field${full ? ' full' : ''}"><label for="${key}" class="${labelClass}">${label}</label><div class="field-box"><input id="${key}" name="${key}" type="text" inputmode="${integer ? 'numeric' : 'decimal'}" autocomplete="off" maxlength="${integer ? 7 : 14}" class="with-unit${key === 'dailyOrders' ? ' orders-input' : ''}" value="${esc(value)}" aria-describedby="${key}-note${validation ? ` ${key}-error` : ''}" ${validation ? 'aria-invalid="false"' : ''} ${signed ? '' : ''}><span class="field-unit${key === 'dailyOrders' ? ' orders' : ''}" aria-hidden="true">${unit}</span></div>${note ? `<span class="field-note" id="${key}-note">${note}</span>` : `<span id="${key}-note" hidden></span>`}${validation ? `<span class="field-error" id="${key}-error" role="status" hidden></span>` : ''}</div>`;
 }
 function form(id = null) {
+  if(!leaveForecast())return;
   const original = state.entries.find(e => e.id === id);
   if (id != null && !original) { notify('Запись не найдена. Откройте историю.'); return; }
   const entryId = original?.id ?? newEntryId();
@@ -544,4 +551,4 @@ try {
 Native?.ready();
 
 // Refresh date boundaries on return from the background; never promise an exact background alarm.
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;try{persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});

@@ -21,7 +21,7 @@ export function forecastTeaser(state) {
 }
 export function mountForecast({root,getState,commit,heading,nav,leave,notify,Native,initial='today'}) {
   const $=s=>root.querySelector(s),data=()=>getState().forecast??emptyForecast();
-  let updateModel=()=>{},modelFailure=false,screen=initial,start=forecastClock(data()).date,overrides={},dayDate=start,pending=null,weekConfig=data().weekConfig??null,weekConfigDraftValid=true;
+  let updateModel=()=>{},flushPlan=()=>true,modelFailure=false,screen=initial,start=forecastClock(data()).date,overrides={},dayDate=start,pending=null,weekConfig=data().weekConfig??null,weekConfigDraftValid=true;
   const useWeekConfig=(force=false)=>{if(!weekConfig)return;for(let i=0;i<7;i++){const date=addDays(start,i),base=planDay(data(),date),fact=data().days[date];if(fact?.completed&&fact.ordersConfirmed&&date<=forecastClock(data()).date||!force&&data().plans[date])continue;const rest=base.rest&&(base.slotMin??base.accountedMin)===0,workingMin=rest?0:weekConfig.workingMin,same=base.workingMin===workingMin;overrides[date]={workingMin,slotMin:rest?0:weekConfig.slotMin,accountedMin:null,intervals:rest?[]:weekConfig.intervals??(same?base.intervals.filter(i=>i.state==='WORK'):[]),precision:rest?'total':weekConfig.precision??(same&&base.intervals.length?'intervals':'total'),accountingAssumption:true};}};useWeekConfig();
   const current=()=>forecastClock(data());
   const write=(next,{nowcast=true}={})=>{
@@ -43,29 +43,38 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     let plan;try{plan=planDay(f,date);}catch(error){if(!/Ночная работа пересекает следующий день/.test(error.message))throw error;plan={};}
     const slot=own?.slotMin??f.weekConfig?.slotMin??plan.slotMin??plan.accountedMin??840;
     const work=own?.workingMin??f.weekConfig?.workingMin??plan.workingMin??480;
-    shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number" id="simpleCount">—<span> заказов</span></div><p class="forecast-band" id="simpleRange"></p></section>
+    shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><p class="forecast-band" id="simpleRange"></p></section>
       <section class="detail-card forecast-simple-plan"><h2>Моё время</h2>${durationField('todaySlotHours','Слот',slot)}${durationField('todayWorkHours','Из них буду работать',work)}<p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
       <button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
-    let saveTimer;
+    let saveTimer,dirty=false;
     const read=()=>{const pair=readPair('todayWorkHours','todaySlotHours');if(pair.slotMin==null||pair.workingMin==null)throw new Error('Укажите длительность слота и рабочее время.');return {...pair,intervals:[],precision:'total',mode:'simple'};};
     const preview=()=>{
       const pair=read(),result=predict(data(),date,planDay(data(),date,{[date]:pair}));
-      $('#simpleCount').innerHTML=`${result.central??'—'}<span> заказов</span>`;
+      const count=$('#simpleCount');
+      count.classList.toggle('is-unknown',result.central==null);
+      count.innerHTML=result.central==null?'—':`${result.central}<span> заказов</span>`;
+      if(result.central==null)count.setAttribute('aria-label','Прогноз заказов неизвестен');
+      else count.removeAttribute('aria-label');
       $('#simpleRange').textContent=result.central==null?(result.preparing?(modelFailure?'Не удалось рассчитать прогноз. Откройте экран ещё раз.':'Готовим прогноз…'):'Пока мало данных о рабочем времени'):`Возможный диапазон: ${result.lower}–${result.upper}`;
       $('#forecastError').hidden=true;
       return pair;
     };
-    const save=pair=>run(()=>{
+    const save=pair=>{
       const next=saveForecastHours(data(),date,pair.slotMin,pair.workingMin);
       if(JSON.stringify(next.weekConfig)===JSON.stringify(data().weekConfig)&&JSON.stringify(next.plans[date])===JSON.stringify(data().plans[date]))return;
       write(next,{nowcast:false});
       const status=$('#forecastSaved');if(status){status.hidden=false;setTimeout(()=>{status.hidden=true;},2200);}
-    });
-    const changed=()=>{clearTimeout(saveTimer);run(()=>{const pair=preview();saveTimer=setTimeout(()=>save(pair),500);});};
+    };
+    flushPlan=()=>{
+      clearTimeout(saveTimer);
+      if(!dirty)return true;
+      try{save(read());dirty=false;return true;}catch(error){showError(error);return false;}
+    };
+    const changed=()=>{clearTimeout(saveTimer);dirty=true;run(()=>{preview();saveTimer=setTimeout(flushPlan,500);});};
     $('#todayWorkHours').addEventListener('input',changed);
     $('#todaySlotHours').addEventListener('input',changed);
     updateModel=()=>{modelFailure=false;run(preview);};run(preview);
-    $('#importForecast').onclick=()=>{clearTimeout(saveTimer);run(()=>save(read()));if(Native?.importForecast)Native.importForecast();else $('#forecastFile').click();};
+    $('#importForecast').onclick=()=>{if(!flushPlan())return;if(Native?.importForecast)Native.importForecast();else $('#forecastFile').click();};
     $('#forecastFile').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>8000000)throw new Error('Файл больше 8 МБ.');if(file.name.toLowerCase().endsWith('.xlsx'))throw new Error('Откройте XLSX в Android-приложении.');receiveImport(await file.text(),file.name);}catch(error){showError(error);}};
   }
   function readPair(workId,slotId) {
@@ -189,8 +198,9 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     root.querySelectorAll('[data-edit-fact]').forEach(b=>b.onclick=()=>{dayDate=b.dataset.editFact;render('day');});
   }
   function receiveImport(text,name='Courier Forecast') {
+    if(!flushPlan())return;
     run(()=>{const parsed=parseForecastFile(text,name);const merged=applyHistory(data(),parsed);write(merged);simpleView();notify(`История загружена: ${parsed.days.length} дней`);});
   }
-  function render(next=screen){updateModel=()=>{};screen=next;({today:simpleView,day:dayView,week:weekView,accuracy:accuracyView,data:dataView}[screen]??simpleView)();}
-  render();return {receiveImport,modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(screen!=='today'){render('today');return true;}return false;}};
+  function render(next=screen){if(!flushPlan())return;flushPlan=()=>true;updateModel=()=>{};screen=next;({today:simpleView,day:dayView,week:weekView,accuracy:accuracyView,data:dataView}[screen]??simpleView)();}
+  render();return {receiveImport,flush:()=>flushPlan(),modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(!flushPlan())return true;if(screen!=='today'){render('today');return true;}return false;}};
 }
