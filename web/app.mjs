@@ -156,7 +156,7 @@ function drawPaceGauge(pace, target, met) {
   }
 }
 function periods() {
-  return [...new Set([selectedPeriod, periodFor(today()).id, ...state.entries.map(e => e.periodId), ...Object.keys(state.closures), ...state.settings.paymentRules.map(r => r.effectivePeriodStart)])].sort().reverse();
+  return [...new Set([selectedPeriod, periodFor(today()).id, ...state.entries.map(e => e.periodId), ...Object.keys(state.closures), ...state.settings.paymentRules.map(r => periodFor(r.effectivePeriodStart).id)])].sort().reverse();
 }
 function navigation() {
   return `<div class="period-navigation"><button class="period-arrow" id="previousPeriod" aria-label="Предыдущий период" type="button">${icon['chevron-left']}</button><select id="periodPicker" class="period-select" aria-label="Расчётный период">${periods().map(id => `<option value="${id}" ${id === selectedPeriod ? 'selected' : ''}>${esc(periodLabel(id))}</option>`).join('')}</select><button class="period-arrow" id="nextPeriod" aria-label="Следующий период" type="button">${icons.chevron}</button></div>`;
@@ -254,11 +254,11 @@ function periodDetails() {
 function settings() {
   if(!leaveForecast())return;
   app.className = ''; view = 'settings'; editingId = null;
-  const choices = [...new Set([...periods(), ...[-1,1,2,3,4].map(n => shiftPeriod(selectedPeriod,n).id)])].sort().reverse();
-  const initial = paymentTermsFor(state, selectedPeriod);
+  const chosenDate = selectedPeriod === periodFor(today()).id ? today() : selectedPeriod;
+  const initial = paymentTermsFor(state, chosenDate);
   const ruleHistory = () => state.settings.paymentRules.length ? `<details class="calculation payment-history"><summary>История условий</summary>${[...state.settings.paymentRules].reverse().map(rule => `<div class="payment-rule"><strong>С ${esc(formatDate(rule.effectivePeriodStart))}</strong><span>${esc(money(rule.hourlyRate))}/ч · темп ${goalText(rule.basePace)}</span><span>Темп ${goalText(rule.premiumPace)}: ${percentText(rule.paceBonusPercent)}% · 12 недель: ${percentText(rule.cycleBonusPercent)}%</span></div>`).join('')}</details>` : '';
   app.innerHTML = `${heading('Настройки')}<section class="detail-card appearance-card"><h2>Тема</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная · AMOLED</option></select></div></section>
-    <section class="detail-card payment-settings"><h2>Условия оплаты</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Начиная с периода</label><select id="paymentPeriod" class="period-select">${choices.map(id => `<option value="${id}" ${id === selectedPeriod ? 'selected' : ''}>${esc(periodLabel(id))}</option>`).join('')}</select></div><div class="form-grid">
+    <section class="detail-card payment-settings"><h2>Условия оплаты</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><input id="paymentPeriod" type="date" value="${esc(chosenDate)}" required><p class="hint">Новая ставка применяется к записям с этой даты, в том числе внутри текущего периода.</p></div><div class="form-grid">
     ${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}
     ${field('basePace','Темп для оплаты',initial.basePace,{unit:'заказа/ч',full:true})}
     ${field('premiumPace','Темп для премии',initial.premiumPace,{unit:'заказа/ч',full:true})}
@@ -270,7 +270,7 @@ function settings() {
     <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
   const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
   const periodField=$('.payment-period'),fieldGrid=$('#paymentForm .form-grid');
-  const paymentTitles=['Период','₽/час','Темп оплаты','Темп премии','Мин. часы','Крит. темп','% темп','% 12 недель'];
+  const paymentTitles=['Дата','₽/час','Темп оплаты','Темп премии','Мин. часы','Крит. темп','% темп','% 12 недель'];
   periodField.insertAdjacentHTML('beforebegin',pager('paymentDeck',[
     {title:paymentTitles[0],html:periodField.outerHTML},
     ...paymentFields.map((key,index)=>({title:paymentTitles[index+1],html:fieldGrid.querySelector('#'+key).closest('.field').outerHTML}))

@@ -2,7 +2,7 @@ import { emptyForecast, normalizeForecast, mergeForecast, forecastReport, weekPl
 export const RATE = 360;
 export const THRESHOLD = 1.8;
 export const SCHEMA_VERSION = 6;
-export const APP_VERSION = '1.7.11';
+export const APP_VERSION = '1.7.12';
 export const MIN_PAYMENT_HOURS = 80;
 export const PREMIUM_PACE = 2.8;
 export const PREMIUM_PERCENT = 5;
@@ -122,7 +122,7 @@ function paymentNumber(value, key) {
 function normalizePaymentRule(input) {
   if (!input || typeof input !== 'object') throw new Error('Проверьте условия оплаты.');
   const effectivePeriodStart = String(input.effectivePeriodStart ?? '');
-  if (periodFor(effectivePeriodStart).id !== effectivePeriodStart) throw new Error('Условия должны начинаться с первого дня двухнедельного периода.');
+  dateMillis(effectivePeriodStart);
   const result = {effectivePeriodStart};
   for (const key of Object.keys(DEFAULT_PAYMENT_TERMS)) result[key] = paymentNumber(input[key], key);
   for (const key of ['minimumHours','criticalPace']) if (input[key] != null && input[key] !== '') result[key] = paymentNumber(input[key],key);
@@ -131,12 +131,12 @@ function normalizePaymentRule(input) {
 function normalizePaymentRules(input = []) {
   if (!Array.isArray(input) || input.length > 500) throw new Error('Проверьте историю условий оплаты.');
   const rules = input.map(normalizePaymentRule).sort((a,b)=>a.effectivePeriodStart.localeCompare(b.effectivePeriodStart));
-  if (new Set(rules.map(r=>r.effectivePeriodStart)).size !== rules.length) throw new Error('Условия оплаты за один период повторяются.');
+  if (new Set(rules.map(r=>r.effectivePeriodStart)).size !== rules.length) throw new Error('Условия оплаты за одну дату повторяются.');
   return rules;
 }
 export function paymentTermsFor(state, period) {
-  const start = periodFor(period).start;
-  return (state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart <= start).at(-1) ?? DEFAULT_PAYMENT_TERMS;
+  dateMillis(period);
+  return (state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart <= period).at(-1) ?? DEFAULT_PAYMENT_TERMS;
 }
 export function setPaymentTerms(state, input) {
   const rule = normalizePaymentRule(input);
@@ -148,6 +148,21 @@ function baseForHours(hundredths, rate) {
   const cents = (BigInt(hundredths) * BigInt(Math.round(rate * 100)) + 50n) / 100n;
   if (cents > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Почасовая сумма слишком велика. Проверьте часы и ставку.');
   return Number(cents) / 100;
+}
+function ratedHours(state, entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    if (entry.dailyHours == null) continue;
+    const terms = paymentTermsFor(state, entry.date);
+    const key = `${terms.hourlyRate}|${terms.cycleBonusPercent}`;
+    const group = groups.get(key) ?? {hourlyRate:terms.hourlyRate,cycleBonusPercent:terms.cycleBonusPercent,hundredths:0};
+    group.hundredths += Math.round(entry.dailyHours * 100);
+    groups.set(key,group);
+  }
+  return [...groups.values()].map(group=>({...group,base:baseForHours(group.hundredths,group.hourlyRate)}));
+}
+function ratedBase(state, entries) {
+  return ratedHours(state,entries).reduce((sum,part)=>sum+Math.round(part.base*100),0)/100;
 }
 function percentage(amount, percent) {
   if (amount == null) return null;
@@ -223,12 +238,17 @@ export function forecastFinances(state, start, overrides = {}, clockDate = today
       if(m>1440) {m=null;complete=false;}
       orders+=n??0;hours+=(m??0)/60;rows.push({date,orders:n,accountedMin:m,workingMin,source,lower,upper});
     }
-    const terms=paymentTermsFor(state,from),minimumHours=terms.minimumHours??MIN_PAYMENT_HOURS;
-    const result=calculateScenario({hours:complete?hours.toFixed(2):'',orders:complete?orders:''},terms);
+    const to=addDays(from,count-1),asOf=to < clockDate ? to : clockDate < from ? from : clockDate;
+    const terms=paymentTermsFor(state,asOf),minimumHours=terms.minimumHours??MIN_PAYMENT_HOURS;
+    const scenario=calculateScenario({hours:complete?hours.toFixed(2):'',orders:complete?orders:''},terms);
+    const byRate=new Map();
+    for(const row of rows)if(row.accountedMin!=null){const rate=paymentTermsFor(state,row.date).hourlyRate;byRate.set(rate,(byRate.get(rate)??0)+row.accountedMin);}
+    const base=complete?[...byRate].reduce((n,[rate,minutes])=>n+Math.round(baseForHours(Math.round(minutes/60*100),rate)*100),0)/100:null;
+    const result={...scenario,hourlyBase:base,pacePremium:scenario.pacePremium==null?null:scenario.pacePremium===0?0:percentage(base,terms.paceBonusPercent)};
     const critical=calculateScenario({hours:complete?hours.toFixed(2):'',orders:complete?orders:''},{...terms,basePace:terms.criticalPace??terms.basePace});
     const lowerOrders=rows.every(r=>r.lower!=null)?rows.reduce((n,r)=>n+r.lower,0):null;
     const upperOrders=rows.every(r=>r.upper!=null)?rows.reduce((n,r)=>n+r.upper,0):null;
-    return {...result,from,to:addDays(from,count-1),rows,complete,hasPrediction,terms,minimumHours,
+    return {...result,from,to,rows,complete,hasPrediction,terms,minimumHours,
       lowerOrders,upperOrders,belowCritical:complete?critical.missingNorm>0:null,
       missingHours:complete?Math.max(0,minimumHours-hours):null,
       risk:!complete?'unknown':hours<minimumHours||result.missingNorm>0?'high':hasPrediction&&lowerOrders<result.normOrders?'medium':hasPrediction?'conditional':'met',
@@ -254,10 +274,10 @@ export function calculatePremiumCycle(state, date = today()) {
   const known = entries.filter(e => e.dailyHours != null);
   const hours = known.length ? known.reduce((acc, e) => acc + Math.round(e.dailyHours * 100), 0) / 100 : null;
   const grouped = new Map();
-  for (const entry of known) { const key = periodFor(entry.date).id; grouped.set(key,(grouped.get(key) ?? 0)+Math.round(entry.dailyHours*100)); }
-  const breakdown = [...grouped].sort(([a],[b])=>a.localeCompare(b)).map(([periodId,hundredths])=>{
-    const terms = paymentTermsFor(state,periodId), base = baseForHours(hundredths,terms.hourlyRate);
-    return {periodId,hours:hundredths/100,hourlyRate:terms.hourlyRate,cycleBonusPercent:terms.cycleBonusPercent,hourlyBase:base,premium:percentage(base,terms.cycleBonusPercent)};
+  for (const entry of known) { const key = periodFor(entry.date).id; const rows=grouped.get(key)??[];rows.push(entry);grouped.set(key,rows); }
+  const breakdown = [...grouped].sort(([a],[b])=>a.localeCompare(b)).flatMap(([periodId,rows])=>{
+    return ratedHours(state,rows).map(part=>({periodId,hours:part.hundredths/100,hourlyRate:part.hourlyRate,
+      cycleBonusPercent:part.cycleBonusPercent,hourlyBase:part.base,premium:percentage(part.base,part.cycleBonusPercent)}));
   });
   const hourlyBase = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.hourlyBase*100),0)/100;
   const premium = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)/100;
@@ -290,9 +310,10 @@ export function entriesFor(state, id) {
 export function pendingLegacy(state, id) {
   return entriesFor(state, id).filter(e => e.legacyReading?.interpretation === 'pending');
 }
-export function calculate(state, id) {
+export function calculate(state, id, asOf = null) {
   const entries = entriesFor(state, id);
-  const terms = paymentTermsFor(state,id);
+  const period = periodFor(id);
+  const terms = paymentTermsFor(state,asOf ?? (period.end < today() ? period.end : today() < period.start ? period.start : today()));
   const latest = entries.at(-1);
   const sum = key => entries.reduce((acc, row) => acc + Math.round(row[key] * 100), 0) / 100;
   const hoursRecorded = entries.filter(e => e.dailyHours != null).length;
@@ -301,7 +322,7 @@ export function calculate(state, id) {
   const hoursHundredths = entries.reduce((acc, e) => acc + Math.round((e.dailyHours ?? 0) * 100), 0);
   const hours = pendingCount || !hoursRecorded ? null : hoursHundredths / 100;
   const orders = pendingCount || !ordersRecorded ? null : entries.reduce((acc, e) => acc + (e.dailyOrders ?? 0), 0);
-  const base = hours == null ? null : baseForHours(hoursHundredths,terms.hourlyRate);
+  const base = hours == null ? null : ratedBase(state,entries);
   const paidReward = latest ? sum('reward') : null;
   const tips = latest ? sum('tips') : null;
   const separateBonus = latest ? sum('separateBonus') : null;
@@ -335,7 +356,7 @@ export function calculate(state, id) {
   };
 }
 export function calculateDay(state, date) {
-  return calculate({ ...state, entries: state.entries.filter(e => e.date === date) }, periodFor(date).id);
+  return calculate({ ...state, entries: state.entries.filter(e => e.date === date) }, periodFor(date).id, date);
 }
 export function normalizeEntry(input, now = new Date().toISOString()) {
   if (!input || typeof input !== 'object') throw new Error('Проверьте запись дня.');
@@ -482,7 +503,7 @@ export function mergeImport(state, incoming) {
     for (const rule of parsed.settings.paymentRules) {
       const existing = rules.get(rule.effectivePeriodStart);
       const effective=r=>({...r,minimumHours:r.minimumHours??MIN_PAYMENT_HOURS,criticalPace:r.criticalPace??r.basePace});
-      if (existing && JSON.stringify(effective(existing)) !== JSON.stringify(effective(rule))) throw new Error(`В копии другие условия оплаты с периода ${periodLabel(rule.effectivePeriodStart)}. Сначала выберите нужные условия в настройках. Данные не изменены.`);
+      if (existing && JSON.stringify(effective(existing)) !== JSON.stringify(effective(rule))) throw new Error(`В копии другие условия оплаты с ${formatDate(rule.effectivePeriodStart)}. Сначала выберите нужные условия в настройках. Данные не изменены.`);
       rules.set(rule.effectivePeriodStart,existing??rule);
     }
   }
@@ -540,7 +561,7 @@ export function markdownReport(state, id, exportDate = today()) {
     `- Осталось получить от Яндекса: ${money(s.estimatedYandexOwed)}`, `- Чаевые: ${money(s.tips)}`,
     `- Отдельные бонусы: ${money(s.separateBonus)}`, `- Общий доход по пользовательской формуле: ${money(s.grossUserIncome)}`, '',
     '## Расчётные премии',
-    `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база выбранного двухнедельного периода, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
+    `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база по ставкам дат записей, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
     `- Начало 12-недельного отсчёта: ${state.settings?.premiumCycleStart ?? 'не настроено'}.`,
     `- Цикл 12 недель: ${cycle.start ? `${cycle.start} — ${cycle.end}` : 'не настроен'}.`,
     `- База за 12 недель по введённым часам: ${money(cycle.hourlyBase)}. Премия по условиям периодов: ${money(cycle.premium)}.`,
@@ -548,9 +569,9 @@ export function markdownReport(state, id, exportDate = today()) {
     `- Записей цикла без часов: ${cycle.missingHours}; сумма известна только по введённым часам.`, '',
     ...(cycle.boundaryNote ? [`- Внимание: ${cycle.boundaryNote}`, `- Проверьте интервалы записей: ${cycle.boundaryEntries.map(e => `${e.id} (дата записи ${e.date}, прежний интервал ${e.legacyReading.fromDate ?? 'с начала двухнедельного периода'} — ${e.legacyReading.date})`).map(mdSafe).join('; ')}.`, ''] : []),
     '### Вклад периодов в премию за 12 недель',
-    '| Период | Часы в цикле | Ставка | База | Процент | Премия |', '| --- | ---: | ---: | ---: | ---: | ---: |',
+    '| Период и тарифная часть | Часы в цикле | Ставка | База | Процент | Премия |', '| --- | ---: | ---: | ---: | ---: | ---: |',
     ...cycle.breakdown.map(b=>`| ${b.periodId} | ${hoursText(b.hours)} | ${money(b.hourlyRate)} | ${money(b.hourlyBase)} | ${percentText(b.cycleBonusPercent)}% | ${money(b.premium)} |`),
-    '- База и премия округляются до копеек для каждого входящего периода, затем складываются. Ставка относится к датам записей; старые накопительные интервалы не распределяются по неизвестным дням.', '',
+    '- База и премия округляются до копеек отдельно для каждой ставки в периоде, затем складываются. Ставка относится к датам записей; старые накопительные интервалы не распределяются по неизвестным дням.', '',
     '### Записи 12-недельного цикла',
     '| Дата | ID записи | Часы |', '| --- | --- | ---: |',
     ...cycle.entries.map(e => `| ${e.date} | ${mdSafe(e.id)} | ${hoursText(e.dailyHours)} |`), '',
@@ -567,14 +588,14 @@ export function markdownReport(state, id, exportDate = today()) {
     ...(s.closure ? ['## Закрытие периода', `- Фактическая финальная доплата: ${money(s.closure.finalAdjustment)}`, `- Примечание: ${mdSafe(s.closure.note) || '—'}`, '- Финальная доплата сохранена отдельно и не прибавляется повторно к почасовой базе.', ''] : []),
     '## Условия оплаты',
     `- Выбранный период: ${money(s.terms.hourlyRate)}/ч; темп оплаты ${goalText(s.terms.basePace)}; темп премии ${goalText(s.terms.premiumPace)}; премия за темп ${percentText(s.terms.paceBonusPercent)}%; за 12 недель ${percentText(s.terms.cycleBonusPercent)}%.`,
-    '| Начиная с периода | Ставка | Темп оплаты | Темп премии | За темп | За 12 недель |', '| --- | ---: | ---: | ---: | ---: | ---: |',
+    '| Начиная с даты | Ставка | Темп оплаты | Темп премии | За темп | За 12 недель |', '| --- | ---: | ---: | ---: | ---: | ---: |',
     `| До первой настройки | ${money(RATE)} | ${goalText(THRESHOLD)} | ${goalText(PREMIUM_PACE)} | ${PREMIUM_PERCENT}% | ${PREMIUM_PERCENT}% |`,
     ...(state.settings?.paymentRules ?? []).map(r=>`| ${r.effectivePeriodStart} | ${money(r.hourlyRate)} | ${goalText(r.basePace)} | ${goalText(r.premiumPace)} | ${percentText(r.paceBonusPercent)}% | ${percentText(r.cycleBonusPercent)}% |`), '',
     '## Правила расчёта', '- Период — 14 дней с пятницы; календарный якорь — 18.09.2026.',
     `- Ставка: ${money(s.terms.hourlyRate)}/ч. Почасовая выплата зависит от минимума ${s.terms.minimumHours ?? MIN_PAYMENT_HOURS} часов и итогового темпа не ниже ${goalText(s.terms.basePace)} заказа/ч.`,
     '- Часы за период = сумма dailyHours всех записей периода; заказы = сумма dailyOrders.',
     '- Несколько слотов за одну дату складываются за день и период. Исправление заменяет только выбранную запись; удаление убирает только её вклад.',
-    '- Почасовая база = сумма часов × ставка выбранного периода; при незавершённом периоде это оценка.',
+    '- Почасовая база = сумма по ставкам, действовавшим в даты записей; при незавершённом периоде это оценка.',
     '- Общий доход = почасовая база + чаевые + отдельные бонусы.',
     '- Осталось получить = почасовая база − сумма reward; чаевые и отдельные бонусы не уменьшают эту сумму.',
     '- Если вознаграждение превышает базу, разница остаётся отрицательной, без обнуления.',
