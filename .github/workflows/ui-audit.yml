@@ -1,8 +1,14 @@
-name: UI audit before and after
+name: UI audit
 on:
   pull_request:
     branches: [main, qa/native-forecast-cold-start]
   workflow_dispatch:
+    inputs:
+      focus:
+        description: Android checks to run
+        type: choice
+        default: full
+        options: [full, delta, content]
 permissions:
   contents: read
 concurrency:
@@ -40,14 +46,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Native UI comparison on Android 35
+      - name: Native UI checks on Android 35
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           target: default
           arch: x86_64
           profile: pixel_6
-          script: python3 qa/ui_audit_matrix.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --phase after --focus full
+          script: python3 qa/ui_audit_matrix.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --phase after --focus "${{ inputs.focus || 'content' }}"
       - name: Capture audit evidence
         if: always()
         uses: actions/upload-artifact@v4

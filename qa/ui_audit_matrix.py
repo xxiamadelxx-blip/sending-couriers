@@ -13,7 +13,7 @@ import emulator_smoke as device
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', type=Path, required=True)
 parser.add_argument('--phase', choices=['before', 'after'], required=True)
-parser.add_argument('--focus', choices=['full', 'delta'], default='full')
+parser.add_argument('--focus', choices=['full', 'delta', 'content'], default='full')
 args = parser.parse_args()
 out = device.ROOT / 'qa-results' / ('ui-' + args.phase)
 out.mkdir(parents=True, exist_ok=True)
@@ -94,13 +94,19 @@ def main():
     device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
     device.wait_home(45)
     capture('00-empty-home-360-dark')
-    device.tap_node('Прогноз')
-    device.wait_node('Импортировать отчёт')
-    capture('01-empty-forecast-360-dark')
+    if args.focus == 'content':
+        device.tap_node('Период')
+        device.tap_node('Записи периода')
+        root = capture('01-empty-history-360-dark')
+        assert device.find_node(root, 'Пока нет записей') is not None
+    else:
+        device.tap_node('Прогноз')
+        device.wait_node('Импортировать отчёт')
+        capture('01-empty-forecast-360-dark')
     device.tap_node('Главная')
     device.add_slot(hours=4, orders=8, reward=1200)
     device.add_slot(hours=5, orders=10, reward=2000)
-    if args.phase == 'after':
+    if args.phase == 'after' and args.focus != 'content':
         device.tap_node('Прогноз')
         for _ in range(6):
             device.tap_node('Из них буду работать: минус 15 минут')
@@ -147,6 +153,16 @@ def main():
                 checks[-1]['contentTreeStatus'] = 'PASS' if readable else 'FAIL'
                 if not readable:
                     missing_content.append(f'home-{index}-{suffix}')
+                if args.focus == 'content':
+                    visible_text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')
+                                         if n.get('bounds') != '[0,0][0,0]'))
+                    expected_values = [['2,000', '9 ч', '18 заказов'], ['3 240', '3 200', '40'], ['0 ₽', '— ₽']][index]
+                    values_ok = all(value in visible_text for value in expected_values)
+                    checks[-1]['valuesTreeStatus'] = 'PASS' if values_ok else 'FAIL'
+                    if not values_ok:
+                        missing_content.append(f'values-home-{index}-{suffix}: {visible_text}')
+            if args.focus == 'content':
+                continue
             device.tap_node('Период')
             capture('period-' + suffix)
             device.tap_node('Записи периода')
@@ -173,6 +189,9 @@ def main():
             capture('keyboard-' + suffix)
             device.adb('shell', 'input', 'keyevent', '4')
             device.adb('shell', 'input', 'keyevent', '4')
+    if args.focus == 'content':
+        assert not missing_content, 'Main headings or values missing: ' + ', '.join(missing_content)
+        return
     device.tap_node('Главная')
     for scale in ['1.3', '2.0']:
         device.adb('shell', 'settings', 'put', 'system', 'font_scale', scale)
