@@ -207,6 +207,8 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
 .forecast-page .duration-control .duration-value input{height:48px;min-height:48px}
 .nav-item{font-size:12px}
 .forecast-simple-hero .forecast-number.is-unknown{font-size:36px;font-weight:500;letter-spacing:0;line-height:1.3;color:var(--muted)}
+.button,.forecast-page .button,.button.export-action,.period-actions .export-action,.payment-settings .pager-tabs button,.cycle-config>summary,.additional>summary{min-height:48px}
+.period-select{height:48px;min-height:48px}
 
 /* Native font scaling changes layout, while keeping the requested text size. */
 main{padding-bottom:calc(var(--navigation-space,104px) + var(--safe-bottom))}

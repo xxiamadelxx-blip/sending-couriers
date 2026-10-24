@@ -19,14 +19,17 @@ export function bindDurations(root){
     const sync=()=>syncDuration(root,id),set=min=>{input.value=hours(Math.min(1440,Math.max(0,min)));input.dispatchEvent(new Event('input',{bubbles:true}));sync();};
     input.addEventListener('input',sync);sync();
     control.querySelectorAll('[data-duration-step]').forEach(b=>b.onclick=()=>set((numeric(input.value)??0)+Number(b.dataset.durationStep)*15));
-    slider.addEventListener('input',()=>set(Number(slider.value)));
-    let drag=null;
+    let drag=null,pointer=null;
+    // Pointer gestures use the detented drag below. Android's native range can
+    // emit an input while a vertical pan starts; it must not overwrite hours.
+    slider.addEventListener('input',()=>pointer==null?set(Number(slider.value)):sync());
+    slider.addEventListener('mousedown',e=>e.preventDefault());
     const cancel=()=>{if(!drag)return;const previous=drag.raw;drag=null;input.value=previous;input.dispatchEvent(new Event('input',{bubbles:true}));sync();};
     slider.addEventListener('pointerdown',e=>{
-      if(e.button!==0||slider.disabled)return;e.preventDefault();slider.focus({preventScroll:true});
+      if(e.button!==0||e.isPrimary===false||slider.disabled)return;pointer=e.pointerId;e.preventDefault();slider.focus({preventScroll:true});slider.setPointerCapture(e.pointerId);
       const box=slider.getBoundingClientRect(),thumb=box.left+17+(box.width-34)*Number(slider.value)/1440;
       if(Math.abs(e.clientX-thumb)>23)return; // Tapping the track never jumps to a distant value.
-      drag={id:e.pointerId,x:e.clientX,y:e.clientY,base:numeric(input.value)??0,raw:input.value,step:0};slider.setPointerCapture(e.pointerId);
+      drag={id:e.pointerId,x:e.clientX,y:e.clientY,base:numeric(input.value)??0,raw:input.value,step:0};
     });
     slider.addEventListener('pointermove',e=>{
       if(!drag||e.pointerId!==drag.id)return;
@@ -34,6 +37,8 @@ export function bindDurations(root){
       if(Math.abs(dy)>Math.abs(dx)+8){cancel();return;}
       const step=Math.trunc(dx/10);if(step!==drag.step){drag.step=step;set(drag.base+step*15);}
     });
-    slider.addEventListener('pointerup',()=>{drag=null;});slider.addEventListener('pointercancel',cancel);slider.addEventListener('lostpointercapture',cancel);
+    slider.addEventListener('pointerup',()=>{drag=null;pointer=null;});
+    slider.addEventListener('pointercancel',()=>{cancel();pointer=null;sync();});
+    slider.addEventListener('lostpointercapture',()=>{cancel();pointer=null;sync();});
   });
 }

@@ -55,6 +55,11 @@ def capture(name):
     return root
 
 
+def durations(root):
+    return [float(n.get('text', '').replace(',', '.')) for n in root.iter('node')
+            if n.get('class') == 'android.widget.EditText']
+
+
 def theme(name):
     root = device.dump('theme-current')
     label = 'Включить дневную тему' if name == 'light' else 'Включить ночную тему'
@@ -109,6 +114,21 @@ def main():
         assert len(fields) == 2 and [float(v.replace(',', '.')) for v in fields] == [14, 6.5], fields
         for _ in range(6):
             device.tap_node('Из них буду работать: плюс 15 минут')
+        root = device.dump('duration-gesture-before')
+        assert durations(root) == [14, 8], 'Restore before gesture checks failed'
+        slider = next(n for n in root.iter('node') if n.get('class') == 'android.widget.SeekBar'
+                      and 'Из них буду работать' in n.get('text', ''))
+        b = list(map(int, re.findall(r'\d+', slider.get('bounds', ''))))
+        y = (b[1] + b[3]) // 2
+        device.adb('shell', 'input', 'tap', str(b[2]-8), str(y))
+        root = capture('duration-track-touch')
+        assert durations(root) == [14, 8], 'Track touch changed duration'
+        thumb = b[0] + 51 + (b[2]-b[0]-102) // 3  # 34 dp thumb, value 8/24, density 3.
+        device.adb('shell', 'input', 'swipe', str(thumb), str(y), str(thumb+120), str(y), '450')
+        root = capture('duration-thumb-drag')
+        assert durations(root) == [14, 9], 'Thumb drag must use four 15-minute detents'
+        for _ in range(4):
+            device.tap_node('Из них буду работать: минус 15 минут')
         device.tap_node('Главная')
     for width, size in [(360, '1080x2400'), (390, '1170x2532')]:
         device.adb('shell', 'wm', 'size', size)
@@ -161,7 +181,8 @@ def main():
         device.wait_home(30)
         capture('font-' + scale + '-home')
         device.tap_node('Прогноз')
-        capture('font-' + scale + '-forecast')
+        root = capture('font-' + scale + '-forecast')
+        before_scroll = durations(root)
         for attempt in range(3):
             root = device.dump(f'font-scroll-current-{attempt}')
             action = device.find_node(root, 'Импортировать отчёт')
@@ -178,6 +199,7 @@ def main():
             x = (b[0]+b[2])//2
             device.adb('shell', 'input', 'swipe', str(x), str(b[1]+(b[3]-b[1])*3//4), str(x), str(b[1]+(b[3]-b[1])//4), '450')
         root = capture('font-' + scale + '-forecast-bottom')
+        assert durations(root) == before_scroll, 'Vertical scroll changed planned hours'
         action = device.find_node(root, 'Импортировать отчёт')
         nav = device.find_node(root, 'Главная')
         assert action is not None and nav is not None, 'Large-text import action missing'
@@ -218,5 +240,6 @@ finally:
         'apkSha256': hashlib.sha256(args.apk.read_bytes()).hexdigest(),
         'testSigningOnly': args.phase == 'after', 'releaseUpgradeVerified': False,
         'visualAuditStatus': 'NOT_VERIFIED', 'imeInteractionStatus': 'CAPTURED_REQUIRES_REVIEW',
-        'checks': checks, 'limits': ['TalkBack not tested', 'Screenshot review required']
+        'checks': checks, 'focus': args.focus,
+        'limits': ['TalkBack not tested', 'Screenshot review required', 'Large text only at 390 dp in light theme']
     }, ensure_ascii=False, indent=2))
