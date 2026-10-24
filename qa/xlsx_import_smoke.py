@@ -70,13 +70,17 @@ def exported_state():
     for _ in range(20):
         raw = adb("exec-out", "cat", path, binary=True, check=False)
         if raw:
-            state = json.loads(raw)
+            try:
+                state = json.loads(raw)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                time.sleep(.5)  # Android may create the destination before the write finishes.
+                continue
             adb("shell", "rm", path)
             tap_node("Закрыть")
             tap_node("Прогноз")
             return state
         time.sleep(.5)
-    raise AssertionError("Saved JSON backup is not present in Downloads")
+    raise AssertionError("Saved JSON backup is missing or incomplete in Downloads")
 
 
 def exported_forecast():
