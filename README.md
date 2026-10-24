@@ -58,4 +58,4 @@ python3 tests/verify_apk.py --sdk /absolute/path/to/android-sdk --apk qa/Courier
 python3 tools/package_release.py
 ```
 
-Результаты 1.7.8: `verification/1.7.8/`. Для 1.7.11: 130 unit, фактический NativeBridge на JVM, совпадение assets/dex и сертификата. Облачный Android 35 проверяет обновление поверх 1.7.8, три слота, импорт синтетического XLSX и снимки экранов; итог и открытые пункты перечислены в `docs/acceptance/ANDROID_QA_1.7.11.md`. APK находится в `qa/Courier-Finance-1.7.11.apk`.
+Результаты 1.7.8: `verification/1.7.8/`. Для 1.7.11: 130 unit, фактический NativeBridge на JVM, совпадение assets/dex и сертификата. Облачный Android 35 проверяет обновление поверх 1.7.8, три слота, повторный импорт синтетического XLSX, автоматическое восстановление из локального Android Backup после переустановки и снимки экранов; итог и открытые пункты перечислены в `docs/acceptance/ANDROID_QA_1.7.11.md`. APK находится в `qa/Courier-Finance-1.7.11.apk`.
