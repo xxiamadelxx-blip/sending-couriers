@@ -84,7 +84,7 @@ def exported_state():
     # adb shell date can resolve another timezone near midnight. Read the
     # actual filename shown by the native Save dialog instead of guessing.
     filename = next((n.get("text", "") for n in root.iter("node")
-                     if re.fullmatch(r"courier-backup-\\d{4}-\\d{2}-\\d{2}\\.json", n.get("text", ""))), None)
+                     if re.fullmatch(r"courier-backup-\d{4}-\d{2}-\d{2}\.json", n.get("text", ""))), None)
     assert filename is not None, "Native Save dialog did not expose the JSON backup filename"
     path = "/sdcard/Download/" + filename
     for _ in range(20):
