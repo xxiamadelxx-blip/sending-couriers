@@ -93,7 +93,9 @@ def main():
     device.adb('install', str(args.apk.resolve()))
     device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
     device.wait_home(45)
-    capture('00-empty-home-360-dark')
+    empty_root = capture('00-empty-home-360-dark')
+    assert device.find_node(empty_root, 'Смена ещё не записана') is not None, 'Empty state heading missing'
+    assert device.find_node(empty_root, 'Добавить первый слот') is not None, 'First-shift CTA missing'
     if args.focus == 'content':
         device.tap_node('Период')
         device.tap_node('Записи периода')
