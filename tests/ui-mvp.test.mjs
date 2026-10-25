@@ -94,3 +94,10 @@ test('200% slider hitbox parsing uses digit regex that matches Android node coor
  assert.equal(block.split(expected).length-1,2);
  assert.equal(block.split(wrong).length-1,0);
 });
+
+test('CI Android runner executes XLSX gate in a single shell invocation',async()=>{
+  const ci=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
+  assert.match(ci,/\[ "\$\{\{ inputs\.focus \|\| 'full' \}\}" != "full" \] \|\| \( adb shell wm size/);
+  assert.doesNotMatch(ci,/^\s+if \[ "\$\{\{ inputs\.focus \|\| 'full' \}\}" = "full" \]; then/m);
+  assert.match(ci,/&& python3 qa\/xlsx_import_smoke\.py \)/);
+});
