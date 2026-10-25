@@ -25,3 +25,19 @@ test('native 48dp control size and 200 percent font-safety retained',()=>{
   assert.match(forecast,/durationField\('todaySlotHours','Слот',slot\)/);
   assert.match(forecast,/durationField\('todayWorkHours','Из них буду работать',work\)/);
 });
+
+test('light-theme signal-colored labels meet WCAG AA contrast on the page background',()=>{
+  const light=v2.match(/:root\[data-theme="light"\] \{([^}]+)\}/)?.[1];
+  assert.ok(light,'light-theme tokens are present');
+  const token=(name)=>light.match(new RegExp('--'+name+':(#[0-9a-fA-F]{6})'))?.[1];
+  const luminance=(hex)=>{
+    const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255);
+    const channels=rgb.map(v=>v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4));
+    return channels[0]*0.2126+channels[1]*0.7152+channels[2]*0.0722;
+  };
+  const contrast=(a,b)=>{
+    const x=luminance(a),y=luminance(b);
+    return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);
+  };
+  assert.ok(contrast(token('teal'),token('bg'))>=4.5,'signal labels need >=4.5:1 on the light canvas');
+});

@@ -482,7 +482,7 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--home-accent);
 :root[data-theme="light"] {
   color-scheme:light;
   --bg:#eae7de;--ink:#1c252c;--muted:#4b5961;--line:#b3b9b8;
-  --surface:#f7f5ee;--field:#fffdf8;--teal:#bd401e;--error:#af2b3f;
+  --surface:#f7f5ee;--field:#fffdf8;--teal:#a93718;--error:#af2b3f;
   --warning:#905508;--primary-bg:#c74a24;--primary-ink:#fffaf1;
   --gauge-track:#9babb2;--gauge-good:#f8b44b;--gauge-pending:#e15a31;
   --home-accent:#c74a24;--home-quiet:#e1e4e0;--home-shadow:none;

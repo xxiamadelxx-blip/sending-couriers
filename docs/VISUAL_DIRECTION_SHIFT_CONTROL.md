@@ -29,3 +29,9 @@ Do not fetch Google Fonts or inject network dependencies: system sans + native m
 - A built test APK is not signed with the user's private stable key. Owner-key release must be verified separately.
 
 Source inspiration: https://better-design.com/design-systems/sonic-punchy and https://better-design.com/design-systems/instrument. References are stylistic only, not imported code or font assets.
+
+## Android QA and first visual review
+
+- [CI #40172974543](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40172974543) at `b95532c08312e3172d4da27d59672cee598be89e` built Android and passed model/finance tests, but UI matrix was **FAIL** at `qa/ui_audit_matrix.py:156`: CSS uppercase made the native accessibility tree expose `ТЕМП ПЕРИОДА` instead of the exact previous mixed-case `Темп периода`. Screenshot `home-360-dark.png` confirms the metric itself is present and correctly visible, so this is a case-sensitive test conflict, not a missing value. Fixed QA accepts exactly the mixed/uppercase spellings, still insists on one real node, and independently checks the income heading too.
+- First screenshot confirms visibly different real UI: hard 3px charcoal instrument, warm orange line and goal ring, gold income slab, rectangular control pad. Separate screenshot review of additional pages and font 200% is pending a fresh full CI.
+- Independent token contrast audit: former light accent `#bd401e` on `#eae7de` has WCAG ratio approximately **4.34:1**, below the 4.5:1 normal-text threshold. Changed only the light accent to `#a93718` and added a source-backed contrast regression. Do not claim device evidence until the new run finishes.

@@ -153,10 +153,10 @@ def main():
             theme(mode)
             suffix = f'{width}-{mode}'
             root = capture(f'home-{suffix}')
-            assert device.find_node(root, 'Темп периода') is not None, 'Period pace is missing'
+            assert any(device.find_node(root, name) is not None for name in ('Темп периода', 'ТЕМП ПЕРИОДА')), 'Period pace is missing'
             device.adb('shell', 'input', 'swipe', '540', '1800', '540', '750', '450')
             root = capture(f'home-finance-{suffix}')
-            assert device.find_node(root, 'Общий доход') is not None, 'Income is missing from the main scroll'
+            assert any(device.find_node(root, name) is not None for name in ('Общий доход', 'ОБЩИЙ ДОХОД')), 'Income is missing from the main scroll'
             if args.focus == 'content':
                 visible_text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')))
                 if '3 240' not in visible_text:
