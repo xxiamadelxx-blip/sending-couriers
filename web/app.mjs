@@ -207,13 +207,26 @@ function summary() {
   app.querySelectorAll('#paceTitle,#summaryPace,.meter-value,#summaryPacePremium,#summaryCyclePremium').forEach(node=>node.tabIndex=-1);
   const premiumTitle=$('#openPremiums .card-heading');
   premiumTitle.setAttribute('role','heading');premiumTitle.setAttribute('aria-level','2');premiumTitle.tabIndex=-1;
-  // Put the period's essentials on one vertical screen, in reading order.
+  // Redesign is presentation-only: facts, money and forecast remain in the same state.
   const rhythm=$('.rhythm'),status=$('#paymentStatus'),income=$('.income-hero'),premiums=$('#openPremiums'),calculation=$('.calculation');
   premiums.querySelector('.card-heading svg')?.remove();
-  const premiumHTML=`<div class="premiums-card">${premiums.innerHTML}</div>`;premiums.remove();
-  rhythm.insertAdjacentHTML('beforebegin',`<div id="homeDeck" class="home-stack">${rhythm.outerHTML}${income.outerHTML}${status.outerHTML}<section class="home-premiums detail-card">${premiumHTML}${cycle.boundaryNote ? `<details class="calculation boundary-note"><summary>Есть старые интервалы</summary><p>${esc(cycle.boundaryNote)}</p></details>` : ''}</section>${calculation.outerHTML}</div>`);
-  rhythm.remove();status.remove();income.remove();calculation.remove();
+  const premiumHTML=`<div class="premiums-card">${premiums.innerHTML}</div>`;
+  const emptyDashboard=!s.entries.length&&!s.closure;
+  const emptyPanel=`<section class="home-empty" aria-labelledby="homeEmptyTitle">
+    <span class="home-empty-symbol" aria-hidden="true">${icon.package}</span>
+    <p class="home-eyebrow">НОВЫЙ ПЕРИОД</p>
+    <h2 id="homeEmptyTitle">Смена ещё не записана</h2>
+    <p class="home-empty-copy">Добавьте первый слот, чтобы увидеть темп, выплаты и премии. Прошлые записи доступны в истории.</p>
+    <button class="button primary" id="homeEmptyAdd" type="button">${icon.plus}Добавить первый слот</button>
+  </section>`;
+  const filledPanel=`<section class="home-focus" aria-label="Темп и условие выплаты">${rhythm.outerHTML}${status.outerHTML}</section>
+    ${income.outerHTML}
+    <section class="home-premiums detail-card">${premiumHTML}${cycle.boundaryNote ? `<details class="calculation boundary-note"><summary>Есть старые интервалы</summary><p>${esc(cycle.boundaryNote)}</p></details>` : ''}</section>
+    ${calculation.outerHTML}`;
+  rhythm.insertAdjacentHTML('beforebegin',`<div id="homeDeck" class="home-stack">${emptyDashboard?emptyPanel:filledPanel}</div>`);
+  rhythm.remove();status.remove();income.remove();premiums.remove();calculation.remove();
   bottomNav('summary'); drawPaceGauge(s.pace, s.terms.basePace,s.paymentConditions.paceMet);
+  $('#homeEmptyAdd')?.addEventListener('click',()=>form());
   $('#choosePeriod').addEventListener('click', history);
   $('#export').addEventListener('click', () => $('#exportDialog').showModal()); resetScroll();
   $('#refreshWeather')?.addEventListener('click',()=>refreshWeather(true));refreshWeather();
