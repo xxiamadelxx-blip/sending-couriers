@@ -51,3 +51,14 @@ test('UI M2: period choice has at least 48dp hitbox in native 360/390 theme matr
  assert.match(qa,/Home period button must be at least 48dp tall/);
  assert.match(qa,/pb\[3\]-pb\[1\] >= 144/);
 });
+
+test('UI M2: native Android file picker opens and cancel preserves both forecast durations',async()=>{
+ const native=await readFile(new URL('../android/src/ru/courier/finance/MainActivity.java',import.meta.url),'utf8');
+ assert.match(native,/Intent\.ACTION_OPEN_DOCUMENT/);
+ assert.match(native,/if \(resultCode != RESULT_OK \|\| data == null \|\| data\.getData\(\) == null\) return/);
+ assert.match(qa,/Native ACTION_OPEN_DOCUMENT picker did not appear/);
+ assert.match(qa,/capture\('forecast-import-native-picker-1\.3'\)/);
+ assert.match(qa,/capture\('forecast-import-cancelled-1\.3'\)/);
+ assert.match(qa,/Canceling native import changed 14h slot or working hours/);
+ assert.match(qa,/Canceling import did not restore forecast navigation/);
+});

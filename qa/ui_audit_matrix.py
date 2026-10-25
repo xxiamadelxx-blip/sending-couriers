@@ -292,6 +292,33 @@ def main():
         action_bounds = list(map(int, re.findall(r'\d+', action.get('bounds', ''))))
         nav_bounds = list(map(int, re.findall(r'\d+', nav.get('bounds', ''))))
         assert action_bounds[2] > action_bounds[0] and action_bounds[3] > action_bounds[1] and action_bounds[1] >= 0 and action_bounds[3] <= nav_bounds[1], 'Large-text import is missing or covered by navigation'
+        if scale == '1.3' and args.phase == 'after' and args.focus == 'full':
+            # An Android file import starts DocumentsUI. Dismissing the picker
+            # is a CANCEL operation, never an empty import or reset.
+            device.tap_node('Импортировать отчёт')
+            picker_seen = False
+            for picker_attempt in range(15):
+                try:
+                    picker_root = device.dump(f'import-picker-current-{picker_attempt}')
+                except (ET.ParseError, RuntimeError):
+                    time.sleep(.5)
+                    continue
+                if any('documentsui' in n.get('package', '').lower()
+                       for n in picker_root.iter('node')):
+                    picker_seen = True
+                    break
+                time.sleep(.5)
+            assert picker_seen, 'Native ACTION_OPEN_DOCUMENT picker did not appear'
+            capture('forecast-import-native-picker-1.3')
+            device.adb('shell', 'input', 'keyevent', '4')
+            device.wait_node('Импортировать отчёт', 25)
+            back_from_picker = capture('forecast-import-cancelled-1.3')
+            assert durations(back_from_picker) == before_scroll, (
+                'Canceling native import changed 14h slot or working hours'
+            )
+            assert device.find_node(back_from_picker, 'Главная') is not None, (
+                'Canceling import did not restore forecast navigation'
+            )
         device.tap_node('Настройки')
         capture('font-' + scale + '-settings')
         device.tap_node('Добавить слот')
