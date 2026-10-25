@@ -41,3 +41,10 @@ Status as of this document: **implementation PARTIAL**. Unit, native build and c
 - Optional period filters only if the user needs them and import sources genuinely provide categories (Яндекс-inspired).
 
 Rejected: social leaderboards, subscriptions, linked accounts, AI predictions, bank sync, GPS background service, push/server dependences, regional demand maps, automatic tax deduction assumptions, and unverified courier pay rates.
+
+
+## Independent baseline screenshot finding (P1)
+
+A real Android 35 screenshot at 200% system font scale from [pre-redesign CI #40147139881](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40147139881), artifact `ui-audit-4025da40193c997973ad87984aafac42656891a5`, `ui-after/font-2.0-home.png`, **visibly shows 111% overlapping the progress ring**. The regular-font 360dp screenshot does not show the same fault. This is actual screenshot evidence, not a layout hypothesis or static CSS rule.
+
+Fix in `web/style.css`: for `data-text-scale="large"`, convert `.gauge-label` from an absolute overlay to a separate normal-flow block below the ring; the circle remains visual context and the percentage/goal remain readable text. Static regression guard added in `tests/home-dashboard.test.mjs`. The **post-change screenshot comparison is still NOT RUN**; acceptance requires a new captured Android 35 font-2.0 image from the final SHA, not only the CSS assertion.

@@ -22,3 +22,9 @@ test('two forecast duration controls and large text remain visible in the source
   assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.pace-hero/);
   assert.match(css,/button:focus-visible/);
 });
+
+test('at 200% font scale the progress value is not overlaid on the ring',()=>{
+  assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge-label\{[\s\S]*?position:static/);
+  assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge\{[\s\S]*?flex-direction:column/);
+  assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge canvas\{[\s\S]*?height:152px/);
+});
