@@ -40,3 +40,20 @@ class FormLargeGeometry(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class PeriodHistoryAccessGeometry(unittest.TestCase):
+    def fake_period(self, button):
+        return ET.fromstring(f'''<hierarchy>
+          <node class="android.webkit.WebView" bounds="[0,135][1170,2388]" />
+          <node text="Записи периода" class="android.widget.Button" bounds="{button}" />
+          <node text="Главная" class="android.widget.Button" bounds="[30,2202][249,2367]" />
+        </hierarchy>''')
+
+    def test_red_offscreen_bounds_cannot_tap_android_home(self):
+        self.assertIsNone(audit.period_history_center(self.fake_period('[48,2427][1122,2388]')))
+
+    def test_visible_period_action_returns_safe_tap(self):
+        self.assertEqual(audit.period_history_center(self.fake_period('[48,1910][1122,2080]')),(585,1995))
+
+    def test_action_covered_by_nav_is_rejected(self):
+        self.assertIsNone(audit.period_history_center(self.fake_period('[48,2120][1122,2300]')))

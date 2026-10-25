@@ -94,10 +94,46 @@ def enter_and_check(label, value, point, mode):
                for n in edited.iter('node')), f'Input {value} not entered: {label}'
     device.adb('shell', 'input', 'keyevent', '4')
 
+def period_history_center(root):
+    action = bounds(device.find_node(root, 'Записи периода'))
+    nav = bounds(device.find_node(root, 'Главная'))
+    web = bounds(next((n for n in root.iter('node')
+                      if n.get('class') == 'android.webkit.WebView'), None))
+    if len(action) != 4 or len(nav) != 4 or len(web) != 4:
+        return None
+    # RED XML: [48,2427][1122,2388] is clipped/reversed offscreen.
+    # Its midpoint is Android's OS Home navigation area, not an app button.
+    if (action[2] <= action[0] or action[3]-action[1] < 144
+            or action[1] < web[1] or action[3] > min(web[3], nav[1])):
+        return None
+    return ((action[0]+action[2])//2, (action[1]+action[3])//2)
+
+
+def open_visible_period_history():
+    for attempt in range(10):
+        root = device.dump(f'200-period-history-scroll-{attempt}')
+        point = period_history_center(root)
+        if point is not None:
+            snap('200-period-history-visible')
+            device.adb('shell', 'input', 'tap', str(point[0]), str(point[1]))
+            device.wait_node('ИСТОРИЯ', 25)
+            return
+        web = next((n for n in root.iter('node')
+                    if n.get('class') == 'android.webkit.WebView'), None)
+        wb, nav = bounds(web), bounds(device.find_node(root, 'Главная'))
+        assert len(wb) == len(nav) == 4, 'Period view/navigation missing at 200%'
+        bottom = min(wb[3], nav[1])
+        x = (wb[0]+wb[2])//2
+        device.adb('shell', 'input', 'swipe',
+                   str(x), str(wb[1]+(bottom-wb[1])*3//4),
+                   str(x), str(wb[1]+(bottom-wb[1])//4), '340')
+    raise AssertionError('Period history action unreachable by scroll at 200%')
+
+
 def assert_saved():
     device.wait_home(45)
     device.tap_node('Период')
-    device.tap_node('Записи периода')
+    open_visible_period_history()
     root = snap('200-390-light-history-saved')
     text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')))
     assert '10 ч · 20 заказов' in text and '3 500' in text, (
