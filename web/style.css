@@ -349,3 +349,72 @@ h1,.page-heading h1{font-size:27px;line-height:1.2;letter-spacing:-.6px}
 :root[data-text-scale="large"] #homeDeck .gauge{justify-self:start}
 :root[data-text-scale="large"] #homeDeck .meters{grid-template-columns:minmax(0,1fr)}
 @media(max-width:374px){#homeDeck .income-parts{gap:4px}#homeDeck .income-parts strong{font-size:12px}#homeDeck .premium-teasers{gap:7px}}
+
+/* Design iteration 2026-10-25: restrained operational dashboard. */
+:root{--home-accent:#a8e6bf;--home-quiet:#0c1510;--home-shadow:none}
+:root[data-theme="light"]{--home-accent:#176642;--home-quiet:#eff7ef;--home-shadow:0 10px 30px #22442b11}
+.overview-top{padding:4px 2px 0;margin-bottom:19px}
+.overview-top h1{font-size:27px;letter-spacing:-.85px;line-height:1.15;font-weight:790}
+.overview-top .period-button{display:inline-flex;max-width:100%;min-height:48px;padding:0 13px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font-size:13px;white-space:normal;text-align:left}
+.overview-top .period-button svg:last-child{margin-left:auto}
+.overview-toolbar{gap:10px;margin-bottom:16px}
+.header-tools{gap:9px}
+.home-stack{gap:14px}
+#homeDeck .home-focus{position:relative;display:flex;flex-direction:column;isolation:isolate;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:var(--surface);box-shadow:var(--home-shadow)}
+#homeDeck .home-focus::before{content:"";height:3px;background:linear-gradient(90deg,var(--home-accent),transparent 85%);position:absolute;inset:0 0 auto;pointer-events:none}
+#homeDeck .home-focus .rhythm{order:0;border:0;border-radius:0;background:transparent;margin:0;padding:22px 19px 16px}
+#homeDeck .home-focus .pace-hero{grid-template-columns:minmax(0,1fr) 106px;gap:10px}
+#homeDeck .home-focus .pace-hero h2{font-size:13px;font-weight:650;letter-spacing:.1px}
+#homeDeck .home-focus .hero-pace strong{font-size:50px;letter-spacing:-1.8px;line-height:1.08;font-variant-numeric:tabular-nums}
+#homeDeck .home-focus .hero-pace strong.compact{font-size:39px}
+#homeDeck .home-focus .hero-pace strong.wide{font-size:28px}
+#homeDeck .home-focus .gauge,#homeDeck .home-focus .gauge canvas{width:106px;height:106px}
+#homeDeck .home-focus .meters{margin-top:18px;padding:16px 0;gap:12px}
+#homeDeck .home-focus .meter-value{font-size:24px;letter-spacing:-.65px;font-variant-numeric:tabular-nums}
+#homeDeck .home-focus .meter-label{font-size:12px}
+#homeDeck .home-focus .norm-row{padding:10px 0 5px;min-height:48px;font-size:13px}
+#homeDeck .home-focus .reserve-line{padding:5px 0 0;font-size:12px}
+#homeDeck .home-focus .payment-status{order:1;border:0;border-top:1px solid var(--line);border-radius:0;background:var(--home-quiet);padding:14px 18px;margin:0;gap:10px}
+#homeDeck .home-focus .payment-status svg{flex-shrink:0}
+#homeDeck .home-focus .payment-status p{font-size:12px;line-height:1.45}
+#homeDeck .income-hero{position:relative;border-radius:22px;padding:22px 19px;border-color:var(--line);box-shadow:var(--home-shadow)}
+#homeDeck .income-hero h2{font-size:13px}
+#homeDeck .major-amount{font-size:clamp(37px,10vw,49px);font-variant-numeric:tabular-nums;line-height:1.13;margin:8px 0 18px}
+#homeDeck .income-parts{gap:6px;padding:16px 0}
+#homeDeck .income-parts strong{font-size:13px;overflow-wrap:anywhere}
+#homeDeck .payouts{padding-top:17px}
+#homeDeck .payouts .amount{font-size:clamp(18px,5vw,24px);font-variant-numeric:tabular-nums}
+#homeDeck .home-premiums{padding:20px 19px;border-radius:22px;box-shadow:var(--home-shadow)}
+#homeDeck .home-premiums .card-heading{font-size:16px;font-weight:750}
+#homeDeck .premium-teasers{gap:10px;margin-top:16px}
+#homeDeck .premium-teasers>span{min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+#homeDeck .premium-teasers svg{height:20px;width:20px}
+#homeDeck .premium-teasers strong{margin-top:5px;font-size:clamp(19px,5.4vw,25px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.home-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:28px 23px 24px;border:1px solid var(--line);border-radius:22px;background:var(--surface);box-shadow:var(--home-shadow)}
+.home-empty-symbol{display:grid;place-items:center;width:58px;height:58px;border-radius:18px;background:var(--home-quiet);color:var(--home-accent)}
+.home-empty-symbol svg{width:29px;height:29px}
+.home-eyebrow{font-size:11px;font-weight:750;letter-spacing:1.3px;color:var(--home-accent)}
+.home-empty h2{font-size:27px;letter-spacing:-.8px;line-height:1.15}
+.home-empty-copy{font-size:14px;line-height:1.55;color:var(--muted)}
+.home-empty .button{margin-top:9px;min-height:54px;width:100%;border-radius:15px}
+.home-empty .button svg{width:20px;height:20px}
+.forecast-simple-hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:var(--surface)}
+.forecast-simple-hero::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--home-accent),transparent 85%);pointer-events:none}
+.forecast-page .forecast-simple-plan{border:1px solid var(--line);border-radius:22px;background:var(--surface)}
+.forecast-page .forecast-simple-plan .duration-control+.duration-control{border-top:1px solid var(--line);padding-top:13px}
+.forecast-page .forecast-simple-hero .forecast-number{font-variant-numeric:tabular-nums}
+.bottom-nav{border-top:1px solid var(--line);box-shadow:0 -9px 28px #0001}
+.nav-item.active{background:var(--home-quiet);border-radius:13px;color:var(--teal)}
+:root[data-theme="light"] .nav-item.active{color:var(--teal);background:#e5f2e8}
+button:focus-visible,summary:focus-visible{outline:2px solid var(--home-accent);outline-offset:3px}
+@media(max-width:374px){
+ #homeDeck .home-focus .rhythm{padding:19px 13px 12px}
+ #homeDeck .home-focus .pace-hero{grid-template-columns:minmax(0,1fr) 96px}
+ #homeDeck .home-focus .gauge,#homeDeck .home-focus .gauge canvas{width:96px;height:96px}
+ #homeDeck .premium-teasers{gap:7px}
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .pace-hero{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] #homeDeck .home-focus .meters{grid-template-columns:minmax(0,1fr);gap:14px}
+:root[data-text-scale="large"] #homeDeck .premium-teasers{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] #homeDeck .premium-teasers>span+span{padding-top:14px;border-top:1px solid var(--line)}
+@media(prefers-reduced-motion:reduce){.home-empty,.home-focus,.income-hero{animation:none!important;transition:none!important}}
