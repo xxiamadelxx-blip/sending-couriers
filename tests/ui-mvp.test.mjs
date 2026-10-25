@@ -19,7 +19,8 @@ test('UI M1: period states facts before payment warnings and 12-week controls',(
 });
 test('UI M1: slot history keeps editable ID and complete monetary rows',()=>{
  const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
- assert.ok(section.includes('class="day-money"'));\n assert.ok(!section.includes('class="day-money" role="group"'), 'Android must expose each monetary row after transfer upgrade');
+ assert.ok(section.includes('class="day-money"'));
+ assert.ok(!section.includes('class="day-money" role="group"'), 'Android must expose each monetary row after transfer upgrade');
  for(const v of ['Вознаграждение','Чаевые','Отдельные бонусы','Итог на экране'])assert.ok(section.includes(v));
  assert.ok(section.includes('data-entry="${esc(e.id)}"'));
 });
