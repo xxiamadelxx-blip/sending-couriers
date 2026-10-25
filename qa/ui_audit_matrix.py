@@ -142,25 +142,15 @@ def main():
             device.tap_node('Главная')
             theme(mode)
             suffix = f'{width}-{mode}'
-            for index, label in enumerate(['Темп', 'Доход', 'Премии']):
-                device.tap_node(label)
-                root = capture(f'home-{index}-{suffix}')
-                marker = ['Темп периода', 'Общий доход', 'Расчётные премии'][index]
-                selected = device.find_node(root, label)
-                assert selected is not None and selected.get('selected') == 'true', 'Wrong selected home page: ' + label
-                readable = any(marker in re.sub(r'\s+', ' ', n.get('text', '') + ' ' + n.get('content-desc', ''))
-                               and n.get('bounds') != '[0,0][0,0]' for n in root.iter('node'))
-                checks[-1]['contentTreeStatus'] = 'PASS' if readable else 'FAIL'
-                if not readable:
-                    missing_content.append(f'home-{index}-{suffix}')
-                if args.focus == 'content':
-                    visible_text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')
-                                         if n.get('bounds') != '[0,0][0,0]'))
-                    expected_values = [['2,000', '9 ч', '18 заказов'], ['3 240', '3 200', '40'], ['0 ₽', '— ₽']][index]
-                    values_ok = all(value in visible_text for value in expected_values)
-                    checks[-1]['valuesTreeStatus'] = 'PASS' if values_ok else 'FAIL'
-                    if not values_ok:
-                        missing_content.append(f'values-home-{index}-{suffix}: {visible_text}')
+            root = capture(f'home-{suffix}')
+            assert device.find_node(root, 'Темп периода') is not None, 'Period pace is missing'
+            device.adb('shell', 'input', 'swipe', '540', '1800', '540', '750', '450')
+            root = capture(f'home-finance-{suffix}')
+            assert device.find_node(root, 'Общий доход') is not None, 'Income is missing from the main scroll'
+            if args.focus == 'content':
+                visible_text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')))
+                if '3 240' not in visible_text:
+                    missing_content.append(f'home-income-{suffix}: {visible_text}')
             if args.focus == 'content':
                 continue
             device.tap_node('Период')
@@ -173,16 +163,13 @@ def main():
             device.wait_node('Импортировать отчёт')
             capture('forecast-' + suffix)
             device.tap_node('Настройки')
-            titles = ['Дата', '₽/час', 'Темп оплаты', 'Темп премии', 'Мин. часы', 'Крит. темп', '% темп', '% 12 недель']
-            fields = ['Действует с даты', 'Ставка за час', 'Темп для оплаты', 'Темп для премии', 'Минимум часов за период', 'Критический темп', 'Премия за темп', 'Премия за 12 недель']
-            previous = 'Дата'
-            for index, label in enumerate(titles[:1] if args.focus == 'delta' else titles):
-                tap_payment_tab(label, previous)
-                root = capture(f'settings-{index}-{suffix}')
-                assert device.find_node(root, fields[index]) is not None, 'Payment page did not change: ' + label
-                assert any(n.get('text', '').startswith('Выбрана дата: ') and n.get('bounds') != '[0,0][0,0]'
-                           for n in root.iter('node')), 'Selected tariff date is not visible on ' + label
-                previous = label
+            root = capture(f'settings-main-{suffix}')
+            assert device.find_node(root, 'Действует с даты') is not None
+            assert device.find_node(root, 'Ставка за час') is not None, 'Date and rate must share the same screen'
+            if args.focus != 'delta':
+                device.tap_node('Остальные условия')
+                root = capture(f'settings-more-{suffix}')
+                assert device.find_node(root, 'Темп для оплаты') is not None
             device.tap_node('Добавить слот')
             root = capture('form-' + suffix)
             edit = next(n for n in root.iter('node') if n.get('class') == 'android.widget.EditText')

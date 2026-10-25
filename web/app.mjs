@@ -12,7 +12,6 @@ import { mountForecast } from './forecast-ui.mjs';
 import {prepareForecast,forecastKey} from './forecast-runtime.mjs';
 import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity } from './forecast.mjs';
 import { weatherCache, weatherParts, weatherSymbol, weatherDescription, weatherLocation } from './weather.mjs';
-import { pager, bindPager } from './pager.mjs';
 import { intervalField, bindIntervals, intervalValue } from './interval-control.mjs';
 import { withSlotWorkingTime } from './slot-work.mjs';
 
@@ -31,7 +30,7 @@ document.addEventListener('click', event => {
   const button = event.target.closest('button, summary');
   if (button && !button.disabled && button.type !== 'submit' && !button.matches('#themeToggle,#feedbackTest,#confirmImport,#deleteDay,#reopenPeriod,[data-calc="="]')) feedback('tap');
 }, true);
-let state, selectedPeriod = periodFor(today()).id, view = 'summary', editingId = null, pendingImport = null, homePage = 0;
+let state, selectedPeriod = periodFor(today()).id, view = 'summary', editingId = null, pendingImport = null;
 let toastTimer, forecastScreen, weatherAttempt = 0, requestedModel = null;
 const icons = { back: icon['arrow-left'], plus: icon.plus, share: icon['file-export'], chevron: icon['chevron-right'], down: icon['chevron-down'] };
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -198,7 +197,7 @@ function summary() {
   app.className = 'overview'; view = 'summary'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
   const gap = s.pace == null ? null : Math.max(0, s.requiredOrders - s.orders);
-  app.innerHTML=`<header class="overview-top"><div class="overview-toolbar">${weatherWidget()}<div class="header-tools"><button class="export-icon" id="export" type="button" aria-label="Экспорт для ChatGPT">${icons.share}</button>${themeButton()}</div></div><button class="period-button" id="choosePeriod" type="button" aria-label="Выбрать расчётный период">${icon.calendar}${esc(periodLabel(selectedPeriod))}${icons.down}</button>${s.closure?'<p class="summary-close-status">Период закрыт</p>':''}</header>
+  app.innerHTML=`<header class="overview-top"><div class="overview-toolbar">${weatherWidget()}<div class="header-tools"><button class="export-icon" id="export" type="button" aria-label="Экспорт для ChatGPT">${icons.share}</button>${themeButton()}</div></div><h1>Рабочий ритм</h1><button class="period-button" id="choosePeriod" type="button" aria-label="Выбрать расчётный период">${icon.calendar}${esc(periodLabel(selectedPeriod))}${icons.down}</button>${s.closure?'<p class="summary-close-status">Период закрыт</p>':''}</header>
     <section class="rhythm" aria-labelledby="paceTitle"><div class="pace-hero"><div><h2 id="paceTitle">Темп периода</h2><p id="summaryPace" class="hero-pace"><strong class="${paceText(s.pace).length > 7 ? 'wide' : paceText(s.pace).length > 5 ? 'compact' : ''}">${paceText(s.pace)}</strong> заказа/ч</p></div><div class="gauge"><canvas id="paceGauge" role="img" aria-label="${s.pace == null ? 'Пока нет данных о темпе' : `Выполнение нормы: ${Math.round(s.pace / s.terms.basePace * 100)}%`}"></canvas><div class="gauge-label" data-state="${s.paymentConditions.paceMet === false ? 'below' : 'other'}"><strong>${s.pace == null ? '—' : Math.round(s.pace / s.terms.basePace * 100) + '%'}</strong><span>Цель ${goalText(s.terms.basePace)}<br>заказа/ч</span></div></div></div>
     <div class="meters" aria-label="Сумма часов и заказов за период"><div class="meter">${icon.clock}<div><p class="meter-value${meterSize(hoursText(s.hours))}" id="summaryHours">${hoursText(s.hours)}<span class="unit"> ч</span></p><p class="meter-label">отработано</p></div></div><div class="meter">${icon.package}<div><p class="meter-value${meterSize(s.orders)}"><span id="summaryOrders">${s.orders ?? '—'}</span><span class="orders-unit"> ${s.orders == null ? 'заказов' : orderWord(s.orders)}</span></p><p class="meter-label">выполнено</p></div></div></div>
     <div class="pace-block"><div class="norm-row">${icon.target}<span>До нормы</span><div><strong>${gap ?? '—'}${gap == null ? '' : ' ' + orderWord(gap)}</strong></div></div><p class="reserve-line" id="summaryReserve">Можно без заказов: ${reserveText(s.reserve)}</p>${s.pace != null && !s.matchedCounters ? '<p class="hint" id="paceNote">Неполные данные · темп по введённым итогам</p>' : ''}</div></section>${paymentStatus(s)}
@@ -208,18 +207,12 @@ function summary() {
   app.querySelectorAll('#paceTitle,#summaryPace,.meter-value,#summaryPacePremium,#summaryCyclePremium').forEach(node=>node.tabIndex=-1);
   const premiumTitle=$('#openPremiums .card-heading');
   premiumTitle.setAttribute('role','heading');premiumTitle.setAttribute('aria-level','2');premiumTitle.tabIndex=-1;
-  // Keep the existing financial and pace markup, then arrange its three
-  // independent sections as a native horizontal carousel.
+  // Put the period's essentials on one vertical screen, in reading order.
   const rhythm=$('.rhythm'),status=$('#paymentStatus'),income=$('.income-hero'),premiums=$('#openPremiums'),calculation=$('.calculation');
   premiums.querySelector('.card-heading svg')?.remove();
   const premiumHTML=`<div class="premiums-card">${premiums.innerHTML}</div>`;premiums.remove();
-  rhythm.insertAdjacentHTML('beforebegin',pager('homeDeck',[
-    {title:'Темп',icon:icon['chart-bar'],html:rhythm.outerHTML+status.outerHTML},
-    {title:'Доход',icon:icon.wallet??icon['file-export'],html:income.outerHTML+calculation.outerHTML},
-    {title:'Премии',icon:icon.gift,html:`<section class="home-premiums detail-card">${premiumHTML}${cycle.boundaryNote ? `<details class="calculation boundary-note"><summary>Есть старые интервалы</summary><p>${esc(cycle.boundaryNote)}</p></details>` : ''}</section>`}
-  ],{label:'Главная'}));
+  rhythm.insertAdjacentHTML('beforebegin',`<div id="homeDeck" class="home-stack">${rhythm.outerHTML}${income.outerHTML}${status.outerHTML}<section class="home-premiums detail-card">${premiumHTML}${cycle.boundaryNote ? `<details class="calculation boundary-note"><summary>Есть старые интервалы</summary><p>${esc(cycle.boundaryNote)}</p></details>` : ''}</section>${calculation.outerHTML}</div>`);
   rhythm.remove();status.remove();income.remove();calculation.remove();
-  bindPager($('#homeDeck'),{initial:homePage,onChange:index=>homePage=index});
   bottomNav('summary'); drawPaceGauge(s.pace, s.terms.basePace,s.paymentConditions.paceMet);
   $('#choosePeriod').addEventListener('click', history);
   $('#export').addEventListener('click', () => $('#exportDialog').showModal()); resetScroll();
@@ -257,26 +250,19 @@ function settings() {
   const chosenDate = selectedPeriod === periodFor(today()).id ? today() : selectedPeriod;
   const initial = paymentTermsFor(state, chosenDate);
   const ruleHistory = () => state.settings.paymentRules.length ? `<details class="calculation payment-history"><summary>История условий</summary>${[...state.settings.paymentRules].reverse().map(rule => `<div class="payment-rule"><strong>С ${esc(formatDate(rule.effectivePeriodStart))}</strong><span>${esc(money(rule.hourlyRate))}/ч · темп ${goalText(rule.basePace)}</span><span>Темп ${goalText(rule.premiumPace)}: ${percentText(rule.paceBonusPercent)}% · 12 недель: ${percentText(rule.cycleBonusPercent)}%</span></div>`).join('')}</details>` : '';
-  app.innerHTML = `${heading('Настройки')}<section class="detail-card appearance-card"><h2>Тема</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная · AMOLED</option></select></div></section>
-    <section class="detail-card payment-settings"><h2>Условия оплаты</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><input id="paymentPeriod" type="date" value="${esc(chosenDate)}" required><p class="hint">Новая ставка применяется к записям с этой даты, в том числе внутри текущего периода.</p></div><div class="form-grid">
+  app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><input id="paymentPeriod" type="date" value="${esc(chosenDate)}" required><p class="hint">Ставка применяется с выбранного дня, в том числе внутри текущего периода.</p></div>
     ${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}
+    <details class="payment-more"><summary>Остальные условия${icons.down}</summary><div class="form-grid">
     ${field('basePace','Темп для оплаты',initial.basePace,{unit:'заказа/ч',full:true})}
     ${field('premiumPace','Темп для премии',initial.premiumPace,{unit:'заказа/ч',full:true})}
     ${field('minimumHours','Минимум часов за период',initial.minimumHours ?? 80,{unit:'ч',full:true})}
     ${field('criticalPace','Критический темп',initial.criticalPace ?? initial.basePace,{unit:'заказа/ч',full:true})}
     ${field('paceBonusPercent','Премия за темп',initial.paceBonusPercent,{unit:'%'})}
-    ${field('cycleBonusPercent','Премия за 12 недель',initial.cycleBonusPercent,{unit:'%'})}</div>
+    ${field('cycleBonusPercent','Премия за 12 недель',initial.cycleBonusPercent,{unit:'%'})}</div></details>
     <p class="payment-effective-date" id="paymentEffectiveDate" aria-live="polite">Выбрана дата: ${esc(formatDate(chosenDate))}</p><div class="error" id="paymentError" role="alert" hidden></div><button class="button primary" id="savePaymentTerms" type="submit">Сохранить условия</button></form><div id="paymentHistory">${ruleHistory()}</div></section>
+    <section class="detail-card appearance-card"><h2>Оформление</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная · AMOLED</option></select></div></section>
     <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
   const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
-  const periodField=$('.payment-period'),fieldGrid=$('#paymentForm .form-grid');
-  const paymentTitles=['Дата','₽/час','Темп оплаты','Темп премии','Мин. часы','Крит. темп','% темп','% 12 недель'];
-  periodField.insertAdjacentHTML('beforebegin',pager('paymentDeck',[
-    {title:paymentTitles[0],html:periodField.outerHTML},
-    ...paymentFields.map((key,index)=>({title:paymentTitles[index+1],html:fieldGrid.querySelector('#'+key).closest('.field').outerHTML}))
-  ],{label:'Условия оплаты'}));
-  periodField.remove();fieldGrid.remove();
-  const paymentPager=bindPager($('#paymentDeck'));
   bottomNav('settings'); $('#goBack').addEventListener('click', summary);
   $('#themeSelect').addEventListener('change', event => {
     try { persist(updateSettings(state, { theme:event.target.value })); $('#preferencesError').hidden = true; }
@@ -294,9 +280,9 @@ function settings() {
       const rule = { effectivePeriodStart:$('#paymentPeriod').value };
       for (const key of ['hourlyRate','basePace','premiumPace','paceBonusPercent','cycleBonusPercent','minimumHours','criticalPace']) rule[key] = $('#' + key).value;
       const base=paymentTermsFor(state,rule.effectivePeriodStart);
-      paymentFields.forEach((key,index)=>{
+      paymentFields.forEach(key=>{
         try { setPaymentTerms(state,{...base,effectivePeriodStart:rule.effectivePeriodStart,[key]:rule[key]}); }
-        catch(error) { paymentPager.go(index+1);$('#'+key).focus();throw error; }
+        catch(error) { if(key!=='hourlyRate')$('.payment-more').open=true;$('#'+key).focus();throw error; }
       });
       persist(setPaymentTerms(state,rule));
       $('#paymentError').hidden = true; $('#paymentHistory').innerHTML = ruleHistory();

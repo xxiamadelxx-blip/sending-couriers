@@ -243,3 +243,108 @@ main{padding-bottom:calc(var(--navigation-space,104px) + var(--safe-bottom))}
   .forecast-simple-plan .duration-control{margin:8px 0!important}
   .forecast-import-button{margin:4px 0 10px}
 }
+
+/* 1.7.14: one readable dashboard, restrained surfaces, direct tariff editing. */
+:root{--line:#263229;--muted:#a4b1a8;--surface:#080e0a;--field:#101713;--teal:#a8e6bf;--primary-bg:#a8e6bf;--primary-ink:#10281b;--gauge-track:#28352b}
+:root[data-theme="light"]{--bg:#f4f6f1;--ink:#18251d;--muted:#56665b;--line:#d5ded4;--surface:#fff;--field:#f7faf6;--teal:#176642;--primary-bg:#176642;--primary-ink:#fff;--gauge-track:#d5e1d8}
+main{padding-left:calc(16px + var(--safe-left));padding-right:calc(16px + var(--safe-right))}
+h1,.page-heading h1{font-size:27px;line-height:1.2;letter-spacing:-.6px}
+.page-heading{margin-bottom:18px}.page-heading h1{font-weight:720}
+.overview-top{margin-bottom:16px}
+.overview-toolbar{min-height:44px;margin-bottom:12px}
+.overview-top h1{font-size:24px;margin:0 0 4px}
+.overview-top .period-button{margin:0;min-height:44px;border:0;border-radius:0;padding:0;color:var(--muted);font-size:13px;font-weight:550}
+.overview-top .period-button svg{width:16px;height:16px}
+.export-icon{border:0;background:var(--surface);border-radius:12px;width:44px;height:44px}
+.header-weather{font-size:13px}
+.home-stack{display:flex;flex-direction:column;gap:12px}
+#homeDeck .rhythm,#homeDeck .income-hero,#homeDeck .home-premiums{margin:0;border:1px solid var(--line);border-radius:16px;background:var(--surface);padding:18px}
+#homeDeck .rhythm{order:0}
+#homeDeck .income-hero{order:1}
+#homeDeck .payment-status{order:2;margin:0}
+#homeDeck .home-premiums{order:3}
+#homeDeck>.calculation{order:4;margin:0 4px}
+#homeDeck .pace-hero{grid-template-columns:minmax(0,1fr) 100px;gap:8px}
+#homeDeck .pace-hero h2{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 6px}
+#homeDeck .hero-pace{font-size:13px;color:var(--muted);white-space:normal;letter-spacing:0}
+#homeDeck .hero-pace strong{font-size:46px;line-height:1;letter-spacing:-1.5px;margin:0 0 5px;font-weight:740}
+#homeDeck .hero-pace strong.compact{font-size:37px}
+#homeDeck .hero-pace strong.wide{font-size:29px}
+#homeDeck .gauge,#homeDeck .gauge canvas{width:100px;height:100px}
+#homeDeck .gauge-label strong{font-size:22px}
+#homeDeck .gauge-label span{font-size:9px;margin-top:1px}
+#homeDeck .meters{margin:14px 0 0;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);gap:0}
+#homeDeck .meter{gap:5px;align-items:center}
+#homeDeck .meter>svg{width:19px;height:19px;margin:0}
+#homeDeck .meter+.meter{padding-left:12px}
+#homeDeck .meter-value{font-size:22px;letter-spacing:-.5px}
+#homeDeck .meter-value .unit{font-size:17px}
+#homeDeck .orders-unit{font-size:11px}
+#homeDeck .meter-label{font-size:11px;margin:2px 0 0}
+#homeDeck .pace-block{margin:0}
+#homeDeck .norm-row{min-height:38px;gap:7px;border:0;font-weight:500;font-size:13px}
+#homeDeck .norm-row svg{width:18px;height:18px}
+#homeDeck .norm-row>div{min-width:0;text-align:right}
+#homeDeck .norm-row strong{font-size:14px}
+#homeDeck .reserve-line{font-size:12px;padding:0;color:var(--muted)}
+#homeDeck .income-hero h2{font-size:13px;font-weight:600;color:var(--muted)}
+#homeDeck .major-amount{display:block;font-size:clamp(36px,10vw,44px);line-height:1.14;letter-spacing:-1.4px;margin:5px 0 14px;color:var(--ink)}
+#homeDeck .income-parts{margin:0;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);gap:8px}
+#homeDeck .income-parts span{font-size:11px;color:var(--muted)}
+#homeDeck .income-parts strong{font-size:13px;line-height:1.3;font-weight:650}
+#homeDeck .payouts{margin:0;padding:12px 0 0;border:0;gap:10px}
+#homeDeck .payouts h2{font-size:11px}
+#homeDeck .payouts .amount{font-size:19px;font-weight:700}
+#homeDeck .payouts>div+div{padding-left:12px}
+#homeDeck .payment-status{padding:12px 14px;background:var(--surface);border-radius:14px}
+#homeDeck .payment-status strong{font-size:13px}
+#homeDeck .home-premiums .premiums-card{padding:0;border:0;background:transparent}
+#homeDeck .home-premiums .card-heading{font-size:15px}
+#homeDeck .premium-teasers{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+#homeDeck .premium-teasers>span{padding:0;border:0;font-size:11px;gap:5px}
+#homeDeck .premium-teasers svg{width:18px;height:18px}
+#homeDeck .premium-teasers strong{font-size:19px;color:var(--ink)}
+.detail-card,.day-card,.day-group,.forecast-simple-hero{border-radius:16px;padding:18px;background:var(--surface)}
+.detail-card h2{font-size:18px;line-height:1.3}
+.period-overview,.cycle-settings{margin-top:12px}
+.period-facts dd{font-size:23px}
+.period-actions{align-items:stretch}
+.period-actions #periodHistory{justify-content:space-between;padding:0 14px;border:1px solid var(--line);background:var(--surface);border-radius:12px}
+.period-actions .export-action{align-self:flex-start}
+.forecast-page .page-heading h1{font-size:27px}
+.forecast-simple-hero{padding:20px 18px;margin:12px 0}
+.forecast-simple-hero h2{font-size:17px}
+.forecast-simple-hero .forecast-number.is-unknown{font-size:32px}
+.forecast-page .detail-card{border-radius:16px;padding:18px}
+.forecast-simple-plan .duration-control{margin:14px 0!important}
+.payment-settings{margin-top:0}
+.payment-settings h2{font-size:20px;margin:0 0 18px}
+.payment-settings .payment-period{margin:0 0 18px}
+.payment-settings .payment-period .hint{margin:7px 0 0;font-size:12px}
+.payment-settings>.field,.payment-settings form>.field{margin:0 0 12px}
+.payment-settings .field label{font-size:14px;font-weight:600;color:var(--muted)}
+.payment-settings .field input{border-radius:10px;min-height:50px}
+.payment-more{border-top:1px solid var(--line);margin-top:12px}
+.payment-more summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;list-style:none;cursor:pointer;font-size:14px;font-weight:650;color:var(--teal)}
+.payment-more summary::-webkit-details-marker{display:none}
+.payment-more summary svg{width:18px;height:18px}
+.payment-more[open] summary svg{transform:rotate(180deg)}
+.payment-more .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px 10px;padding:12px 0 8px}
+.payment-more .field:nth-child(-n+5){grid-column:1/-1}
+.payment-more .field:not(.full)>label{min-height:0}
+.payment-effective-date{background:transparent;border-top:1px solid var(--line);border-radius:0;padding:12px 0 0;margin:8px 0 0;color:var(--muted);font-size:12px}
+.payment-settings #savePaymentTerms{margin:14px 0 0;border-radius:12px;font-size:15px}
+.appearance-card{padding:16px 18px}.appearance-card .theme-field{margin-top:10px}
+.bottom-nav{background:var(--bg);padding-top:6px;padding-bottom:calc(7px + var(--safe-bottom));gap:0}
+.nav-item{min-height:55px;border-radius:10px;font-size:10px;line-height:1.1;color:var(--muted);font-weight:500}
+.nav-item.active{background:transparent;color:var(--teal);font-weight:700}
+.nav-item svg{width:21px;height:21px}
+.nav-item span{overflow-wrap:normal;word-break:normal;line-height:1.15}
+.nav-add{width:54px;height:54px;min-height:54px;transform:translateY(-12px);box-shadow:none;border-width:2px}
+.nav-add svg{width:26px;height:26px}
+:root[data-text-scale="large"] .nav-item{font-size:8px}
+:root[data-text-scale="large"] .nav-item span{overflow-wrap:anywhere}
+:root[data-text-scale="large"] #homeDeck .pace-hero{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] #homeDeck .gauge{justify-self:start}
+:root[data-text-scale="large"] #homeDeck .meters{grid-template-columns:minmax(0,1fr)}
+@media(max-width:374px){#homeDeck .income-parts{gap:4px}#homeDeck .income-parts strong{font-size:12px}#homeDeck .premium-teasers{gap:7px}}
