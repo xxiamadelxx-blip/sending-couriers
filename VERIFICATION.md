@@ -51,3 +51,7 @@ Android runtime и установка обновления на устройст
 Новые модельные проверки сначала воспроизвели отсутствие условий в1.6.0 (payout-before.txt:5 FAIL), затем прошли. Первый UI-прогон сравнивал ненормализованный тестовый fixture без времени/полей по умолчанию с нормализованными данными; fixture дополнен, production для этого не менялся. Финальные UI результаты — свежие успешные прогоны.
 
 Премии и почасовой доход остаются оценками, пока условия выплаты не подтверждены; actual reward, удержания, чаевые и отдельные бонусы не выводятся из заказов и не перезаписываются. Двухнедельный календарь, правила оплаты1.6.0, место настройки12недель и автоматические отступы сохранены. Скриншоты только для внутреннего просмотра, в архив исходников не включаются.
+
+## UI-012 200% Android form acceptance · 26.10.2026
+
+PASS on source SHA `417f8780a360238785d3e1555183184aa7a82c72`, [CI #40237133128](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40237133128), artifact `ui-audit-330c8ab63cd58acf88a91c851296ea924725896c`. Independent native result: 7 fields on 360dp dark/390dp light at font 200%; numeric keyboard + Save visible; new synthetic slot 1h/2 orders/300 ₽ becomes 10h/20 orders/3500 ₽; persisted after force-stop; XLSX 2 imports with 2 distinct orders and no duplicates; temporary test signer upgrade PASS. The owner signing key IS RECOVERED; real owner-signed 1.7.14→1.7.15 Android update and TalkBack are NOT RUN. UI-M2 as a whole remains OPEN.
