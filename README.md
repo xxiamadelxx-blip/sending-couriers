@@ -59,3 +59,8 @@ python3 tools/package_release.py
 ```
 
 Результаты 1.7.8: `verification/1.7.8/`. Для 1.7.11: 130 unit, фактический NativeBridge на JVM, совпадение assets/dex и сертификата. Облачный Android 35 проверяет обновление поверх 1.7.8, три слота, повторный импорт синтетического XLSX, автоматическое восстановление из локального Android Backup после переустановки и снимки экранов; итог и открытые пункты перечислены в `docs/acceptance/ANDROID_QA_1.7.11.md`. APK находится в `qa/Courier-Finance-1.7.11.apk`.
+
+
+## UI MVP redesign / active release milestone
+
+New user-approved `SHIFT CONTROL` redesign takes precedence over the historical mint/light UI descriptions above. The **current, binding requirements and acceptance evidence** for **all** surfaces are in [docs/acceptance/UI_MVP_RELEASE_2026-10-25.md](docs/acceptance/UI_MVP_RELEASE_2026-10-25.md). Keep this matrix and `AGENTS.md` updated on every Gauntlet loop. PR [#4](https://github.com/xxiamadelxx-blip/sending-couriers/pull/4); release status remains **NOT RELEASED** until all gates pass, including original owner signing key for transfer package. Never link an unsigned CI APK as a ready-to-install update.
