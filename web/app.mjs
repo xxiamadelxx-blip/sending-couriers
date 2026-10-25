@@ -216,7 +216,7 @@ function summary() {
     <span class="home-empty-symbol" aria-hidden="true">${icon.package}</span>
     <p class="home-eyebrow">НОВЫЙ ПЕРИОД</p>
     <h2 id="homeEmptyTitle">Смена ещё не записана</h2>
-    <p class="home-empty-copy">Добавьте первый слот, чтобы увидеть темп, выплаты и премии. Прошлые записи доступны в истории.</p>
+    <p class="home-empty-copy">Добавьте слот, чтобы увидеть темп, доход и выплаты.</p>
     <button class="button primary" id="homeEmptyAdd" type="button">${icon.plus}Добавить первый слот</button>
   </section>`;
   const filledPanel=`<section class="home-focus" aria-label="Темп и условие выплаты">${rhythm.outerHTML}${status.outerHTML}</section>
