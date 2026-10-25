@@ -44,3 +44,10 @@ test('UI M2: native full audit opens and cancels export, scroll-checks all tarif
  assert.match(qa,/Payment setting not reachable by scroll/);
  assert.match(qa,/capture\(f'settings-field-visible-/);
 });
+
+test('UI M2: period choice has at least 48dp hitbox in native 360/390 theme matrix',()=>{
+ assert.match(css,/GAUNTLET P2 \/ UI-007/);
+ assert.match(css,/\.overview-top \.period-button\{min-height:48px\}/);
+ assert.match(qa,/Home period button must be at least 48dp tall/);
+ assert.match(qa,/pb\[3\]-pb\[1\] >= 144/);
+});

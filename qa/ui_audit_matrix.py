@@ -164,6 +164,11 @@ def main():
             theme(mode)
             suffix = f'{width}-{mode}'
             root = capture(f'home-{suffix}')
+            period_choice = device.find_node(root, 'Выбрать расчётный период')
+            pb = list(map(int, re.findall(r'\d+', period_choice.get('bounds', '')))) if period_choice is not None else []
+            assert len(pb) == 4 and pb[2] > pb[0] and pb[3]-pb[1] >= 144, (
+                f'Home period button must be at least 48dp tall: {pb}, {suffix}'
+            )
             assert any(device.find_node(root, name) is not None for name in ('Темп периода', 'ТЕМП ПЕРИОДА')), 'Period pace is missing'
             device.adb('shell', 'input', 'swipe', '540', '1800', '540', '750', '450')
             root = capture(f'home-finance-{suffix}')

@@ -685,3 +685,6 @@ dialog .button{margin:8px 0 0}
   font-family:system-ui,"Roboto","Segoe UI",sans-serif;
   font-variant-numeric:tabular-nums;
 }
+
+/* GAUNTLET P2 / UI-007: real Android bounds were 141px = 47dp on 360/390. */
+.overview-top .period-button{min-height:48px}
