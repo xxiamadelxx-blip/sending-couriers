@@ -419,26 +419,29 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--home-accent);
 :root[data-text-scale="large"] #homeDeck .premium-teasers>span+span{padding-top:14px;border-top:1px solid var(--line)}
 @media(prefers-reduced-motion:reduce){.home-empty,.home-focus,.income-hero{animation:none!important;transition:none!important}}
 
-/* Large Android font: keep the percentage and goal OUTSIDE the circular gauge.
-   At 200% text scale the former absolute overlay intruded into the ring.
-   Never shrink accessible text just to fit it inside a decorative circle. */
+/* Large Android font: text-first pace status, decorative ring removed.
+   Android 35, font_scale=2.0: previous 152px canvas pushed 111% below
+   the bottom-navigation top at y=2202 (percent bottom y=2247).
+   Keep the percentage and goal above the fold without shrinking type. */
 :root[data-text-scale="large"] #homeDeck .home-focus .gauge{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
+  display:block;
   justify-self:stretch;
   width:100%;
   height:auto;
-  gap:10px;
 }
 :root[data-text-scale="large"] #homeDeck .home-focus .gauge canvas{
-  width:152px;
-  height:152px;
-  flex:none;
+  display:none;
 }
 :root[data-text-scale="large"] #homeDeck .home-focus .gauge-label{
   position:static;
   inset:auto;
+  display:flex;
+  flex-direction:row;
+  flex-wrap:wrap;
+  align-items:baseline;
+  justify-content:flex-start;
+  text-align:left;
+  gap:6px 14px;
   min-width:0;
   width:100%;
   padding:0;
@@ -452,4 +455,5 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--home-accent);
 :root[data-text-scale="large"] #homeDeck .home-focus .gauge-label span{
   font-size:12px;
   line-height:1.25;
+  margin:0;
 }

@@ -197,7 +197,19 @@ def main():
         device.adb('shell', 'am', 'force-stop', device.PACKAGE)
         device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
         device.wait_home(30)
-        capture('font-' + scale + '-home')
+        home_root = capture('font-' + scale + '-home')
+        if scale == '2.0':
+            # This fixture has 18 orders / 9 active hours against a 1.80 goal.
+            # At 200% font the visible 111% must NOT sit under the bottom nav.
+            percent = device.find_node(home_root, '111%')
+            nav_home = device.find_node(home_root, 'Главная')
+            assert percent is not None and nav_home is not None, '200% progress or bottom navigation missing'
+            percent_box = list(map(int, re.findall(r'\d+', percent.get('bounds', ''))))
+            nav_box = list(map(int, re.findall(r'\d+', nav_home.get('bounds', ''))))
+            assert len(percent_box) == 4 and len(nav_box) == 4
+            assert percent_box[1] >= 0 and percent_box[3] <= nav_box[1], (
+                f'200% progress is covered by bottom navigation: {percent_box}, {nav_box}'
+            )
         device.tap_node('Прогноз')
         root = capture('font-' + scale + '-forecast')
         before_scroll = durations(root)
