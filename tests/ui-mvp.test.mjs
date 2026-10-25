@@ -76,3 +76,21 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
   assert.match(qa,/200% round-trip values changed after process death/);
   assert.match(qa,/bb\[3\] <= nav_box\[1\]/);
 });
+
+test('MVP Android M2 positive XLSX: full workflow imports same report twice and verifies saved facts',async()=>{
+ const ci=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
+ const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
+ assert.match(ci,/python3 qa\/xlsx_import_smoke\.py/);
+ assert.match(ci,/adb shell settings put system font_scale 1\.0/);
+ assert.match(xlsx,/def scroll_to_import\(\):/);
+ assert.match(xlsx,/Native XLSX import action not reachable by vertical scroll/);
+ assert.match(xlsx,/assert first == second/);
+ assert.match(xlsx,/assert_imported\(exported_forecast\(\)\)/);
+});
+test('200% slider hitbox parsing uses digit regex that matches Android node coordinates',()=>{
+ const block=qa.split("if scale == '2.0' and args.phase == 'after'")[1].split("if scale == '1.3' and args.phase == 'after'")[0];
+ const expected=String.raw`re.findall(r'\d+',`;
+ const wrong=String.raw`re.findall(r'\\d+',`;
+ assert.equal(block.split(expected).length-1,2);
+ assert.equal(block.split(wrong).length-1,0);
+});

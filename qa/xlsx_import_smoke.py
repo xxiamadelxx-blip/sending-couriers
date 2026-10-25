@@ -19,7 +19,22 @@ def tap(node):
     adb("shell", "input", "tap", str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
 
 
+def scroll_to_import():
+    """The import CTA is below the fold on actual 360dp Android screenshots."""
+    for attempt in range(6):
+        root = dump(f"xlsx-import-action-{attempt}")
+        action = find_node(root, "Импортировать отчёт")
+        nav = find_node(root, "Главная")
+        ab = list(map(int, re.findall(r"\d+", action.get("bounds", "")))) if action is not None else []
+        nb = list(map(int, re.findall(r"\d+", nav.get("bounds", "")))) if nav is not None else []
+        if len(ab) == len(nb) == 4 and ab[2] > ab[0] and ab[3] > ab[1] and ab[1] >= 0 and ab[3] <= nb[1]:
+            return
+        adb("shell", "input", "swipe", "540", "1720", "540", "680", "350")
+    raise AssertionError("Native XLSX import action not reachable by vertical scroll")
+
+
 def choose_workbook():
+    scroll_to_import()
     tap_node("Импортировать отчёт")
     time.sleep(2)
     screenshot("xlsx-picker")

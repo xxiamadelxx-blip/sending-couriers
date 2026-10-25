@@ -297,13 +297,13 @@ def main():
             # scrolled Android tree proves visibility; now prove both controls
             # respond at 200% font without touching the other time basis.
             nav = device.find_node(root, 'Главная')
-            nav_box = list(map(int, re.findall(r'\\d+', nav.get('bounds', ''))))
+            nav_box = list(map(int, re.findall(r'\d+', nav.get('bounds', ''))))
             assert len(nav_box) == 4
             for label in ('Слот: минус 15 минут', 'Слот: плюс 15 минут',
                           'Из них буду работать: минус 15 минут',
                           'Из них буду работать: плюс 15 минут'):
                 node = device.find_node(root, label)
-                bb = list(map(int, re.findall(r'\\d+', node.get('bounds', '')))) if node is not None else []
+                bb = list(map(int, re.findall(r'\d+', node.get('bounds', '')))) if node is not None else []
                 assert len(bb) == 4 and bb[2] > bb[0] and bb[1] >= 0 and bb[3] <= nav_box[1], (
                     f'200% slider action is offscreen or covered: {label} {bb}, nav {nav_box}'
                 )

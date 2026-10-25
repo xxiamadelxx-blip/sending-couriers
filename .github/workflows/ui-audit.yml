@@ -77,6 +77,14 @@ jobs:
           profile: pixel_6
           script: |
             python3 qa/ui_audit_matrix.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --phase after --focus "${{ inputs.focus || 'full' }}"
+            if [ "${{ inputs.focus || 'full' }}" = "full" ]; then
+              adb shell wm size 1080x2400
+              adb shell wm density 480
+              adb shell settings put system font_scale 1.0
+              adb shell am force-stop ru.courier.finance
+              adb shell am start -n ru.courier.finance/.MainActivity
+              python3 qa/xlsx_import_smoke.py
+            fi
             python3 qa/transfer_upgrade_smoke.py --old "$RUNNER_TEMP/courier-transfer-prior-test-only.apk" --new "$RUNNER_TEMP/courier-transfer-test-only.apk"
       - name: Capture audit evidence
         if: always()
