@@ -116,6 +116,17 @@ def main():
     device.tap_node('Главная')
     device.add_slot(hours=4, orders=8, reward=1200)
     device.add_slot(hours=5, orders=10, reward=2000)
+    if args.phase == 'after' and args.focus == 'full':
+        # Exercise export modal. Cancel must never mutate the fixture.
+        device.tap_node('Экспорт для ChatGPT')
+        device.wait_node('Резервная копия JSON')
+        opened = capture('export-dialog-360-dark')
+        for action in ('Поделиться файлом', 'Сохранить файл', 'Резервная копия JSON', 'Закрыть'):
+            assert device.find_node(opened, action) is not None, f'Export action missing: {action}'
+        device.tap_node('Закрыть')
+        closed = device.dump('export-dialog-closed')
+        assert device.find_node(closed, 'Сохранить файл') is None, 'Export modal remained open'
+        assert device.find_node(closed, 'Главная') is not None, 'Export modal did not restore the home screen'
     if args.phase == 'after' and args.focus != 'content':
         device.tap_node('Прогноз')
         for _ in range(6):
@@ -190,6 +201,27 @@ def main():
                 device.tap_node('Остальные условия')
                 root = capture(f'settings-more-{suffix}')
                 assert device.find_node(root, 'Темп для оплаты') is not None
+                # The DOM can list off-screen fields with [0,0][0,0] bounds.
+                # For each payment setting, independently prove scroll reachability.
+                fields = ('Темп для оплаты', 'Темп для премии',
+                          'Минимум часов за период', 'Критический темп',
+                          'Премия за темп', 'Премия за 12 недель')
+                for field_index, label in enumerate(fields):
+                    visible = False
+                    fb = []
+                    for attempt in range(8):
+                        root = device.dump(f'settings-field-{suffix}-{field_index}-{attempt}')
+                        node = device.find_node(root, label)
+                        nav = device.find_node(root, 'Главная')
+                        nb = list(map(int, re.findall(r'\d+', nav.get('bounds', '')))) if nav is not None else []
+                        fb = list(map(int, re.findall(r'\d+', node.get('bounds', '')))) if node is not None else []
+                        if (len(nb) == len(fb) == 4 and fb[2] > fb[0] and
+                            fb[3] > fb[1] and fb[1] >= 0 and fb[3] <= nb[1]):
+                            visible = True
+                            break
+                        device.adb('shell', 'input', 'swipe', '540', '1770', '540', '680', '360')
+                    assert visible, f'Payment setting not reachable by scroll: {label}; bounds={fb}'
+                    capture(f'settings-field-visible-{suffix}-{field_index}')
             device.tap_node('Добавить слот')
             root = capture('form-' + suffix)
             edit = next(n for n in root.iter('node') if n.get('class') == 'android.widget.EditText')

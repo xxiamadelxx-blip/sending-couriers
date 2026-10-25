@@ -35,3 +35,12 @@ test('UI M2: real money uses Cyrillic/ruble-capable system font, not Android mon
   assert.match(css,/#homeDeck \.income-hero \.major-amount,\s*#homeDeck \.home-premiums \.premium-teasers strong,\s*\.day-money \.day-row span:last-child\{[\s\S]*?font-family:system-ui/);
   assert.match(css,/font-variant-numeric:tabular-nums/);
 });
+
+test('UI M2: native full audit opens and cancels export, scroll-checks all tariff controls',()=>{
+ assert.match(qa,/capture\('export-dialog-360-dark'\)/);
+ assert.match(qa,/device\.tap_node\('Закрыть'\)/);
+ assert.match(qa,/Export modal remained open/);
+ for(const term of ['Темп для оплаты','Темп для премии','Минимум часов за период','Критический темп','Премия за темп','Премия за 12 недель']) assert.ok(qa.includes(term));
+ assert.match(qa,/Payment setting not reachable by scroll/);
+ assert.match(qa,/capture\(f'settings-field-visible-/);
+});
