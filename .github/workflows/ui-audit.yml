@@ -24,6 +24,8 @@ jobs:
           fetch-depth: 3
       - name: Model and finance regressions
         run: npm test
+      - name: Emulator recovery unit tests
+        run: python3 -m unittest discover -s tests -p 'test_emulator_wait_home.py' -v
       - name: Set up Android command line tools
         uses: android-actions/setup-android@v3
         with:
