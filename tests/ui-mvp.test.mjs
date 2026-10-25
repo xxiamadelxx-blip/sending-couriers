@@ -30,3 +30,8 @@ test('UI M2: Android form cancel exercises the real visible Back and checks hist
  assert.match(qa,/device\.tap_node\('Главная'\)/);
  assert.doesNotMatch(qa,/device\.adb\('shell', 'input', 'keyevent', '4'\)\s*device\.adb\('shell', 'input', 'keyevent', '4'\)/);
 });
+
+test('UI M2: real money uses Cyrillic/ruble-capable system font, not Android monospace tofu',()=>{
+  assert.match(css,/#homeDeck \.income-hero \.major-amount,\s*#homeDeck \.home-premiums \.premium-teasers strong,\s*\.day-money \.day-row span:last-child\{[\s\S]*?font-family:system-ui/);
+  assert.match(css,/font-variant-numeric:tabular-nums/);
+});

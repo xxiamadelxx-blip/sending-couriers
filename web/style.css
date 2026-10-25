@@ -674,3 +674,14 @@ dialog .button{margin:8px 0 0}
 :root[data-text-scale="large"] .day-meters{grid-template-columns:minmax(0,1fr)}
 :root[data-text-scale="large"] .day-meters span+span{border-left:0;border-top:1px solid var(--line);padding:8px 0 0}
 :root[data-text-scale="large"] .form-page .field.full:has(#reward) input{font-size:22px}
+
+
+/* UI-MVP glyph P1: Android 35 monospace cannot render the ₽ sign in
+   saved rewards / home income / calculated premiums. Keep tabular figures
+   but let the native system font draw currency symbols and Cyrillic. */
+#homeDeck .income-hero .major-amount,
+#homeDeck .home-premiums .premium-teasers strong,
+.day-money .day-row span:last-child{
+  font-family:system-ui,"Roboto","Segoe UI",sans-serif;
+  font-variant-numeric:tabular-nums;
+}
