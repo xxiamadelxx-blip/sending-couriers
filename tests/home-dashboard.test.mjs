@@ -25,6 +25,6 @@ test('two forecast duration controls and large text remain visible in the source
 
 test('at 200% font scale the progress value is not overlaid on the ring',()=>{
   assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge-label\{[\s\S]*?position:static/);
-  assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge\{[\s\S]*?flex-direction:column/);
+  assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge\{[^}]*display:block/);
   assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge canvas\{[\s\S]*?display:none/);
 });
