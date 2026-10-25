@@ -80,7 +80,12 @@ def exported_state():
                  and node.get("enabled") == "true"), None)
     assert save is not None, "Android backup destination has no Save button"
     tap(save)
-    filename = "courier-backup-" + adb("shell", "date", "+%Y-%m-%d").strip() + ".json"
+    # Android DocumentsUI names the backup using the app's local date, while
+    # adb shell date can resolve another timezone near midnight. Read the
+    # actual filename shown by the native Save dialog instead of guessing.
+    filename = next((n.get("text", "") for n in root.iter("node")
+                     if re.fullmatch(r"courier-backup-\\d{4}-\\d{2}-\\d{2}\\.json", n.get("text", ""))), None)
+    assert filename is not None, "Native Save dialog did not expose the JSON backup filename"
     path = "/sdcard/Download/" + filename
     for _ in range(20):
         raw = adb("exec-out", "cat", path, binary=True, check=False)
