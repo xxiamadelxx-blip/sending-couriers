@@ -101,3 +101,16 @@ test('CI Android runner executes XLSX gate in a single shell invocation',async()
   assert.doesNotMatch(ci,/^\s+if \[ "\$\{\{ inputs\.focus \|\| 'full' \}\}" = "full" \]; then/m);
   assert.match(ci,/&& python3 qa\/xlsx_import_smoke\.py \)/);
 });
+
+test('release: transfer build has increasing 1.7.15/code29 and tests prior 1.7.14/code28',async()=>{
+ const manifest=await readFile(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8');
+ const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
+ const build=await readFile(new URL('../build.py',import.meta.url),'utf8');
+ const workflow=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
+ assert.match(manifest,/android:versionCode="29" android:versionName="1\.7\.15"/);
+ assert.match(core,/export const APP_VERSION = '1\.7\.15';/);
+ assert.match(build,/Courier-Finance-1\.7\.15\.apk/);
+ assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='29' versionName='1.7.15'"));
+ assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
+ assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
+});
