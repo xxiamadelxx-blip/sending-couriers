@@ -593,3 +593,84 @@ dialog{background:var(--surface);color:var(--ink);border:2px solid var(--line);b
 @media(max-width:374px){#homeDeck .home-focus .rhythm{padding:27px 15px 14px}#homeDeck .income-hero{padding:20px 16px 27px}#homeDeck .home-focus .pace-hero{gap:7px}}
 @media(prefers-reduced-motion:reduce){.home-focus,.income-hero,.home-empty,.nav-add{animation:none!important;transition:none!important}}
 /* END VISUAL V2 / SHIFT CONTROL */
+
+
+/* UI-MVP / full-surface information hierarchy, 2026-10-25.
+   No JS data edits, new network requests, or hidden required inputs. */
+#app:not(.form-page)>.page-heading{padding:8px 0 14px}
+.period-overview{position:relative;background:var(--console-hero);color:var(--console-hero-ink);border:0;border-radius:3px;padding:23px 18px 18px;overflow:hidden}
+.period-overview::before{content:"";position:absolute;inset:0 0 auto 0;height:5px;background:var(--signal-panel)}
+.period-overview h2{color:var(--console-label);font-size:12px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}
+.period-overview .period-facts{margin-top:14px;gap:12px}
+.period-overview .period-facts>div+div{border-color:#4c5a64}
+.period-overview .period-facts dt{color:var(--console-label);font-size:12px}
+.period-overview .period-facts dd{color:var(--console-hero-ink);font-family:ui-monospace,monospace;font-weight:900;font-size:clamp(28px,8.2vw,38px);line-height:1.13;letter-spacing:-.06em}
+.cycle-settings{padding:16px 18px;border:1px solid var(--line);background:transparent}
+.cycle-settings .cycle-header h2{font-weight:900}
+.cycle-settings progress{height:12px;accent-color:var(--teal)}
+.cycle-settings #configureCycle{min-height:48px;display:flex;align-items:center;gap:8px}
+.period-actions #periodHistory{background:var(--primary-bg);color:var(--primary-ink);border:0;border-radius:3px;font-weight:850;min-height:54px}
+.period-actions .export-action{border:1px solid var(--line);border-radius:3px;min-height:48px;padding:11px 15px}
+.history-list{gap:9px}
+.day-group{background:transparent;border:0;border-radius:0;padding:0}
+.day-group>h2{font-size:22px;font-weight:900;letter-spacing:-.04em;margin:12px 0 5px}
+.day-group .day-total{margin:0 0 14px;font-size:13px;line-height:1.5;border-bottom:2px solid var(--line);padding-bottom:12px;color:var(--muted)}
+.slot-list{display:flex;flex-direction:column;gap:10px}
+.day-card{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--teal);border-radius:3px;padding:14px 14px 15px}
+.day-head{align-items:center;gap:8px;margin-bottom:13px}
+.day-head h2{font-size:19px}
+.day-meters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:4px 0 13px;font-size:clamp(17px,5.2vw,23px);font-weight:900;font-variant-numeric:tabular-nums}
+.day-meters span{min-width:0;overflow-wrap:anywhere}
+.day-meters span+span{border-left:1px solid var(--line);padding-left:12px}
+.day-money{background:var(--field);padding:3px 12px;border-top:2px solid var(--line)}
+.day-money .day-row{padding:9px 0;gap:8px}
+.day-money .day-row span:last-child{font-family:ui-monospace,monospace;font-size:14px;font-weight:750;white-space:nowrap}
+.day-money .day-row:last-child{border-bottom:0}
+.empty-history{border:1px dashed var(--line);border-radius:3px;background:var(--surface)}
+.history-footer{display:grid;gap:8px}
+.history-footer .button{margin:0;min-height:50px}
+.form-page .page-heading{padding:0 0 12px;border-bottom:2px solid var(--ink)}
+.form-page #dayForm{gap:0}
+.form-page .form-grid{row-gap:12px}
+.form-section-heading{grid-column:1/-1;margin:10px 0 1px;padding:10px 0 7px;border-bottom:2px solid var(--line);color:var(--ink);font-size:14px;line-height:1.3;letter-spacing:.05em;font-weight:900}
+.form-section-heading:first-of-type{margin-top:4px}
+.form-page .field label{font-size:13px;line-height:1.3;font-weight:750;color:var(--ink);min-height:auto}
+.form-page .field input,.form-page .field select{background:var(--field);min-height:48px}
+.form-page .field.full:has(#reward) input{font-family:ui-monospace,monospace;font-size:23px;font-weight:800}
+.form-page .field:has(#dailyHours) input,.form-page .field:has(#dailyOrders) input{font-family:ui-monospace,monospace;font-weight:800;font-size:20px}
+.form-page .form-period{font-size:12px;color:var(--muted)}
+.form-page .save-area{border-top:2px solid var(--line);background:var(--bg);padding:11px 0 calc(4px + var(--safe-bottom))}
+.form-page .save-area .button.primary{min-height:55px;letter-spacing:.01em;font-size:16px}
+.form-page #deleteDay{min-height:48px;border:1px solid var(--error);border-radius:3px}
+.form-page .slot-working{border:1px solid var(--line);background:var(--surface);border-radius:3px;padding:0 12px;margin:14px 0}
+.form-page .slot-working summary{min-height:52px;display:flex;align-items:center;justify-content:space-between}
+.forecast-page .forecast-simple-plan{padding:22px 16px}
+.forecast-page .forecast-simple-plan h2{font-size:19px;letter-spacing:-.035em;margin-bottom:11px}
+.forecast-page .duration-control{padding:12px 0 14px}
+.forecast-page .duration-control+.duration-control{margin-top:13px}
+.forecast-page .duration-control .duration-track{margin-top:5px}
+.forecast-page .forecast-import-button{background:transparent;border:2px solid var(--teal);color:var(--teal);min-height:54px;font-weight:800}
+.payment-settings{padding:22px 17px}
+.payment-settings h2{font-size:21px;font-weight:900;letter-spacing:-.04em}
+.payment-settings .payment-period{border-bottom:1px solid var(--line);padding-bottom:15px;margin-bottom:17px}
+.payment-settings #hourlyRate{font-family:ui-monospace,monospace;font-size:23px;font-weight:850}
+.payment-settings .payment-more{border-top:2px solid var(--line);border-bottom:1px solid var(--line);padding:0 2px}
+.payment-settings .payment-more summary{min-height:54px}
+.payment-settings .payment-effective-date{font-size:13px}
+.appearance-card{border-top:4px solid var(--teal)}
+.appearance-card h2{font-size:20px;font-weight:900}
+dialog{max-width:min(94vw,480px);padding:20px 18px;box-shadow:0 12px 48px #0008}
+dialog::backdrop{background:#05090cbc}
+dialog h2{font-size:23px;font-weight:900;margin:0 0 12px}
+dialog .button{margin:8px 0 0}
+#toast{background:var(--console-hero);color:var(--console-hero-ink);border:1px solid var(--teal);border-radius:3px;box-shadow:none}
+@media(max-width:374px){
+ .form-page .page-heading h1{font-size:clamp(22px,7.7vw,28px)}
+ .day-card{padding:12px 11px}
+ .form-page .form-grid{column-gap:8px}
+ .form-page .field label{font-size:12px}
+}
+:root[data-text-scale="large"] .form-section-heading{font-size:16px}
+:root[data-text-scale="large"] .day-meters{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] .day-meters span+span{border-left:0;border-top:1px solid var(--line);padding:8px 0 0}
+:root[data-text-scale="large"] .form-page .field.full:has(#reward) input{font-size:22px}

@@ -50,3 +50,9 @@ Android Developers, [Make apps more accessible (Views)](https://developer.androi
 `criterion | status | git SHA | platform/API+density+theme+font | test command/exit | screenshot/XML/log/CI artifact URL | independent finding | fix and rerun`.
 
 A successful run on a different SHA is not evidence that this HEAD is releasable. After every code change, mandatory tests and visual comparison; pending owner-key remains BLOCKED regardless of UI quality.
+
+## Gauntlet M1/M2 pass 1, current working SHA pending CI
+
+Scope implementation: period summary now precedes payment warning while retaining all numbers and cycle controls; history gets a receipt-like monetary group and paired large hours/orders; create/edit form groups time/earnings without removing tax, park, tips or bonuses; forecast time controls, settings, splash, dialogs, CTA, errors, empty states, nav remain in the same shared industrial design. `tests/ui-mvp.test.mjs` guards new hierarchy and fields.
+
+Fix for #UI-001: after closing the IME, QA taps visible in-app `Назад`, asserts `История` + available bottom `Главная`, then navigates to summary. The two hardware system Back events previously left the form visible; that behavior is **not** silently renamed success. Separate hardware-back verification remains NOT RUN. New full Android 35 + visual review is required before changing status.

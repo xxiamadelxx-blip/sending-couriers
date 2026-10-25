@@ -197,7 +197,16 @@ def main():
             device.adb('shell', 'input', 'tap', str((b[0]+b[2])//2), str((b[1]+b[3])//2))
             capture('keyboard-' + suffix)
             device.adb('shell', 'input', 'keyevent', '4')
-            device.adb('shell', 'input', 'keyevent', '4')
+            # RED in #40173464789: a second hardware Back leaves the form open.
+            # Dismiss IME, then exercise the actual visible in-app Back handler.
+            device.tap_node('Назад')
+            root = device.dump('form-abandoned-' + suffix)
+            assert device.find_node(root, 'Главная') is not None, (
+                'Canceling the form must restore history with bottom navigation'
+            )
+            assert device.find_node(root, 'История') is not None or device.find_node(root, 'ИСТОРИЯ') is not None, (
+                'Canceled form did not return to history'
+            )
     if args.focus == 'content':
         assert not missing_content, 'Main headings or values missing: ' + ', '.join(missing_content)
         return

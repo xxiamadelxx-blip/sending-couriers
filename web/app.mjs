@@ -236,8 +236,9 @@ function periodDetails() {
   if(!leaveForecast())return;
   app.className = ''; view = 'period'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
-  app.innerHTML = `${heading('Период')}${navigation()}${paymentStatus(s)}
+  app.innerHTML = `${heading('Период')}${navigation()}
     <section class="detail-card period-overview" aria-label="Итоги периода"><h2>Итоги периода</h2><dl class="period-facts"><div><dt>Часы</dt><dd>${hoursText(s.hours)} ч</dd></div><div><dt>Заказы</dt><dd>${s.orders ?? '—'}</dd></div></dl></section>
+    ${paymentStatus(s)}
     <section class="detail-card cycle-settings"><div class="cycle-header"><h2>12 недель</h2>${cycle.start ? `<span>Цикл ${cycle.cycleNumber}</span>` : ''}</div>${cycle.start ? `<p class="cycle-dates" id="cycleDates">${esc(formatDate(cycle.start))} — ${esc(formatDate(cycle.end))}</p><progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress><p class="hint">${cycle.status === 'not-started' ? 'Ещё не начался' : `День ${cycle.elapsedDays} из 84`}</p>` : ''}<details id="cycleConfig" class="cycle-config"><summary id="configureCycle">${cycle.start ? 'Изменить дату начала' : 'Указать дату начала'}${icons.down}</summary><form id="settingsForm" novalidate><div class="field cycle-start"><label for="premiumCycleStart">Начало первого цикла</label><input type="date" id="premiumCycleStart" name="premiumCycleStart" min="1900-01-01" max="2200-10-09" value="${esc(state.settings.premiumCycleStart ?? '')}"></div><p class="hint settings-preview" id="cyclePreview"></p><div class="error" id="settingsError" role="alert" hidden></div><button class="button primary" id="saveSettings" type="submit">Сохранить дату</button></form></details></section>
     <div class="actions period-actions"><button class="button quiet" id="periodHistory" type="button">Записи периода${icons.chevron}</button><button class="button quiet export-action" id="periodExport" type="button">${icons.share}Экспорт для ChatGPT</button></div>`;
   bottomNav('period'); $('#goBack').addEventListener('click', summary); bindNavigation(periodDetails);
@@ -332,8 +333,10 @@ function form(id = null) {
   app.innerHTML = `${heading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll"><div class="form-grid"><div class="field full"><label for="date">Дата</label><div class="date-box"><span id="dateVisible">${esc(formatDate(e.date, true))}</span>${icon.calendar}<input name="date" id="date" type="date" lang="ru" value="${esc(e.date)}" required></div><p class="form-period" id="formPeriod">Период: ${esc(periodLabel(periodFor(e.date)))}</p></div>
     ${inputHint ? `<p class="hint optional-reading">${esc(inputHint)}</p>` : ''}
     <p class="hint slot-hint" id="slotHint" hidden></p>
+    <h2 class="form-section-heading">Время и заказы</h2>
     ${field('dailyHours', carried ? 'Часы за интервал' : 'Часы за слот', val('dailyHours'), { unit: 'ч', labelClass: 'daily-label', note: carried ? 'Время между прежними записями' : '' })}
     ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', val('dailyOrders'), { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : '' })}
+    <h2 class="form-section-heading">Начисления и удержания</h2>
     ${field('reward', 'Вознаграждение', val('reward'), { full: true })}
     ${field('tax', 'Налог', val('tax'), { unit: '₽', note: `Ориентир ${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%`, validation: true })}
     ${field('parkCommission', 'Комиссия парка', val('parkCommission'), { unit: '₽', note: `Ориентир ${PARK_COMMISSION_PERCENT}%`, validation: true })}
@@ -442,7 +445,7 @@ function history() {
   const s = calculate(state, selectedPeriod);
   const card = (e, title) => {
     const readingHtml = `<div class="day-meters"><span>${hoursText(e.dailyHours)} ч</span><span>${e.dailyOrders ?? '—'} заказов</span></div><p class="day-delta" ${!dayCaption(e) && e.dailyHours != null && e.dailyOrders != null ? 'hidden' : ''}>${esc(dayCaption(e))}${e.dailyHours == null ? ' · часы не записаны' : ''}${e.dailyOrders == null ? ' · заказы не записаны' : ''}</p>`;
-    return `<article class="day-card"><div class="day-head"><h2>${esc(title)}</h2><button class="edit-day" data-date="${e.date}" data-entry="${esc(e.id)}" type="button" aria-label="Редактировать ${esc(title)}">Изменить</button></div>${readingHtml}<div class="day-row"><span>Вознаграждение</span>${amount(e.reward)}</div><div class="day-row"><span>Чаевые</span>${amount(e.tips)}</div><div class="day-row"><span>Отдельные бонусы</span>${amount(e.separateBonus)}</div>${e.displayedNet != null ? `<div class="day-row"><span>Итог на экране</span>${amount(e.displayedNet)}</div>` : ''}${e.note ? `<p class="day-note">${esc(e.note)}</p>` : ''}</article>`;
+    return `<article class="day-card"><div class="day-head"><h2>${esc(title)}</h2><button class="edit-day" data-date="${e.date}" data-entry="${esc(e.id)}" type="button" aria-label="Редактировать ${esc(title)}">Изменить</button></div>${readingHtml}<div class="day-money" role="group" aria-label="Начисления слота"><div class="day-row"><span>Вознаграждение</span>${amount(e.reward)}</div><div class="day-row"><span>Чаевые</span>${amount(e.tips)}</div><div class="day-row"><span>Отдельные бонусы</span>${amount(e.separateBonus)}</div>${e.displayedNet != null ? `<div class="day-row"><span>Итог на экране</span>${amount(e.displayedNet)}</div>` : ''}</div>${e.note ? `<p class="day-note">${esc(e.note)}</p>` : ''}</article>`;
   };
   const groups = [...new Set(s.entries.map(e => e.date))].reverse().map(date => {
     const d = calculateDay(state, date);
