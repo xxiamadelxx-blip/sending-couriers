@@ -55,3 +55,10 @@ Fix in `web/style.css`: for `data-text-scale="large"`, convert `.gauge-label` fr
 CI [#40152054775](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40152054775) completed **SUCCESS** on SHA `b86ac82f6073a42cdc898b40387b77880b0b0d86`, including emulator and temporary-signer transfer upgrade. However its **real** `ui-after/font-2.0-home.png` and UI XML still show `111%` below the bottom-nav top. Independent comparison: `111%` XML bounds `[393,2061][777,2247]` vs clickable `Главная` nav `[30,2202][258,2367]`; 45 screen px of overlap. The automated QA did not check that invariant. No OCR was used.
 
 RED: parse those baseline XML bounds to reproduce the 45px failure before modifying CSS. GREEN requires the updated `qa/ui_audit_matrix.py` on Android 35 to assert `111%` bottom is not lower than nav top, and a new screenshot must be reviewed. Minimal production fix: at Android large-text scale, hide only the **decorative canvas ring** and retain the real visible percentage and target in normal-flow, readable text. Normal font retains the ring. This avoids deleting money, entries, forecast facts or altering the user's font scale. Owner-key APK remains a separate release gate.
+
+
+## Next independent finding: history edit tap target (P2)
+
+From last **green** [run #40170606206](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40170606206), `ui-after/history-360-dark.xml` has explicit clickable edit buttons for two slots, bounds `[693,956][939,1091]` and `[693,1574][939,1709]`. Both heights are 135 px = **45 dp** on an emulator with density 480 dpi. This repeats across four 360/390 dp light/dark combinations (8 button samples). Acceptance is 48 dp, 144 px at that emulator density, without hiding labels or changing the event handler.
+
+RED: independent DOM/XML pixel arithmetic above; GREEN gate: full Android matrix asserts both edit buttons have at least 144 px physical height on 360/390 dark/light screenshots. Only `.edit-day` min-height/min-width is adjusted to 48 CSS px. This is a touch-target fix, no financial or persistence change. The post-fix Android XML is required to declare PASS.

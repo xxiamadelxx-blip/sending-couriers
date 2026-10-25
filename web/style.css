@@ -457,3 +457,7 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--home-accent);
   line-height:1.25;
   margin:0;
 }
+
+/* Android 35 history edit targets were 45 dp high at 360/390 widths.
+   Reserve 48 dp for the action even when the visual caption is smaller. */
+.day-head .edit-day{min-height:48px;min-width:48px}

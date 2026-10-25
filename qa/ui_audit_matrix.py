@@ -167,6 +167,16 @@ def main():
             capture('period-' + suffix)
             device.tap_node('Записи периода')
             root = capture('history-' + suffix)
+            # Android 35 is fixed at 480 dpi (3 px per dp). Edit affordances
+            # must be at least 48 dp high, not merely readable text labels.
+            for slot_num in (1, 2):
+                label = f'Редактировать Слот {slot_num}'
+                edit = device.find_node(root, label)
+                assert edit is not None, f'Missing history edit action: {label}'
+                eb = list(map(int, re.findall(r'\d+', edit.get('bounds', ''))))
+                assert len(eb) == 4 and eb[3] - eb[1] >= 144, (
+                    f'{label} tap height is below 48 dp at 480 dpi: {eb}'
+                )
             text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')))
             assert '9 ч' in text and '18 заказов' in text and '3 200' in text, text
             device.tap_node('Прогноз')
