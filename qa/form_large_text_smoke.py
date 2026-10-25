@@ -77,6 +77,21 @@ def scroll_until_input(label, stage):
         swipe_form(root)
     raise AssertionError(f'200% form input unreachable by scroll: {label}; bounds={last}')
 
+def focused_field_completely_visible(root, label):
+    """Native IME focus must not push a field label behind the fixed heading."""
+    scroll = form_scroll(root)
+    node = device.find_node(root, label)
+    field = input_after_label(root, label)
+    save = device.find_node(root, 'Сохранить слот')
+    sb, lb, eb, pb = map(bounds, (scroll, node, field, save))
+    if any(len(b) != 4 for b in (sb, lb, eb, pb)):
+        return False
+    lower = min(sb[3], pb[1])
+    return (lb[2] > lb[0] and eb[2] > eb[0]
+            and sb[1] <= lb[1] < lb[3] <= lower
+            and sb[1] <= eb[1] < eb[3] <= lower)
+
+
 def enter_and_check(label, value, point, mode):
     device.adb('shell', 'input', 'tap', str(point[0]), str(point[1]))
     root = device.dump(f'200-{mode}-{label}-ime')
@@ -86,6 +101,12 @@ def enter_and_check(label, value, point, mode):
     assert 0 < pb[1] < pb[3] <= wb[3] and pb[3]-pb[1] >= 144, (
         f'IME obscures 48dp save action: field={label}, save={pb}, webview={wb}')
     assert wb[3] < 2100, f'IME not opened: {label}, WebView={wb}'
+    assert focused_field_completely_visible(root, label), (
+        f'200% Android keyboard clips focused field label: {label}; '
+        f'label={bounds(device.find_node(root, label))}; '
+        f'scroll={bounds(form_scroll(root))}'
+    )
+    snap(f'200-{mode}-{label}-IME-label-fully-visible')
     if label == 'Вознаграждение':
         snap('200-390-light-IME-save-visible')
     device.adb('shell', 'input', 'text', value)

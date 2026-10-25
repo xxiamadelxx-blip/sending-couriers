@@ -688,3 +688,10 @@ dialog .button{margin:8px 0 0}
 
 /* GAUNTLET P2 / UI-007: real Android bounds were 141px = 47dp on 360/390. */
 .overview-top .period-button{min-height:48px}
+
+/* UI-013: when 200% text and Android IME are active, implicit WebView
+   focus scroll clipped the upper 48-57 physical px of input field labels.
+   Add target scroll margin, preserving full font scale and the fixed Save CTA. */
+:root[data-text-scale="large"] .form-page .form-grid .field input{
+  scroll-margin-block-start:42px;
+}

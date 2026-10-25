@@ -57,3 +57,28 @@ class PeriodHistoryAccessGeometry(unittest.TestCase):
 
     def test_action_covered_by_nav_is_rejected(self):
         self.assertIsNone(audit.period_history_center(self.fake_period('[48,2120][1122,2300]')))
+
+
+class FocusedFieldLabelGeometry(unittest.TestCase):
+    def focused(self, label, input_bounds='[48,927][1122,1185]'):
+        return ET.fromstring(f'''<hierarchy>
+          <node class="android.view.View" scrollable="true" bounds="[42,861][1128,1251]">
+            <node text="Вознаграждение" bounds="{label}" />
+            <node class="android.widget.EditText" bounds="{input_bounds}" />
+          </node>
+          <node text="Сохранить слот" bounds="[48,1287][1122,1494]" />
+        </hierarchy>''')
+
+    def test_red_ime_clips_reward_label_in_recorded_xml(self):
+        self.assertFalse(audit.focused_field_completely_visible(
+            self.focused('[48,804][1122,909]'), 'Вознаграждение'))
+
+    def test_full_label_and_input_visible_inside_scroll(self):
+        self.assertTrue(audit.focused_field_completely_visible(
+            self.focused('[48,864][1122,969]', '[48,987][1122,1245]'),
+            'Вознаграждение'))
+
+    def test_partly_covered_input_is_not_a_pass(self):
+        self.assertFalse(audit.focused_field_completely_visible(
+            self.focused('[48,864][1122,969]', '[48,987][1122,1258]'),
+            'Вознаграждение'))

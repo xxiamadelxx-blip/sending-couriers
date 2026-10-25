@@ -114,3 +114,10 @@ test('release: transfer build has increasing 1.7.15/code29 and tests prior 1.7.1
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
  assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
 });
+
+test('UI-013 full 200% label remains visible after opening IME, not just input and Save',async()=>{
+ const f=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
+ assert.match(css,/:root\[data-text-scale="large"\] \.form-page \.form-grid \.field input\{\s*scroll-margin-block-start:42px;/);
+ assert.match(f,/assert focused_field_completely_visible\(root, label\)/);
+ assert.match(f,/IME-label-fully-visible/);
+});
