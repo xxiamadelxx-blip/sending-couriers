@@ -62,3 +62,17 @@ test('UI M2: native Android file picker opens and cancel preserves both forecast
  assert.match(qa,/Canceling native import changed 14h slot or working hours/);
  assert.match(qa,/Canceling import did not restore forecast navigation/);
 });
+
+test('UI M2 native 200% font: both time bases are reachable, independently operable and persisted',()=>{
+  for(const action of ['Слот: плюс 15 минут','Слот: минус 15 минут',
+                       'Из них буду работать: плюс 15 минут','Из них буду работать: минус 15 минут']){
+    assert.ok(qa.includes(action),'missing Android 200% interaction: '+action);
+  }
+  for(const capture of ['font-2.0-slot-plus','font-2.0-active-plus','font-2.0-both-restored']){
+    assert.ok(qa.includes(capture),'missing real-device screenshot: '+capture);
+  }
+  assert.match(qa,/durations\(after_slot_plus\) == \[14\.25, 8\]/);
+  assert.match(qa,/durations\(after_active_plus\) == \[14, 8\.25\]/);
+  assert.match(qa,/200% round-trip values changed after process death/);
+  assert.match(qa,/bb\[3\] <= nav_box\[1\]/);
+});

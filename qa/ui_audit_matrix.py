@@ -292,6 +292,51 @@ def main():
         action_bounds = list(map(int, re.findall(r'\d+', action.get('bounds', ''))))
         nav_bounds = list(map(int, re.findall(r'\d+', nav.get('bounds', ''))))
         assert action_bounds[2] > action_bounds[0] and action_bounds[3] > action_bounds[1] and action_bounds[1] >= 0 and action_bounds[3] <= nav_bounds[1], 'Large-text import is missing or covered by navigation'
+        if scale == '2.0' and args.phase == 'after' and args.focus == 'full':
+            # Prior still-frame suggested both sliders were obscured. The
+            # scrolled Android tree proves visibility; now prove both controls
+            # respond at 200% font without touching the other time basis.
+            nav = device.find_node(root, 'Главная')
+            nav_box = list(map(int, re.findall(r'\\d+', nav.get('bounds', ''))))
+            assert len(nav_box) == 4
+            for label in ('Слот: минус 15 минут', 'Слот: плюс 15 минут',
+                          'Из них буду работать: минус 15 минут',
+                          'Из них буду работать: плюс 15 минут'):
+                node = device.find_node(root, label)
+                bb = list(map(int, re.findall(r'\\d+', node.get('bounds', '')))) if node is not None else []
+                assert len(bb) == 4 and bb[2] > bb[0] and bb[1] >= 0 and bb[3] <= nav_box[1], (
+                    f'200% slider action is offscreen or covered: {label} {bb}, nav {nav_box}'
+                )
+                assert bb[2]-bb[0] >= 144 and bb[3]-bb[1] >= 144, (
+                    f'200% slider action below 48dp: {label} {bb}'
+                )
+            assert durations(root) == [14, 8], f'Unexpected 200% baseline: {durations(root)}'
+            device.tap_node('Слот: плюс 15 минут')
+            after_slot_plus = capture('font-2.0-slot-plus')
+            assert durations(after_slot_plus) == [14.25, 8], (
+                f'Full slot action changed wrong field: {durations(after_slot_plus)}'
+            )
+            device.tap_node('Слот: минус 15 минут')
+            restored_slot = device.dump('font-2.0-slot-restored')
+            assert durations(restored_slot) == [14, 8]
+            device.tap_node('Из них буду работать: плюс 15 минут')
+            after_active_plus = capture('font-2.0-active-plus')
+            assert durations(after_active_plus) == [14, 8.25], (
+                f'Active-hours action changed wrong field: {durations(after_active_plus)}'
+            )
+            device.tap_node('Из них буду работать: минус 15 минут')
+            restored_both = capture('font-2.0-both-restored')
+            assert durations(restored_both) == [14, 8], (
+                f'200% button round trip lost original values: {durations(restored_both)}'
+            )
+            device.adb('shell', 'am', 'force-stop', device.PACKAGE)
+            device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+            device.wait_home(30)
+            device.tap_node('Прогноз')
+            reloaded = device.dump('font-2.0-both-after-process-death')
+            assert durations(reloaded) == [14, 8], (
+                f'200% round-trip values changed after process death: {durations(reloaded)}'
+            )
         if scale == '1.3' and args.phase == 'after' and args.focus == 'full':
             # An Android file import starts DocumentsUI. Dismissing the picker
             # is a CANCEL operation, never an empty import or reset.
