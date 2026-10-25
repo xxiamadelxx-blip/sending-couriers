@@ -343,7 +343,8 @@ h1,.page-heading h1{font-size:27px;line-height:1.2;letter-spacing:-.6px}
 .nav-add{width:54px;height:54px;min-height:54px;transform:translateY(-12px);box-shadow:none;border-width:2px}
 .nav-add svg{width:26px;height:26px}
 :root[data-text-scale="large"] .nav-item{font-size:8px}
-:root[data-text-scale="large"] .nav-item span{overflow-wrap:anywhere}
+:root[data-text-scale="large"] .nav-item span{font-size:0;white-space:nowrap;overflow:hidden}
+:root[data-text-scale="large"] .nav-item span::before{content:attr(data-short);font-size:8px}
 :root[data-text-scale="large"] #homeDeck .pace-hero{grid-template-columns:minmax(0,1fr)}
 :root[data-text-scale="large"] #homeDeck .gauge{justify-self:start}
 :root[data-text-scale="large"] #homeDeck .meters{grid-template-columns:minmax(0,1fr)}

@@ -133,7 +133,7 @@ function heading(title) {
 function bottomNav(active) {
   const host=$('#bottomNav');host.hidden=false;
   const links=[['summary','Главная','home','navSummary'],['period','Период','calendar','navPeriod'],['add','Добавить слот','plus','navAddSlot'],['forecast','Прогноз','chart-bar','navForecast'],['settings','Настройки','settings','navSettings']];
-  host.innerHTML=links.map(([key,label,image,id])=>key==='add'?`<button id="${id}" class="nav-add" type="button" aria-label="${label}">${icon.plus}</button>`:`<button id="${id}" class="nav-item ${active===key||(active==='history'&&key==='period')?'active':''}" type="button" ${active===key||active==='history'&&key==='period'?'aria-current="page"':''}>${icon[image]}<span>${label}</span></button>`).join('');
+  host.innerHTML=links.map(([key,label,image,id])=>key==='add'?`<button id="${id}" class="nav-add" type="button" aria-label="${label}">${icon.plus}</button>`:`<button id="${id}" class="nav-item ${active===key||(active==='history'&&key==='period')?'active':''}" type="button" aria-label="${label}" ${active===key||active==='history'&&key==='period'?'aria-current="page"':''}>${icon[image]}<span aria-hidden="true" data-short="${key==='settings'?'Настр.':label}">${label}</span></button>`).join('');
   $('#navSummary').onclick=summary;$('#navPeriod').onclick=periodDetails;$('#navAddSlot').onclick=()=>form();$('#navForecast').onclick=()=>openForecast();$('#navSettings').onclick=settings;
 }
 function cycleDate() {

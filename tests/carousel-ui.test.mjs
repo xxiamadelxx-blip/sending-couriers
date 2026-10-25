@@ -28,31 +28,6 @@ function fixture(theme) {
 const results=[];
 const saved=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('qa-176')));
 const deck=page=>page.locator('#homeDeck');
-async function swipe(page,selector) {
-  const box=await page.locator(selector).boundingBox(),client=await page.context().newCDPSession(page);
-  const y=Math.round(box.y+Math.min(box.height/2,80)),start=Math.round(box.x+box.width*.82),end=Math.round(box.x+box.width*.18);
-  await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:start,y}]});
-  for(let i=1;i<=7;i++)await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:Math.round(start+(end-start)*i/7),y}]});
-  await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  await client.detach();
-}
-async function settled(page,id) {
-  await page.waitForFunction(id=>{
-    const host=document.getElementById(id),track=host.querySelector('.pager-track');
-    const index=Number(host.querySelector('[aria-selected="true"]').dataset.page);
-    return Math.abs(track.scrollLeft-index*track.clientWidth)<2;
-  },id,{timeout:5000});
-  const box=await page.locator(`#${id} .pager-panel[aria-hidden="false"]`).boundingBox();
-  const track=await page.locator(`#${id} .pager-track`).boundingBox();
-  assert.ok(box.x>=track.x-2 && box.x+box.width<=track.x+track.width+2,`${id} card extends outside its viewport`);
-}
-async function centeredPaymentTab(page,index) {
-  await page.waitForFunction(index=>{
-    const bar=document.querySelector('#paymentDeck .pager-tabs').getBoundingClientRect();
-    const tab=document.querySelector(`#paymentDeck [data-page="${index}"]`).getBoundingClientRect();
-    return Math.abs((tab.left+tab.right-bar.left-bar.right)/2)<3;
-  },index,{timeout:5000});
-}
 try{for(const width of [360,390])for(const theme of ['dark','light']){
   const context=await browser.newContext({viewport:{width,height:844},isMobile:true,hasTouch:true,locale:'ru-RU',timezoneId:'Europe/Moscow'});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -64,45 +39,33 @@ try{for(const width of [360,390])for(const theme of ['dark','light']){
   },initial);
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await deck(page).waitFor();
-  assert.deepEqual(await deck(page).locator('[role="tab"] span').allTextContents(),['Темп','Доход','Премии']);
-  assert.equal(await deck(page).locator('[aria-selected=true]').count(),1);
-  await page.screenshot({path:`${out}/Home-0-${width}-${theme}.png`});
-  await deck(page).locator('[role="tab"]').nth(1).click();
-  assert.equal(await deck(page).locator('[aria-selected=true]').innerText(),'Доход');
-  await page.locator('#summaryGross').waitFor({state:'visible'});
-  await page.screenshot({path:`${out}/Home-1-${width}-${theme}.png`});
-  await swipe(page,'#homeDeck .pager-track');
-  await page.waitForFunction(()=>document.querySelector('#homeDeck [data-page="2"]').getAttribute('aria-selected')==='true');
-  await settled(page,'homeDeck');
-  await page.locator('#summaryPacePremium').waitFor({state:'visible'});
-  await page.screenshot({path:`${out}/Home-2-${width}-${theme}.png`});
-  await deck(page).locator('[role="tab"]').nth(1).focus();await page.keyboard.press('ArrowLeft');
-  assert.equal(await deck(page).locator('[aria-selected=true]').innerText(),'Темп');
+  assert.equal(await deck(page).locator('[role="tab"]').count(),0);
+  assert.equal(await deck(page).locator('#summaryPace,#summaryGross,#summaryPacePremium').count(),3);
+  const order=await page.evaluate(()=>['.rhythm','.income-hero','.home-premiums'].map(s=>document.querySelector('#homeDeck '+s).getBoundingClientRect().top));
+  assert.ok(order[0]<order[1]&&order[1]<order[2],order.join(','));
+  await page.screenshot({path:`${out}/Home-${width}-${theme}.png`});
+  await page.locator('#summaryGross').scrollIntoViewIfNeeded();
+  await page.screenshot({path:`${out}/Home-income-${width}-${theme}.png`});
   await page.locator('#navPeriod').click();
   assert.equal(await page.locator('.period-overview').count(),1);
   assert.equal(await page.locator('#pacePremium,#cyclePremium,.period-overview .detail-amount,.cycle-settings .detail-amount').count(),0);
   assert.equal(await page.locator('#premiumCycleStart').count(),1);
   await page.screenshot({path:`${out}/Period-${width}-${theme}.png`});
   await page.locator('#navSettings').click();
-  assert.equal(await page.locator('#paymentDeck .pager-panel').count(),8);
-  assert.equal(await page.locator('#paymentDeck [role="tab"]').count(),8);
-  assert.equal(await page.locator('#paymentDeck .pager-controls').count(),0);
-  await centeredPaymentTab(page,0);
+  assert.equal(await page.locator('#paymentDeck').count(),0);
+  assert.equal(await page.locator('#paymentPeriod,#hourlyRate').count(),2);
+  assert.equal(await page.locator('.payment-more').evaluate(e=>e.open),false);
+  await page.screenshot({path:`${out}/Tariff-${width}-${theme}.png`});
+  await page.locator('.payment-more summary').click();
   const values=['','500','2,05','3,1','90','1,85','6','7,5'];
-  for(let i=0;i<8;i++){
-    await page.locator(`#paymentDeck [data-page="${i}"]`).click();
-    assert.equal(await page.locator('#paymentDeck [aria-selected="true"]').getAttribute('data-page'),String(i));
-    if(i){const key=['','hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'][i];await page.locator('#'+key).fill(values[i]);}
+  for(let i=1;i<8;i++){
+    const key=['','hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'][i];
+    await page.locator('#'+key).fill(values[i]);
   }
-  await centeredPaymentTab(page,7);
-  await page.screenshot({path:`${out}/Payment-${width}-${theme}.png`});
+  await page.screenshot({path:`${out}/Tariff-more-${width}-${theme}.png`});
   const draft=await page.locator('#hourlyRate').inputValue();
   await page.locator('#themeToggle').click();assert.equal(await page.locator('#hourlyRate').inputValue(),draft);
-  assert.equal(await page.locator('#paymentDeck [aria-selected="true"]').getAttribute('data-page'),'7');
-  await page.locator('#paymentDeck [data-page="6"]').click();
-  await swipe(page,'#paymentDeck .pager-track');
-  await page.waitForFunction(()=>document.querySelector('#paymentDeck [data-page="7"]').getAttribute('aria-selected')==='true');
-  await settled(page,'paymentDeck');
+  assert.equal(await page.locator('.payment-more').evaluate(e=>e.open),true);
   const before=await page.evaluate(()=>localStorage.getItem('qa-176'));
   await page.evaluate(()=>window.qaFail=true);
   await page.locator('#savePaymentTerms').click();
@@ -170,5 +133,5 @@ try{for(const width of [360,390])for(const theme of ['dark','light']){
   await context.close();
 }
 await writeFile(`${out}/ui-results.json`,JSON.stringify({result:'PASS',contexts:results,androidRuntimeTested:false},null,2));
-console.log(`PASS ${results.length}/4 payment carousel, period and slot cleanup`);
+console.log(`PASS ${results.length}/4 dashboard, tariff, period and slot cleanup`);
 }finally{await browser.close();server.close();}
