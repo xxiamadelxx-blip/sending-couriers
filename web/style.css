@@ -418,3 +418,38 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--home-accent);
 :root[data-text-scale="large"] #homeDeck .premium-teasers{grid-template-columns:minmax(0,1fr)}
 :root[data-text-scale="large"] #homeDeck .premium-teasers>span+span{padding-top:14px;border-top:1px solid var(--line)}
 @media(prefers-reduced-motion:reduce){.home-empty,.home-focus,.income-hero{animation:none!important;transition:none!important}}
+
+/* Large Android font: keep the percentage and goal OUTSIDE the circular gauge.
+   At 200% text scale the former absolute overlay intruded into the ring.
+   Never shrink accessible text just to fit it inside a decorative circle. */
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-self:stretch;
+  width:100%;
+  height:auto;
+  gap:10px;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge canvas{
+  width:152px;
+  height:152px;
+  flex:none;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label{
+  position:static;
+  inset:auto;
+  min-width:0;
+  width:100%;
+  padding:0;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label strong{
+  font-size:clamp(22px,7vw,29px);
+  line-height:1.12;
+  max-width:100%;
+  overflow-wrap:anywhere;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label span{
+  font-size:12px;
+  line-height:1.25;
+}
