@@ -96,6 +96,14 @@ def main():
     empty_root = capture('00-empty-home-360-dark')
     assert device.find_node(empty_root, 'Смена ещё не записана') is not None, 'Empty state heading missing'
     assert device.find_node(empty_root, 'Добавить первый слот') is not None, 'First-shift CTA missing'
+    # A screenshot or an accessibility label does not prove this button opens the form.
+    device.tap_node('Добавить первый слот')
+    device.wait_node('Сохранить слот')
+    device.tap_node('Назад')
+    device.tap_node('Главная')
+    root_after_cancel = device.dump('first-slot-abandoned')
+    assert device.find_node(root_after_cancel, 'Смена ещё не записана') is not None, 'Leaving an unsaved form changed empty state'
+
     if args.focus == 'content':
         device.tap_node('Период')
         device.tap_node('Записи периода')
