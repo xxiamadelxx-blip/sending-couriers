@@ -234,7 +234,7 @@ function summary() {
 
 function periodDetails() {
   if(!leaveForecast())return;
-  app.className = ''; view = 'period'; editingId = null;
+  app.className = 'period-page'; view = 'period'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
   app.innerHTML = `${heading('Период')}${navigation()}
     <section class="detail-card period-overview" aria-label="Итоги периода"><h2>Итоги периода</h2><dl class="period-facts"><div><dt>Часы</dt><dd>${hoursText(s.hours)} ч</dd></div><div><dt>Заказы</dt><dd>${s.orders ?? '—'}</dd></div></dl><div class="period-reward"><span>Вознаграждение</span><strong id="periodReward">${esc(money(s.paidReward))}</strong></div></section>
