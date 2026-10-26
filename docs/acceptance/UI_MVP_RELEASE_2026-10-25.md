@@ -249,3 +249,22 @@ Owner explicitly removed TalkBack as a desired feature and stopped prioritizing 
 **Iteration SHIFT CONTROL V3**, user-approved black/graphite + signal-orange industrial language retained, no green conversational cards and no new homepage controls. Compact header, 92px rhythm gauge (84px on 360dp), tighter numeric/metric spacing and status, more prominent early income, reduced excessive secondary-screen heading/section gaps, two existing time sliders intact. All changes scoped to `web/style.css`, without math, data, imports, payment rules or backend changes.
 
 **Measurable fresh Android criterion:** synthetic gross money `3 240 ₽` is **fully above the bottom-nav top with 12 physical px clearance** on all four normal-size 360/390 × dark/light home screenshots *without scrolling*. `qa/visual_glance_contract.py` raises FAIL when income is missing/offscreen or overlaps nav. RED source evidence 390-dark y2220 > y2202, reproduced with geometry and regression test; unit test covers negative overlap/missing, positive fit. `qa/ui_audit_matrix.py` writes per-screen `glance-WIDTH-THEME.json`; no test relaxation. Green is **NOT VERIFIED** until complete fresh Android35 screenshots/XML and independent visual review at exact SHA. CI remains red if unrelated historical tests fail, and statuses are recorded individually.
+
+
+### SHIFT CONTROL V3: first-glance income layout independently PASS · 26.10.2026
+
+**Immutable tested visual commit:** `9ffdec16ee0bd10213b7fc1189539ea1d1d46282`. [Android35 run #40313079959](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40313079959), native emulator 480 dpi, test-only signer APK SHA256 `6ef4e5baaf81b47efc4e8ab0e46f15bec3b601706567be7f8e226673de3724b0`, raw screenshot/XML/JSON [artifact ID 12646214509](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40313079959/artifacts/12646214509). **Visually inspected** paired native screenshots for Home/Forecast/History/Period at normal font, in addition to `ui-after/ui-matrix.json` PASS.
+
+| Criterion, same fixture 9h/18 orders/3240 RUB | Before (3df8d78f) | After (9ffdec16) | Evidence & status |
+| --- | --- | --- | --- |
+| 360dp dark, first-glance income vs nav | amount cut by 69 px | bottom=1799px, nav top=2072px, clearance=273px | `glance-360-dark.json` **PASS** |
+| 360dp light | previous nav overlap | bottom=1799px, nav top=2072px, clearance=273px | `glance-360-light.json` **PASS** |
+| 390dp dark | amount cut by 18 px (y2220 vs nav y2202) | bottom=1866px, nav top=2202px, clearance=336px | `glance-390-dark.json` **PASS** |
+| 390dp light | previous nav overlap | bottom=1866px, nav top=2202px, clearance=336px | `glance-390-light.json` **PASS** |
+| Native first-slot cancellation persistent JSON | unverified at earlier SHA | 0 slots before and after force-stop | `00-empty-json-backup-result.json` **PASS** |
+| Four-layout synthetic money and actions | 9h,18 orders,3240 RUB | unchanged, no absent numeric field in native screenshots | `home-*.png/xml`, JS finance tests **PASS** |
+| Secondary screens | earlier tall heading bands | more compact forecast/period/history with same controls and values | side-by-side native screenshot review **PASS within scoped spacing changes** |
+
+**Independent visualization review:** Normal-size 390dp dark `home-390-dark.png` shows all digits and ₽ of `3 240 ₽` above the fixed navigation, not hidden behind it. Forecast maintains exactly two existing time controls, History keeps two distinct same-date slots and their editing actions, Period keeps original totals and links. 360dp light Home also inspected. The layout is intentionally denser: less decorative breathing room, but retains group borders, number hierarchy and action affordances; no new features or navigation.
+
+**Full CI remains FAIL for historical UI-014 (Android WebView editable-node XML description diagnostic) and UI-013 (200% IME label clipped), explicitly deprioritized by owner from current visual sprint.** This does not invalidate an independently passed first-glance layout check, but is not full release PASS. Same-temporary-signer transfer update PASS and repeated XLSX import PASS in same CI; actual owner-signed update still NOT RUN. Continue only other small visual repairs in selected SHIFT CONTROL. All *large* layout/flow/palette/function choices need explicit owner approval, now also in `AGENTS.md`.
