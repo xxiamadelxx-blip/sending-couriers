@@ -155,3 +155,25 @@ test('UI-014: all input templates provide escaped explicit Android-accessible fi
  assert.ok(duration.includes('type="text" aria-label="${esc(label)}" inputmode='), 'forecast duration input missing label');
  assert.ok(forecast.includes('type="${type}" aria-label="${esc(label)}" value='), 'forecast history input missing label');
 });
+
+test('approved Period: show the existing recorded reward sum, never forecast income or paid-out estimate',()=>{
+ const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
+ assert.match(section,/class="period-reward"/);
+ assert.match(section,/id="periodReward"/);
+ assert.match(section,/money\(s\.paidReward\)/);
+ assert.doesNotMatch(section,/money\(s\.grossUserIncome\)/);
+ assert.ok(section.indexOf('id="periodReward"') < section.indexOf('paymentStatus(s)'),
+   'recorded reward should be inside Period totals above the payment risk');
+});
+
+test('approved History: day reward plus full per-slot fields and separate edit by stable id',()=>{
+ const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
+ assert.match(section,/class="day-summary"/);
+ assert.match(section,/class="day-summary-reward"/);
+ assert.match(section,/money\(d\.paidReward\)/);
+ for(const label of ['Вознаграждение','Чаевые','Отдельные бонусы','Итог на экране','Отработано','Заказов']) {
+   assert.ok(section.includes(label), 'missing existing entry field or label: '+label);
+ }
+ assert.ok(section.includes('data-entry="${esc(e.id)}"'));
+ assert.ok(section.includes("d.entries.map((e, i) => card(e, `Слот ${i + 1}`)"));
+});
