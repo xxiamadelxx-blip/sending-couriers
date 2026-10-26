@@ -24,6 +24,15 @@ test('UI M1: slot history keeps editable ID and complete monetary rows',()=>{
  for(const v of ['Вознаграждение','Чаевые','Отдельные бонусы','Итог на экране'])assert.ok(section.includes(v));
  assert.ok(section.includes('data-entry="${esc(e.id)}"'));
 });
+test('UI M2: empty-state navigation must wait for rendered home and history, not nav buttons alone',()=>{
+ const start=qa.indexOf("if args.phase == 'after' and args.focus == 'full':");
+ const finish=qa.indexOf("if args.focus == 'content':",start);
+ const section=qa.slice(start,finish);
+ assert.match(section,/device\.tap_node\('Главная'\)\s+device\.wait_node\('Смена ещё не записана', 20\)/);
+ assert.match(section,/device\.tap_node\('Записи периода'\)\s+device\.wait_node\('Пока нет записей', 20\)/);
+ assert.match(section,/device\.wait_home\(30\)\s+device\.wait_node\('Смена ещё не записана', 20\)/);
+});
+
 test('UI M2: Android form cancel exercises the real visible Back and checks history/summary',()=>{
  assert.match(qa,/device\.tap_node\('Назад'\)/);
  assert.match(qa,/Canceling the form must restore history with bottom navigation/);
