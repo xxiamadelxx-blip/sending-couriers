@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 import emulator_smoke as device
 from empty_state_contract import assert_empty_home, assert_empty_history, assert_empty_backup
 from xlsx_import_smoke import exported_state
+from visual_glance_contract import assert_income_above_nav
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', type=Path, required=True)
@@ -218,6 +219,10 @@ def main():
             theme(mode)
             suffix = f'{width}-{mode}'
             root = capture(f'home-{suffix}')
+            # Visual acceptance is about visible money without scrolling,
+            # not merely locating the amount somewhere below the fold.
+            glance = assert_income_above_nav(root)
+            (out / f'glance-{suffix}.json').write_text(json.dumps(glance, indent=2))
             period_choice = device.find_node(root, 'Выбрать расчётный период')
             pb = list(map(int, re.findall(r'\d+', period_choice.get('bounds', '')))) if period_choice is not None else []
             assert len(pb) == 4 and pb[2] > pb[0] and pb[3]-pb[1] >= 144, (
