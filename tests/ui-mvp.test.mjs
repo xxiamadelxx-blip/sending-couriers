@@ -80,8 +80,10 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
 test('MVP Android M2 positive XLSX: full workflow imports same report twice and verifies saved facts',async()=>{
  const ci=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
  const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
- assert.match(ci,/python3 qa\/xlsx_import_smoke\.py/);
- assert.match(ci,/adb shell settings put system font_scale 1\.0/);
+ const runner=await readFile(new URL('../qa/run_ui_gates.py',import.meta.url),'utf8');
+ assert.match(ci,/python3 qa\/run_ui_gates\.py --apk/);
+ assert.match(runner,/\['python3', 'qa\/xlsx_import_smoke\.py'\]/);
+ assert.match(runner,/\['adb', 'shell', 'settings', 'put', 'system', 'font_scale', '1\.0'\]/);
  assert.match(xlsx,/def scroll_to_import\(\):/);
  assert.match(xlsx,/Native XLSX import action not reachable by vertical scroll/);
  assert.match(xlsx,/assert first == second/);
@@ -95,11 +97,16 @@ test('200% slider hitbox parsing uses digit regex that matches Android node coor
  assert.equal(block.split(wrong).length-1,0);
 });
 
-test('CI Android runner executes XLSX gate in a single shell invocation',async()=>{
+test('CI Android runner preserves XLSX and transfer gates with independent exit status',async()=>{
   const ci=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
-  assert.match(ci,/\[ "\$\{\{ inputs\.focus \|\| 'full' \}\}" != "full" \] \|\| \( adb shell wm size/);
-  assert.doesNotMatch(ci,/^\s+if \[ "\$\{\{ inputs\.focus \|\| 'full' \}\}" = "full" \]; then/m);
-  assert.match(ci,/&& python3 qa\/xlsx_import_smoke\.py \)/);
+  const runner=await readFile(new URL('../qa/run_ui_gates.py',import.meta.url),'utf8');
+  assert.match(ci,/python3 qa\/run_ui_gates\.py --apk/);
+  assert.match(runner,/'xlsx_import': \[/);
+  assert.match(runner,/\['python3', 'qa\/xlsx_import_smoke\.py'\]/);
+  assert.match(runner,/for name in names\[1:-1\]:\s*run\(name, skip=focus != 'full', blocked=not baseline_ok\)/);
+  assert.match(runner,/run\('transfer_upgrade'\)/);
+  assert.match(runner,/'status': 'PASS' if exit_code == 0 else 'FAIL'/);
+  assert.match(runner,/return 0 if json\.loads\(output\.read_text\(\)\)\['result'\] == 'PASS' else 1/);
 });
 
 test('release: transfer build has increasing 1.7.15/code29 and tests prior 1.7.14/code28',async()=>{
