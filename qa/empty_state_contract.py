@@ -33,3 +33,16 @@ def assert_empty_history(root):
     unexpected = [node for node in root.iter('node')
                   if _name(node).startswith('Редактировать Слот')]
     assert not unexpected, 'Empty history contains unexpected slot edit actions'
+
+
+def assert_empty_backup(state):
+    """Independently check the persisted JSON backup after cancelling first slot.
+
+    Missing/malformed fields are not converted to zero; this gate is strictly
+    about durable slot records and does not assert weather/forecast freshness.
+    """
+    assert isinstance(state, dict), 'JSON backup must be an object with entries'
+    entries = state.get('entries')
+    assert isinstance(entries, list), 'JSON backup entries must be an array'
+    assert not entries, f'Empty-state cancellation persisted {len(entries)} unexpected slots'
+    return len(entries)
