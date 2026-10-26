@@ -4,7 +4,7 @@ from qa.a11y_xml_smoke import visible_accessible_actions, specific_named_control
 
 
 def nodes(xml):
-    return ET.fromstring('<hierarchy>' + xml + '</hierarchy')
+    return ET.fromstring('<hierarchy>' + xml + '</hierarchy>')
 
 
 class AccessibilityNativeXmlTest(unittest.TestCase):
