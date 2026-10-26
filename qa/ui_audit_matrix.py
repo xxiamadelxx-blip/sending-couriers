@@ -9,7 +9,8 @@ import time
 import xml.etree.ElementTree as ET
 
 import emulator_smoke as device
-from empty_state_contract import assert_empty_home, assert_empty_history
+from empty_state_contract import assert_empty_home, assert_empty_history, assert_empty_backup
+from xlsx_import_smoke import exported_state
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', type=Path, required=True)
@@ -122,11 +123,28 @@ def main():
                 assert_empty_history(capture(f'00-empty-history-{suffix}'))
                 device.tap_node('Главная')
                 device.wait_node('Смена ещё не записана', 20)
-        device.adb('shell', 'am', 'force-stop', device.PACKAGE)
-        device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
-        device.wait_home(30)
+        # The XML screen alone cannot prove an empty native database. Save the
+        # actual user-facing Android JSON backup before and after force-stop.
+        # Only the entry count enters QA artifacts, never the exported data.
+        backup_result = {'result': 'FAIL', 'source': 'native Android DocumentsUI JSON backup',
+                         'synthetic': True, 'beforeRestartEntries': None,
+                         'afterRestartEntries': None}
+        try:
+            backup_result['beforeRestartEntries'] = assert_empty_backup(exported_state())
+            device.tap_node('Главная')
+            device.wait_node('Смена ещё не записана', 20)
+            device.adb('shell', 'am', 'force-stop', device.PACKAGE)
+            device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+            device.wait_home(30)
+            device.wait_node('Смена ещё не записана', 20)
+            assert_empty_home(capture('00-empty-after-restart-390-light'))
+            backup_result['afterRestartEntries'] = assert_empty_backup(exported_state())
+            backup_result['result'] = 'PASS'
+        finally:
+            (out / '00-empty-json-backup-result.json').write_text(
+                json.dumps(backup_result, ensure_ascii=False, indent=2))
+        device.tap_node('Главная')
         device.wait_node('Смена ещё не записана', 20)
-        assert_empty_home(capture('00-empty-after-restart-390-light'))
         device.adb('shell', 'wm', 'size', '1080x2400')
         theme('dark')
     else:
