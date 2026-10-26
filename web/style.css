@@ -1060,3 +1060,29 @@ dialog .button{margin:8px 0 0}
   .day-group .day-summary-counters{font-size:12px}
   .day-group .day-summary-reward{font-size:20px}
 }
+
+
+/* Period-only visual correction from real Android35 review (first screenshot
+   after adding reward cut off the existing Export button behind the nav).
+   Keep prominent 9h/18 orders/recorded reward; adjust vertical slack only. */
+.period-page .page-heading{
+  padding-top:3px!important;
+  padding-bottom:9px!important;
+  margin-bottom:13px;
+}
+.period-page .period-navigation{margin-bottom:7px}
+.period-page .period-overview{
+  margin-top:2px;
+  padding:18px 18px 14px;
+}
+.period-page .period-overview .period-reward{
+  margin-top:10px;
+  padding-top:11px;
+}
+.period-page .cycle-settings{
+  margin-top:7px;
+  padding-top:13px;
+  padding-bottom:12px;
+}
+.period-page .period-actions{margin-top:8px}
+.period-page .period-actions #periodHistory{min-height:50px}
