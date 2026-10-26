@@ -9,6 +9,7 @@ import time
 import xml.etree.ElementTree as ET
 
 import emulator_smoke as device
+from empty_state_contract import assert_empty_home, assert_empty_history
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', type=Path, required=True)
@@ -93,16 +94,42 @@ def main():
     device.adb('install', str(args.apk.resolve()))
     device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
     device.wait_home(45)
-    empty_root = capture('00-empty-home-360-dark')
-    assert device.find_node(empty_root, 'Смена ещё не записана') is not None, 'Empty state heading missing'
-    assert device.find_node(empty_root, 'Добавить первый слот') is not None, 'First-shift CTA missing'
-    # A screenshot or an accessibility label does not prove this button opens the form.
-    device.tap_node('Добавить первый слот')
-    device.wait_node('Сохранить слот')
-    device.tap_node('Назад')
-    device.tap_node('Главная')
-    root_after_cancel = device.dump('first-slot-abandoned')
-    assert device.find_node(root_after_cancel, 'Смена ещё не записана') is not None, 'Leaving an unsaved form changed empty state'
+    if args.phase == 'after' and args.focus == 'full':
+        # Independent native empty-state acceptance: all width/theme layouts
+        # before creating any synthetic facts. An abandoned form must remain
+        # empty after history navigation and after Android force-stop.
+        for width, size in [(360, '1080x2400'), (390, '1170x2532')]:
+            device.adb('shell', 'wm', 'size', size)
+            for mode in ('dark', 'light'):
+                theme(mode)
+                suffix = f'{width}-{mode}'
+                assert_empty_home(capture(f'00-empty-home-{suffix}'))
+                device.tap_node('Добавить первый слот')
+                device.wait_node('Сохранить слот')
+                capture(f'00-empty-form-{suffix}')
+                device.tap_node('Назад')
+                device.wait_node('Главная')
+                assert_empty_home(capture(f'00-empty-cancelled-{suffix}'))
+                device.tap_node('Период')
+                device.tap_node('Записи периода')
+                assert_empty_history(capture(f'00-empty-history-{suffix}'))
+                device.tap_node('Главная')
+        device.adb('shell', 'am', 'force-stop', device.PACKAGE)
+        device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+        device.wait_home(30)
+        assert_empty_home(capture('00-empty-after-restart-390-light'))
+        device.adb('shell', 'wm', 'size', '1080x2400')
+        theme('dark')
+    else:
+        empty_root = capture('00-empty-home-360-dark')
+        assert device.find_node(empty_root, 'Смена ещё не записана') is not None, 'Empty state heading missing'
+        assert device.find_node(empty_root, 'Добавить первый слот') is not None, 'First-shift CTA missing'
+        device.tap_node('Добавить первый слот')
+        device.wait_node('Сохранить слот')
+        device.tap_node('Назад')
+        device.tap_node('Главная')
+        root_after_cancel = device.dump('first-slot-abandoned')
+        assert device.find_node(root_after_cancel, 'Смена ещё не записана') is not None, 'Leaving an unsaved form changed empty state'
 
     if args.focus == 'content':
         device.tap_node('Период')
