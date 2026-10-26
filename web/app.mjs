@@ -278,6 +278,14 @@ function settings() {
     <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
   const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
   bottomNav('settings'); $('#goBack').addEventListener('click', summary);
+  // Keep the editable hourly amount and its ₽ suffix visually together,
+  // including after loading another date's historical tariff.
+  const rateInput = $('#hourlyRate');
+  const sizeRateInput = () => {
+    rateInput.style.width = `${Math.max(4, Math.min(10, rateInput.value.length + 1))}ch`;
+  };
+  rateInput.addEventListener('input', sizeRateInput);
+  sizeRateInput();
   $('#themeSelect').addEventListener('change', event => {
     try { persist(updateSettings(state, { theme:event.target.value })); $('#preferencesError').hidden = true; }
     catch (error) { event.target.value = state.settings.theme; $('#preferencesError').textContent = error.message; $('#preferencesError').hidden = false; feedback('error'); }
@@ -287,6 +295,7 @@ function settings() {
     for (const key of ['hourlyRate','basePace','premiumPace','paceBonusPercent','cycleBonusPercent','minimumHours','criticalPace']) $('#' + key).value = String(terms[key] ?? (key==='minimumHours'?80:terms.basePace)).replace('.',',');
     $('#paymentEffectiveDate').textContent = `Выбрана дата: ${formatDate(event.target.value)}`;
     $('#paymentDateVisible').textContent = formatDate(event.target.value, true);
+    sizeRateInput();
     $('#paymentError').hidden = true;
   });
   $('#paymentForm').addEventListener('submit', event => {
