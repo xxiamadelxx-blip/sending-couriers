@@ -695,3 +695,205 @@ dialog .button{margin:8px 0 0}
 :root[data-text-scale="large"] .form-page .form-grid .field input{
   scroll-margin-block-start:42px;
 }
+
+
+/* Owner-approved visual implementation 2026-10-26:
+   tariff/settings concept, slot editor concept, bottom Add-slot optical alignment.
+   Scope is deliberately limited: never change Home rhythm/gauge/forecast. */
+.settings-page .page-heading{margin-bottom:16px;padding:5px 0 12px}
+.settings-page .page-heading h1{font-size:clamp(24px,7vw,29px)}
+.settings-eyebrow{
+  margin:5px 1px 9px;
+  font-size:11px;
+  line-height:1.4;
+  letter-spacing:.105em;
+  text-transform:uppercase;
+  font-weight:850;
+  color:var(--teal);
+}
+.settings-page .payment-settings{
+  margin-top:0;
+  padding:19px 17px 18px;
+  border-radius:6px;
+}
+.settings-page .payment-settings h2{
+  margin:0 0 17px;
+  font-size:22px;
+  letter-spacing:-.035em;
+}
+.settings-page .payment-period{
+  padding:0 0 15px;
+  margin:0 0 16px;
+  border-bottom:1px solid var(--line);
+}
+.settings-page .payment-period label,
+.settings-page .tariff-rate label{
+  font-size:13px;
+  line-height:1.4;
+  font-weight:650;
+  color:var(--muted);
+}
+.settings-page .settings-date-box{
+  border-radius:6px;
+  margin-top:6px;
+  min-height:50px;
+  font-size:16px;
+  padding:10px 12px;
+}
+.settings-page .settings-date-box svg{height:20px;width:20px;flex-shrink:0}
+.settings-page .settings-date-box input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.settings-page .payment-period .hint{margin-top:8px;font-size:11px;line-height:1.45}
+.settings-page .tariff-rate{
+  display:flex;
+  align-items:flex-end;
+  gap:4px;
+  min-width:0;
+  padding:0 0 13px;
+  border-bottom:1px solid var(--line);
+}
+.settings-page .tariff-rate .field{min-width:0;flex:1;gap:4px}
+.settings-page .tariff-rate .field-box{display:flex;align-items:baseline;gap:7px;min-width:0}
+.settings-page .tariff-rate #hourlyRate{
+  display:block;
+  min-width:0;
+  width:100%;
+  max-width:170px;
+  min-height:49px;
+  padding:3px 0 0;
+  background:transparent;
+  color:var(--ink);
+  border:0;
+  border-bottom:2px solid transparent;
+  border-radius:0!important;
+  outline:none;
+  box-shadow:none;
+  font-family:system-ui,"Roboto",sans-serif;
+  font-weight:850;
+  font-size:clamp(31px,9vw,37px);
+  line-height:1.12;
+  font-variant-numeric:tabular-nums;
+}
+.settings-page .tariff-rate #hourlyRate:focus{border-bottom-color:var(--teal)}
+.settings-page .tariff-rate .field-unit{
+  position:static;
+  transform:none;
+  flex-shrink:0;
+  margin:0;
+  font-size:16px;
+  color:var(--muted);
+}
+.settings-page .tariff-rate-unit{
+  padding:0 0 10px;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:13px;
+}
+.settings-page .payment-more{
+  padding:0;
+  border:0;
+  border-bottom:1px solid var(--line);
+  margin:0 0 8px;
+}
+.settings-page .payment-more summary{
+  min-height:51px;
+  color:var(--ink);
+  font-size:15px;
+  font-weight:650;
+}
+.settings-page .payment-more summary svg{color:var(--teal)}
+.settings-page #savePaymentTerms{
+  margin-top:12px;
+  min-height:52px;
+  border-radius:6px!important;
+}
+.settings-page .payment-effective-date{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:0;
+  border:0;
+  overflow:hidden;
+  clip-path:inset(50%);
+  white-space:nowrap;
+}
+.settings-page .appearance-card{
+  margin-top:13px;
+  padding:16px 17px;
+  border:1px solid var(--line);
+  border-radius:6px;
+}
+.settings-page .appearance-card .settings-eyebrow{margin:0 0 5px}
+.settings-page .appearance-card h2{font-size:17px;letter-spacing:-.02em}
+.settings-page .appearance-card .theme-field{margin-top:9px}
+.settings-page .appearance-card .period-select{border-radius:6px!important}
+
+/* The approved slot concept groups fields without hiding money or changing
+   the unknown-vs-zero model. Advanced working time stays available below. */
+.form-page .page-heading{margin-bottom:16px}
+.form-page .form-grid{row-gap:13px}
+.form-page .form-date-field{gap:6px}
+.form-page .form-date-field>label{
+  color:var(--teal);
+  text-transform:uppercase;
+  letter-spacing:.095em;
+  font-size:11px;
+  font-weight:850;
+}
+.form-page .form-date-field .date-box{
+  min-height:52px;
+  border-radius:6px!important;
+  font-size:17px;
+}
+.form-page .form-date-field .date-box svg{color:var(--teal)}
+.form-page .form-date-field .form-period{margin-top:1px;color:var(--muted)}
+.form-page .form-section-heading{
+  font-size:16px;
+  letter-spacing:.025em;
+  line-height:1.25;
+  font-weight:900;
+  text-transform:uppercase;
+  margin:17px 0 1px;
+  padding:13px 0 2px;
+  border-top:1px solid var(--line);
+  border-bottom:0;
+}
+.form-page .form-section-heading:first-of-type{margin-top:10px}
+.form-page .field:not(.form-date-field) label{
+  min-height:0;
+  font-size:13px;
+  font-weight:600;
+  color:var(--muted);
+}
+.form-page .field input{
+  border-radius:6px!important;
+  min-height:51px;
+}
+.form-page .field input::placeholder{color:var(--muted)}
+.form-page .field.full:has(#reward) input{min-height:55px;font-size:21px}
+.form-page .field:has(#dailyHours) input,
+.form-page .field:has(#dailyOrders) input{font-size:20px}
+.form-page .save-area .button.primary{border-radius:6px!important}
+
+/* Five actual nav actions in the original order, with the approved central
+   square visually seated in the same grid as the remaining four tabs. */
+.bottom-nav{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 62px minmax(0,1fr) minmax(0,1fr);
+  align-items:center;
+  column-gap:3px;
+}
+.nav-add{
+  width:54px;
+  min-width:54px;
+  height:54px;
+  min-height:54px;
+  margin:0;
+  padding:0;
+  justify-self:center;
+  align-self:center;
+  transform:translateY(-2px);
+  border:2px solid var(--nav-surface);
+  border-radius:4px;
+  box-shadow:0 0 0 2px var(--nav-surface);
+}
+.nav-add svg{display:block;width:26px;height:26px;margin:0}
