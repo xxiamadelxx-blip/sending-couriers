@@ -124,7 +124,9 @@ test('UI-013 full 200% label remains visible after opening IME, not just input a
 
 test('UI-013: 200% native form focus repositions whole label after IME resize',()=>{
  assert.match(app,/function installLargeTextFormLabelFocusGuard\(\)/);
- assert.match(app,/scroll\.scrollTop -= Math\.min\(missing, room\)/);
+ assert.match(app,/const offset = keyboardOpen \? Math\.min\(missing, room\) : 0;/);
+ assert.match(app,/scroll\.style\.paddingTop = offset > 0 \?/);
+ assert.match(app,/scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
  assert.match(app,/window\.visualViewport\?\.addEventListener\('resize', schedule\)/);
  assert.match(app,/scroll\.addEventListener\('focusin', schedule\)/);
  assert.match(app,/installLargeTextFormLabelFocusGuard\(\);/);
