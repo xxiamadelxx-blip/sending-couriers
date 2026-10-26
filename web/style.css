@@ -1086,3 +1086,85 @@ dialog .button{margin:8px 0 0}
 }
 .period-page .period-actions{margin-top:8px}
 .period-page .period-actions #periodHistory{min-height:50px}
+
+
+/* VISUAL FIDELITY REPAIR / owner's actual approved mockups / 27 Oct 2026.
+   NOT a new direction. Native screenshot inspection found that the previous
+   implementation missed the approved orange History rails, robust Period
+   numerals, squared filled risk/cycle panels, and cut-corner summary. These
+   rules override high-specificity legacy day-group and monospace styles.
+   Do not interpret earlier XML/unit PASS as owner acceptance of aesthetics. */
+
+/* H1: each same-date slot has a bright LEFT rail in the approved right-hand
+   image. Legacy ".day-group .day-card" had reset the earlier .day-card rail. */
+.history-list .day-group .day-card{
+  border-left:4px solid var(--teal);
+  border-radius:3px;
+  background:var(--surface);
+  box-shadow:none;
+}
+.history-list .day-group .day-head h2{
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-style:italic;
+  font-weight:800;
+  letter-spacing:-.025em;
+}
+.history-list .day-group .day-summary{
+  padding-top:11px;
+  padding-bottom:13px;
+  margin-bottom:13px;
+}
+.history-list .day-group .day-card .day-head{
+  border-bottom:1px solid var(--line);
+  padding-bottom:11px;
+}
+.history-list .day-group .day-card .day-meters{
+  padding-top:10px;
+  padding-bottom:13px;
+}
+.history-list .day-group .day-card .day-money{
+  border-top:1px solid var(--line);
+  background:transparent;
+}
+.history-list .day-group .day-card .day-money .day-row:first-child{
+  padding:13px 0;
+  border-bottom:1px solid var(--line);
+}
+.history-list .day-group .day-card .day-money .day-row{
+  padding:8px 0;
+}
+
+/* P1: approved design uses bold, readable hours/orders without the thin
+   monospace appearance seen in the first Android35 implementation. */
+.period-page .period-overview{
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%);
+}
+.period-page .period-overview .period-facts dd{
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:clamp(30px,8.6vw,38px);
+  font-weight:850;
+  letter-spacing:-.055em;
+  line-height:1.1;
+}
+.period-page .period-overview .period-reward>strong{
+  font-weight:850;
+  letter-spacing:-.04em;
+}
+.period-page .payment-status{
+  background:var(--console-hero);
+  border-radius:3px;
+  padding:13px 14px;
+}
+.period-page .payment-status strong{
+  font-weight:800;
+  font-size:14px;
+}
+.period-page .cycle-settings{
+  background:var(--console-hero);
+  border-color:var(--line);
+  border-radius:3px;
+}
+.period-page .cycle-settings .cycle-header h2{
+  font-size:18px;
+  font-weight:850;
+}
