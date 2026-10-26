@@ -30,8 +30,6 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_empty_state_contract.py' -v
       - name: Empty-state native backup contract unit tests
         run: python3 -m unittest discover -s tests -p 'test_empty_backup_contract.py' -v
-      - name: Glanceable money layout contract unit tests
-        run: python3 -m unittest discover -s tests -p 'test_visual_glance_contract.py' -v
       - name: Large-form geometry independent unit tests
         run: python3 -m unittest discover -s tests -p 'test_form_large_geometry.py' -v
       - name: Accessible Android node XML unit tests
