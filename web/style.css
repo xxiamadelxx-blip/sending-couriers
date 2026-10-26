@@ -1168,3 +1168,36 @@ dialog .button{margin:8px 0 0}
   font-size:18px;
   font-weight:850;
 }
+
+
+/* VISUAL FIX / 27 Oct 2026: actual Android35 360-light screenshot revealed
+   nearly invisible "12 недель" and risk details on slate panels. The light
+   theme needs explicitly light lettering on those intentionally dark cards.
+   No component size/position or finance/data behavior changes. */
+:root[data-theme="light"] .period-page .payment-status,
+:root[data-theme="light"] .period-page .cycle-settings{
+  color:var(--console-hero-ink);
+}
+:root[data-theme="light"] .period-page .payment-status p,
+:root[data-theme="light"] .period-page .cycle-settings .cycle-dates,
+:root[data-theme="light"] .period-page .cycle-settings .hint{
+  color:var(--console-label);
+}
+:root[data-theme="light"] .period-page .cycle-settings h2,
+:root[data-theme="light"] .period-page .cycle-settings .cycle-header h2,
+:root[data-theme="light"] .period-page .cycle-settings .cycle-header span{
+  color:var(--console-hero-ink);
+}
+:root[data-theme="light"] .period-page .payment-status.risk{
+  border-color:#ff8b9a;
+}
+:root[data-theme="light"] .period-page .payment-status.risk>svg,
+:root[data-theme="light"] .period-page .payment-status.risk strong{
+  color:#ff8b9a;
+}
+:root[data-theme="light"] .period-page .cycle-settings #configureCycle{
+  color:#ff9770;
+}
+:root[data-theme="light"] .period-page .cycle-settings #configureCycle svg{
+  color:inherit;
+}
