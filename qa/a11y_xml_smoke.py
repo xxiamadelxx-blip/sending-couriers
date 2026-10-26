@@ -63,6 +63,23 @@ def role_of(node):
     return role(node)
 
 
+def require_native_edit_labels(root, labels, screen):
+    """Check Android-exposed input names, not just adjacent visual HTML labels.
+
+    A WebView's blank input value alone cannot identify its financial meaning.
+    This verifies native XML accessibility descriptions but cannot prove the
+    words a screen reader actually speaks.
+    """
+    edits = [n for n in root.iter('node') if role(n) == 'EditText' and visible(n)]
+    assert len(edits) == len(labels), (f'{screen}: expected {len(labels)} input fields, '
+                                       f'found {len(edits)}')
+    for expected, node in zip(labels, edits):
+        accessible = (node.get('content-desc') or '').strip()
+        assert expected in accessible, (f'{screen}: {expected!r} lacks native '
+                                       f'accessible description; text={node.get("text")!r}, '
+                                       f'content-desc={accessible!r}')
+    return list(labels)
+
 def inspect(directory):
     snapshots = {}
     for file in SCREENS:
@@ -95,9 +112,19 @@ def inspect(directory):
     form_labels = ('Часы за слот', 'Заказы за слот', 'Вознаграждение')
     present = {name(n) for n in snapshots['form-390-dark'].iter('node')}
     assert set(form_labels) <= present, f'Form labels missing from native hierarchy: {set(form_labels)-present}'
+    native_inputs = {
+        'form-390-dark': require_native_edit_labels(snapshots['form-390-dark'],
+            ('Часы за слот', 'Заказы за слот', 'Вознаграждение', 'Налог',
+             'Комиссия парка', 'Чаевые', 'Отдельные бонусы'), 'form-390-dark'),
+        'forecast-390-dark': require_native_edit_labels(snapshots['forecast-390-dark'],
+            ('Слот', 'Из них буду работать'), 'forecast-390-dark'),
+        'settings-main-390-dark': require_native_edit_labels(snapshots['settings-main-390-dark'],
+            ('Ставка за час',), 'settings-main-390-dark'),
+    }
     return {'result':'PASS', 'test':'native XML semantics subset, not TalkBack',
             'talkBackTested':False, 'androidDpi':480,
-            'screens':results, 'formLabelsExposed':list(form_labels)}
+            'screens':results, 'formLabelsExposed':list(form_labels),
+            'nativeInputLabels':native_inputs}
 
 
 def main():

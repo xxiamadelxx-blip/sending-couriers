@@ -131,3 +131,11 @@ test('UI-013: 200% native form focus repositions whole label after IME resize',(
  assert.match(app,/scroll\.addEventListener\('focusin', schedule\)/);
  assert.match(app,/installLargeTextFormLabelFocusGuard\(\);/);
 });
+
+test('UI-014: all input templates provide escaped explicit Android-accessible field names', async()=>{
+ const duration=await readFile(new URL('../web/duration-control.mjs',import.meta.url),'utf8');
+ const forecast=await readFile(new URL('../web/forecast-ui.mjs',import.meta.url),'utf8');
+ assert.ok(app.includes('type="text" aria-label="${esc(label)}" inputmode='), 'slot and tariff text inputs missing label');
+ assert.ok(duration.includes('type="text" aria-label="${esc(label)}" inputmode='), 'forecast duration input missing label');
+ assert.ok(forecast.includes('type="${type}" aria-label="${esc(label)}" value='), 'forecast history input missing label');
+});

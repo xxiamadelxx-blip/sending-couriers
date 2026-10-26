@@ -13,7 +13,7 @@ const range=p=>p?.central==null?'Нет оценки':`${p.central} заказо
 const confidence=p=>({rest:'Отдых',insufficient:'Недостаточно истории',low:'Низкая уверенность',limited:'Ограниченная уверенность',moderate:'Личная история'}[p?.confidence]??'Нет оценки');
 export const forecastModelLabel=p=>p?.central==null?'':p.selectedModel==='weighted-count-baseline'?(p.timeKind?'Почасовые события учтены · выбран базовый расчёт':'Оценка по дневным итогам · почасовая модель не обучена'):['poisson-offset','negative-binomial'].includes(p.selectedModel)?'Почасовая модель по подтверждённым рабочим окнам':'';
 const errorHTML='<p class="error" id="forecastError" role="alert" hidden></p>';
-const textField=(id,label,value='',type='text',extra='')=>`<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" value="${esc(value)}" ${extra}></div>`;
+const textField=(id,label,value='',type='text',extra='')=>`<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" aria-label="${esc(label)}" value="${esc(value)}" ${extra}></div>`;
 const metric=(name,value)=>`<div><span>${name}</span><strong>${esc(value)}</strong></div>`;
 export function forecastTeaser(state) {
   const data=state.forecast??emptyForecast(),p=currentProfile(data),clock=forecastClock(data),result=predict(data,clock.date);
