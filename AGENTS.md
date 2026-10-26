@@ -89,3 +89,5 @@
 ## UI-013, 26.10.2026 · 200% IME labels
 
 UI-012 **PASS** (Android 35 CI #40237133128, source 417f878, 7 fields, 10h/20 orders/3500 ₽ persisted). New independent visual **RED/P2**: on 390dp/light at 200% the Android keyboard scrolls focused labels 48–57px behind the form heading. UI-013 demands the entire label AND input inside native scroll bounds while Save is still visible. Focused input gets scoped CSS scroll margin, strict Android QA assertion and geometrical fixtures; only a new real Android CI + screenshots can mark UI-013 PASS. No changes to money/model/signer.
+
+- UI-M2 subset accessible action naming **PASS at source `c1dd1ae`**: full Android35 CI #40282836918 was overall FAIL due known UI-013, but `ui-a11y/a11y-result.json` in artifact 12633576159 independently PASS (6 native screens, zero unnamed clickable non-edit actions, required controls >=48dp). EditText spoken labels and real TalkBack navigation **NOT RUN**. UI-013 **BLOCKED** after three native failures with screenshot/XML; do not conceal or retry blindly. See current acceptance matrix. Key exists and is verified; owner-signed on-device update remains NOT RUN.
