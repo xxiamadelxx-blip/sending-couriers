@@ -27,8 +27,19 @@ device.wait_home(45)
 device.add_slot(hours=4, orders=8, reward=1200)
 device.tap_node('Период')
 device.tap_node('Записи периода')
-before = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in device.dump('before-update').iter('node')))
-assert '4 ч' in before and '8 заказов' in before and '1 200' in before, before
+def assert_slot_visible(root, phase):
+    """Check the same factual slot across either old inline or new split labels.
+
+    Values remain independently strict: 4 actual hours, exactly 8 orders,
+    and the recorded 1200-ruble reward. Styling cannot alter these facts.
+    """
+    visible = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node'))).casefold()
+    assert re.search(r'(?<!\d)4\s*ч\b', visible), f"{phase}: 4 hours missing: {visible}"
+    assert re.search(r'(?<!\d)8\s+заказов\b', visible), f"{phase}: 8 orders missing: {visible}"
+    assert re.search(r'(?<!\d)1\s*200\s*₽', visible), f"{phase}: reward 1200 RUB missing: {visible}"
+
+
+assert_slot_visible(device.dump('before-update'), 'before-update')
 
 # Android rejects this update if the signing certificate or package changes.
 device.adb('install', '-r', str(args.new.resolve()))
@@ -37,7 +48,18 @@ device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
 device.wait_home(45)
 device.tap_node('Период')
 device.tap_node('Записи периода')
-after = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in device.dump('after-update').iter('node')))
+assert_slot_visible(device.dump('after-update'), 'after-update')
 device.screenshot('after-update')
-assert '4 ч' in after and '8 заказов' in after and '1 200' in after, after
-print('PASS: transfer package updated with the same signer; synthetic entry retained')
+
+# Verify the *persisted facts*, not just presentation. Read the backup using
+# the same Android DocumentsUI workflow available to the courier.
+from xlsx_import_smoke import exported_state
+saved = exported_state()
+entries = saved.get('entries')
+assert isinstance(entries, list) and len(entries) == 1, (
+    f"Upgrade must preserve exactly one synthetic slot, got {len(entries) if isinstance(entries, list) else 'invalid'}"
+)
+slot = entries[0]
+for key, expected in [('dailyHours', 4), ('dailyOrders', 8), ('reward', 1200)]:
+    assert slot.get(key) == expected, f"Upgrade changed persisted {key}: {slot.get(key)} != {expected}"
+print('PASS: same-signer upgrade retained one stored slot: 4h, 8 orders, 1200 RUB')
