@@ -26,6 +26,8 @@ jobs:
         run: npm test
       - name: Emulator recovery unit tests
         run: python3 -m unittest discover -s tests -p 'test_emulator_wait_home.py' -v
+      - name: Empty-state 360/390 native XML contract unit tests
+        run: python3 -m unittest discover -s tests -p 'test_empty_state_contract.py' -v
       - name: Large-form geometry independent unit tests
         run: python3 -m unittest discover -s tests -p 'test_form_large_geometry.py' -v
       - name: Accessible Android node XML unit tests
