@@ -897,3 +897,35 @@ dialog .button{margin:8px 0 0}
   box-shadow:0 0 0 2px var(--nav-surface);
 }
 .nav-add svg{display:block;width:26px;height:26px;margin:0}
+
+
+/* Owner-approved Settings precision pass: the ₽ and "/ час" belong to the
+   editable rate, not separate ends of a full-width row. Visually checked
+   against Android35 settings-main-390-dark.png from run 40324455836. */
+.settings-page .tariff-rate{
+  justify-content:flex-start;
+  gap:9px;
+}
+.settings-page .tariff-rate .field{
+  flex:0 1 auto;
+  max-width:calc(100% - 75px);
+}
+.settings-page .tariff-rate .field-box{
+  display:inline-flex;
+  justify-content:flex-start;
+  align-items:baseline;
+  gap:5px;
+  max-width:100%;
+}
+.settings-page .tariff-rate #hourlyRate{
+  flex:0 1 auto;
+  min-width:3ch;
+  max-width:min(48vw, 10ch);
+}
+.settings-page .tariff-rate .field-unit{font-size:18px;line-height:1.2}
+.settings-page .tariff-rate-unit{
+  align-self:flex-end;
+  padding-bottom:12px;
+  font-size:13px;
+  white-space:nowrap;
+}
