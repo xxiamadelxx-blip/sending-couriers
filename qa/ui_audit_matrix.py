@@ -108,8 +108,12 @@ def main():
                 device.wait_node('Сохранить слот')
                 capture(f'00-empty-form-{suffix}')
                 device.tap_node('Назад')
-                device.wait_node('Главная')
-                # Bottom nav may render before the asynchronous route content.
+                # A cancelled form navigates to History, not directly Home.
+                # The Home button exists on both screens, so its presence alone
+                # was never proof that the navigation actually completed.
+                device.wait_node('Пока нет записей', 20)
+                assert_empty_history(capture(f'00-empty-cancelled-history-{suffix}'))
+                device.tap_node('Главная')
                 device.wait_node('Смена ещё не записана', 20)
                 assert_empty_home(capture(f'00-empty-cancelled-{suffix}'))
                 device.tap_node('Период')
