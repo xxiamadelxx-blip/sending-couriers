@@ -336,7 +336,13 @@ function installLargeTextFormLabelFocusGuard() {
     const visibleBottom = Math.min(viewport.bottom, save.getBoundingClientRect().top) - 2;
     const missing = Math.max(0, viewport.top + 2 - labelRect.top);
     const room = Math.max(0, visibleBottom - inputRect.bottom);
-    if (missing > 0 && room > 0) scroll.scrollTop -= Math.min(missing, room);
+    // Android WebView may anchor the focused input after the IME resize,
+    // undoing ordinary scrollTop changes. Move the existing form viewport
+    // content down only while the keyboard is visible, leaving Save fixed.
+    const keyboardOpen = window.visualViewport && window.visualViewport.height < window.innerHeight - 100;
+    const offset = keyboardOpen ? Math.min(missing, room) : 0;
+    scroll.style.paddingTop = offset > 0 ? `${offset}px` : '';
+    if (offset > 0) scroll.scrollTop = Math.max(0, scroll.scrollTop - offset);
   };
   const schedule = () => {
     requestAnimationFrame(() => requestAnimationFrame(align));
