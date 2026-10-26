@@ -260,12 +260,12 @@ function periodDetails() {
 }
 function settings() {
   if(!leaveForecast())return;
-  app.className = ''; view = 'settings'; editingId = null;
+  app.className = 'settings-page'; view = 'settings'; editingId = null;
   const chosenDate = selectedPeriod === periodFor(today()).id ? today() : selectedPeriod;
   const initial = paymentTermsFor(state, chosenDate);
   const ruleHistory = () => state.settings.paymentRules.length ? `<details class="calculation payment-history"><summary>История условий</summary>${[...state.settings.paymentRules].reverse().map(rule => `<div class="payment-rule"><strong>С ${esc(formatDate(rule.effectivePeriodStart))}</strong><span>${esc(money(rule.hourlyRate))}/ч · темп ${goalText(rule.basePace)}</span><span>Темп ${goalText(rule.premiumPace)}: ${percentText(rule.paceBonusPercent)}% · 12 недель: ${percentText(rule.cycleBonusPercent)}%</span></div>`).join('')}</details>` : '';
-  app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><input id="paymentPeriod" type="date" value="${esc(chosenDate)}" required><p class="hint">Ставка применяется с выбранного дня, в том числе внутри текущего периода.</p></div>
-    ${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}
+  app.innerHTML = `${heading('Настройки')}<p class="settings-eyebrow">Условия работы</p><section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><div class="date-box settings-date-box"><span id="paymentDateVisible">${esc(formatDate(chosenDate, true))}</span>${icon['chevron-down']}<input id="paymentPeriod" type="date" lang="ru" value="${esc(chosenDate)}" required></div><p class="hint">Ставка применяется с выбранного дня, в том числе внутри текущего периода.</p></div>
+    <div class="tariff-rate">${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}<span class="tariff-rate-unit">/ час</span></div>
     <details class="payment-more"><summary>Остальные условия${icons.down}</summary><div class="form-grid">
     ${field('basePace','Темп для оплаты',initial.basePace,{unit:'заказа/ч',full:true})}
     ${field('premiumPace','Темп для премии',initial.premiumPace,{unit:'заказа/ч',full:true})}
@@ -274,7 +274,7 @@ function settings() {
     ${field('paceBonusPercent','Премия за темп',initial.paceBonusPercent,{unit:'%'})}
     ${field('cycleBonusPercent','Премия за 12 недель',initial.cycleBonusPercent,{unit:'%'})}</div></details>
     <p class="payment-effective-date" id="paymentEffectiveDate" aria-live="polite">Выбрана дата: ${esc(formatDate(chosenDate))}</p><div class="error" id="paymentError" role="alert" hidden></div><button class="button primary" id="savePaymentTerms" type="submit">Сохранить условия</button></form><div id="paymentHistory">${ruleHistory()}</div></section>
-    <section class="detail-card appearance-card"><h2>Оформление</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная · AMOLED</option></select></div></section>
+    <section class="detail-card appearance-card"><p class="settings-eyebrow">Оформление</p><h2>Тема интерфейса</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная · AMOLED</option></select></div></section>
     <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
   const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
   bottomNav('settings'); $('#goBack').addEventListener('click', summary);
@@ -286,6 +286,7 @@ function settings() {
     const terms = paymentTermsFor(state,event.target.value);
     for (const key of ['hourlyRate','basePace','premiumPace','paceBonusPercent','cycleBonusPercent','minimumHours','criticalPace']) $('#' + key).value = String(terms[key] ?? (key==='minimumHours'?80:terms.basePace)).replace('.',',');
     $('#paymentEffectiveDate').textContent = `Выбрана дата: ${formatDate(event.target.value)}`;
+    $('#paymentDateVisible').textContent = formatDate(event.target.value, true);
     $('#paymentError').hidden = true;
   });
   $('#paymentForm').addEventListener('submit', event => {
@@ -373,7 +374,7 @@ function form(id = null) {
   const inputHint = carried ? dayCaption(e) : ''; 
   // Earlier versions stored omitted deductions as 0; keep those fields optional on edit.
   const val = key => e[key] == null || (['tax', 'parkCommission'].includes(key) && e[key] === 0) ? '' : String(e[key]).replace('.', ',');
-  app.innerHTML = `${heading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll"><div class="form-grid"><div class="field full"><label for="date">Дата</label><div class="date-box"><span id="dateVisible">${esc(formatDate(e.date, true))}</span>${icon.calendar}<input name="date" id="date" type="date" lang="ru" value="${esc(e.date)}" required></div><p class="form-period" id="formPeriod">Период: ${esc(periodLabel(periodFor(e.date)))}</p></div>
+  app.innerHTML = `${heading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll"><div class="form-grid"><div class="field full form-date-field"><label for="date">Дата слота</label><div class="date-box"><span id="dateVisible">${esc(formatDate(e.date, true))}</span>${icon.calendar}<input name="date" id="date" type="date" lang="ru" value="${esc(e.date)}" required></div><p class="form-period" id="formPeriod">Период: ${esc(periodLabel(periodFor(e.date)))}</p></div>
     ${inputHint ? `<p class="hint optional-reading">${esc(inputHint)}</p>` : ''}
     <p class="hint slot-hint" id="slotHint" hidden></p>
     <h2 class="form-section-heading">Время и заказы</h2>
@@ -386,6 +387,8 @@ function form(id = null) {
     ${field('tips', 'Чаевые', val('tips'))}${field('separateBonus', 'Отдельные бонусы', val('separateBonus'))}</div>
     <details class="additional slot-working"><summary>Рабочее время дня${icons.down}</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
+  // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
+  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = '—'; });
   installLargeTextFormLabelFocusGuard();
   $('#goBack').addEventListener('click', () => { history(); });
   let workingDirty=false;
