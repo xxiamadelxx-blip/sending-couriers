@@ -1355,3 +1355,13 @@ dialog .button{margin:8px 0 0}
   .forecast-page .forecast-simple-plan .duration-heading label{font-size:14px}
   .forecast-page .forecast-simple-plan .duration-track{gap:7px}
 }
+
+
+/* Approved Forecast footnote: explicitly distinguish slot idle time from
+   active work, as on the selected mockup. No change to duration controls. */
+.forecast-page .forecast-simple-plan .forecast-work-note{
+  margin:3px 0 0;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.4;
+}
