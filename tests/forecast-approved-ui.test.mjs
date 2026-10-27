@@ -14,6 +14,7 @@ test('approved Forecast visual: two existing persisted time controls and real un
   assert.match(simple,/class="forecast-band forecast-insufficient"/);
   assert.match(simple,/id="simpleCount"/);
   assert.match(simple,/id="simpleRange"/);
+  assert.match(simple,/Время простоя не считается активной работой\./);
   assert.match(simple,/result\.central==null/);
   assert.match(simple,/result\.preparing/);
   assert.match(simple,/result\.lower/);
