@@ -30,6 +30,6 @@ test('approved Forecast: visual-only slider track fill uses existing minutes and
 
 test('approved Forecast excludes navigation redesign; preserves actual five actions and the plus',()=>{
   for(const key of ["['summary','Главная'","['period','Период'","['forecast','Прогноз'","['settings','Настройки'"])assert.ok(app.includes(key),key);
-  assert.match(app,/id="navAddSlot"/);
+  assert.ok(app.includes("['add','Добавить слот','plus','navAddSlot']"));
   assert.match(css,/\.nav-add\{[\s\S]*?background:var\(--signal-panel\)/);
 });
