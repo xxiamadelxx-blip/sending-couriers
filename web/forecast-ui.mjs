@@ -44,7 +44,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     const slot=own?.slotMin??f.weekConfig?.slotMin??plan.slotMin??plan.accountedMin??840;
     const work=own?.workingMin??f.weekConfig?.workingMin??plan.workingMin??480;
     shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><div class="forecast-band forecast-insufficient" id="simpleRange" role="status"></div></section>
-      <section class="detail-card forecast-simple-plan"><h2>Моё время</h2>${durationField('todaySlotHours','Слот',slot)}${durationField('todayWorkHours','Из них буду работать',work)}<p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
+      <section class="detail-card forecast-simple-plan"><h2>Моё время</h2>${durationField('todaySlotHours','Слот',slot)}${durationField('todayWorkHours','Из них буду работать',work)}<p class="forecast-work-note">Время простоя не считается активной работой.</p><p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
       <button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
     // Approved visual text only. Keep both inputs, their original IDs and
     // accessible control names, the 15-minute steps and persistence unchanged.
