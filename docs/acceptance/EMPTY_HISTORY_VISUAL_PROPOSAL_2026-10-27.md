@@ -1,6 +1,6 @@
 # Empty History visual review, owner corrections · 27 October 2026
 
-**CURRENT STATUS: REVISED CONCEPT APPROVED FOR IMPLEMENTATION; LOCAL UI CODED; ANDROID VISUAL REVIEW PENDING.** The older v1/v2 sketches were rejected and the v3 draft was superseded by the reviewed illustration. Owner approval of that illustration authorizes this scoped implementation, not a visual PASS for the Android build.
+**CURRENT STATUS: REVISED CONCEPT IMPLEMENTED; REAL ANDROID 35 CAPTURES REVIEWED; OWNER VISUAL VERDICT PENDING.** The older v1/v2 sketches were rejected and the v3 draft was superseded by the reviewed illustration. Owner approval of that illustration authorized this scoped implementation, not a visual PASS for the Android build.
 
 ## What owner rejected
 
@@ -8,7 +8,7 @@
 - v2 removed the duplicate but had multiple visible visual defects: coral rail almost touched the section copy, the period-picker chevron appeared too close to the select field border, and the main action labels and captions were not centered. More seriously, the manual full-screen image painting **obscured the real period picker** in an earlier sample. The previously documented "pixel-identical period selector" claim for that earlier output was **incorrect**. The user clearly rejected this quality level.
 - No plug-in automatically approved that poor mock. The underlying cause was placing graphic and text elements at unrelated pixel coordinates and failure to inspect the full-size composite before sharing it.
 
-## Revised proposal v3, not yet submitted for owner approval
+## Revised proposal v3, approved for implementation
 
 - True source: actual Android35 `ui-after/00-empty-history-390-dark.png` from [run #40466490750](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40466490750), [artifact #12716949585](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40466490750/artifacts/12716949585), app visual code SHA `54aeba8ca62af4dd02e356f895ddea7c09805968`.
 - Reconstructed the **concept only** with browser-rendered CSS Grid and one shared spacing scale rather than manual per-label coordinates. This is an illustrative overlay, NOT a screenshot of a new APK.
@@ -30,4 +30,10 @@ The next independently available design step is visual review of import/export d
 
 The actual Android empty-History baseline is in the [Android35 run artifact #12716949585](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40466490750/artifacts/12716949585), `ui-after/00-empty-history-390-dark.png`. A revised illustration generated from that Android screenshot was shown to the owner in this conversation; it is **not** a capture of an implemented APK and its unchanged-looking header, selector and navigation must not be treated as pixel-identical source regions. It keeps the existing period picker and central `+`, introduces no duplicate add action, and aligns the two section labels with the empty-card text. Action titles and secondary labels are visually centered between side icons.
 
-**Owner decision: APPROVED FOR IMPLEMENTATION in the current conversation.** The scoped implementation is in `web/app.mjs` and `web/style.css`: empty History gets the approved card and action hierarchy; the native period selector keeps its function with an inset chevron, the five bottom actions remain, and populated History keeps its previous footer. Local browser renderings were captured at 360/390 in both themes and visually inspected; they are not committed source assets. Browser interactions verified period change, export open/close, closure navigation, and a saved populated slot. `npm test` and syntax/diff checks passed. These browser images are **not Android evidence**. Real Android 35 images at 360/390 in both themes and owner review are required before visual PASS.
+**Owner decision: APPROVED FOR IMPLEMENTATION in the current conversation.** The scoped implementation is in `web/app.mjs` and `web/style.css`: empty History gets the approved card and action hierarchy; the native period selector keeps its function with an inset chevron, the five bottom actions remain, and populated History keeps its previous footer. Local browser renderings were captured at 360/390 in both themes and visually inspected; they are not committed source assets. Browser interactions verified period change, export open/close, closure navigation, and a saved populated slot. `npm test` and syntax/diff checks passed. These browser images are **not Android evidence**.
+
+## Implemented Android 35 evidence
+
+The implementation is source SHA `9506c68474279163a45f7e6b78b7effe75065ea8` in [CI run #40506733392](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40506733392), [artifact #12735759862](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40506733392/artifacts/12735759862). Its real Android captures are `ui-after/00-empty-history-{360,390}-{dark,light}.png`. All four were visually inspected and shown to the owner alongside the matched earlier Android baseline captures; the owner verdict on the implemented build is pending. **Visual status: NOT VERIFIED; no design PASS yet.**
+
+The independent Android UI matrix, action layout, repeated XLSX import, and same-temporary-signer transfer upgrade gates passed on this SHA. The full CI run failed due the historical `native_edit_labels` diagnostic (blank UiAutomator EditText `content-desc`) and `large_font_form` 200% label clipping. These failures are preserved as FAIL and are not evidence for or against the visual design. A real owner-signed upgrade is still NOT RUN. Local review PNGs in `design/review/` are untracked and are not part of the submitted implementation.
