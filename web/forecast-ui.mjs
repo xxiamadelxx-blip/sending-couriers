@@ -43,19 +43,30 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     let plan;try{plan=planDay(f,date);}catch(error){if(!/Ночная работа пересекает следующий день/.test(error.message))throw error;plan={};}
     const slot=own?.slotMin??f.weekConfig?.slotMin??plan.slotMin??plan.accountedMin??840;
     const work=own?.workingMin??f.weekConfig?.workingMin??plan.workingMin??480;
-    shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><p class="forecast-band" id="simpleRange"></p></section>
+    shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><div class="forecast-band forecast-insufficient" id="simpleRange" role="status"></div></section>
       <section class="detail-card forecast-simple-plan"><h2>Моё время</h2>${durationField('todaySlotHours','Слот',slot)}${durationField('todayWorkHours','Из них буду работать',work)}<p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
       <button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
+    // Approved visual text only. Keep both inputs, their original IDs and
+    // accessible control names, the 15-minute steps and persistence unchanged.
+    const slotCaption=$('label[for="todaySlotHours"]');
+    if(slotCaption)slotCaption.textContent='Полный слот';
     let saveTimer,dirty=false;
     const read=()=>{const pair=readPair('todayWorkHours','todaySlotHours');if(pair.slotMin==null||pair.workingMin==null)throw new Error('Укажите длительность слота и рабочее время.');return {...pair,intervals:[],precision:'total',mode:'simple'};};
     const preview=()=>{
       const pair=read(),result=predict(data(),date,planDay(data(),date,{[date]:pair}));
-      const count=$('#simpleCount');
-      count.classList.toggle('is-unknown',result.central==null);
-      count.innerHTML=result.central==null?'—':`${result.central}<span> заказов</span>`;
-      if(result.central==null)count.setAttribute('aria-label','Прогноз заказов неизвестен');
+      const count=$('#simpleCount'),band=$('#simpleRange');
+      const unknown=result.central==null;
+      count.hidden=unknown;
+      count.classList.toggle('is-unknown',unknown);
+      count.innerHTML=unknown?'—':`${result.central}<span> заказов</span>`;
+      if(unknown)count.setAttribute('aria-label','Прогноз заказов неизвестен');
       else count.removeAttribute('aria-label');
-      $('#simpleRange').textContent=result.central==null?(result.preparing?(modelFailure?'Не удалось рассчитать прогноз. Откройте экран ещё раз.':'Готовим прогноз…'):'Пока мало данных о рабочем времени'):`Возможный диапазон: ${result.lower}–${result.upper}`;
+      band.classList.toggle('forecast-insufficient',unknown);
+      if(unknown){
+        const title=result.preparing?'Готовим прогноз…':modelFailure?'Нет прогноза':'Пока мало данных';
+        const detail=result.preparing?'Расчёт по истории смен':modelFailure?'Не удалось рассчитать прогноз. Откройте экран ещё раз.':'Прогноз появится после накопления истории смен';
+        band.innerHTML=`<span class="forecast-insufficient-mark" aria-hidden="true"></span><span class="forecast-insufficient-copy"><strong>${esc(title)}</strong><small>${esc(detail)}</small></span>`;
+      }else band.textContent=`Возможный диапазон: ${result.lower}–${result.upper}`;
       $('#forecastError').hidden=true;
       return pair;
     };
