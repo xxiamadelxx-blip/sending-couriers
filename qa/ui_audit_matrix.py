@@ -175,11 +175,11 @@ def main():
         device.tap_node('Экспорт для ChatGPT')
         device.wait_node('Резервная копия JSON')
         opened = capture('export-dialog-360-dark')
-        for action in ('Поделиться файлом', 'Сохранить файл', 'Резервная копия JSON', 'Закрыть'):
+        for action in ('Поделиться отчётом', 'Сохранить отчёт', 'Резервная копия JSON', 'Закрыть'):
             assert device.find_node(opened, action) is not None, f'Export action missing: {action}'
         device.tap_node('Закрыть')
         closed = device.dump('export-dialog-closed')
-        assert device.find_node(closed, 'Сохранить файл') is None, 'Export modal remained open'
+        assert device.find_node(closed, 'Сохранить отчёт') is None, 'Export modal remained open'
         assert device.find_node(closed, 'Главная') is not None, 'Export modal did not restore the home screen'
     if args.phase == 'after' and args.focus != 'content':
         device.tap_node('Прогноз')
@@ -218,6 +218,14 @@ def main():
             theme(mode)
             suffix = f'{width}-{mode}'
             root = capture(f'home-{suffix}')
+            if args.phase == 'after' and args.focus == 'full' and suffix != '360-dark':
+                device.tap_node('Экспорт для ChatGPT')
+                device.wait_node('Резервная копия JSON')
+                opened = capture(f'export-dialog-{suffix}')
+                for action in ('Поделиться отчётом', 'Сохранить отчёт',
+                               'Резервная копия JSON', 'Закрыть'):
+                    assert device.find_node(opened, action) is not None, f'Export action missing: {action}'
+                device.tap_node('Закрыть')
             period_choice = device.find_node(root, 'Выбрать расчётный период')
             pb = list(map(int, re.findall(r'\d+', period_choice.get('bounds', '')))) if period_choice is not None else []
             assert len(pb) == 4 and pb[2] > pb[0] and pb[3]-pb[1] >= 144, (

@@ -157,6 +157,10 @@ function drawPaceGauge(pace, target, met) {
 function periods() {
   return [...new Set([selectedPeriod, periodFor(today()).id, ...state.entries.map(e => e.periodId), ...Object.keys(state.closures), ...state.settings.paymentRules.map(r => periodFor(r.effectivePeriodStart).id)])].sort().reverse();
 }
+function openExportDialog() {
+  $('#exportPeriodLabel').textContent = `ОТЧЁТ · ${periodLabel(selectedPeriod)}`;
+  $('#exportDialog').showModal();
+}
 function navigation() {
   return `<div class="period-navigation"><button class="period-arrow" id="previousPeriod" aria-label="Предыдущий период" type="button">${icon['chevron-left']}</button><select id="periodPicker" class="period-select" aria-label="Расчётный период">${periods().map(id => `<option value="${id}" ${id === selectedPeriod ? 'selected' : ''}>${esc(periodLabel(id))}</option>`).join('')}</select><button class="period-arrow" id="nextPeriod" aria-label="Следующий период" type="button">${icons.chevron}</button></div>`;
 }
@@ -228,7 +232,7 @@ function summary() {
   bottomNav('summary'); drawPaceGauge(s.pace, s.terms.basePace,s.paymentConditions.paceMet);
   $('#homeEmptyAdd')?.addEventListener('click',()=>form());
   $('#choosePeriod').addEventListener('click', history);
-  $('#export').addEventListener('click', () => $('#exportDialog').showModal()); resetScroll();
+  $('#export').addEventListener('click', openExportDialog); resetScroll();
   $('#refreshWeather')?.addEventListener('click',()=>refreshWeather(true));refreshWeather();
 }
 
@@ -255,7 +259,7 @@ function periodDetails() {
     try { persist(updateSettings(state, { premiumCycleStart: $('#premiumCycleStart').value })); periodDetails(); notify('Дата сохранена'); }
     catch (error) { $('#settingsError').textContent = error.message; $('#settingsError').hidden = false; feedback('error'); }
   });
-  $('#periodExport').addEventListener('click', () => $('#exportDialog').showModal());
+  $('#periodExport').addEventListener('click', openExportDialog);
   $('#periodHistory').addEventListener('click', history); resetScroll();
 }
 function settings() {
@@ -524,7 +528,7 @@ function history() {
   bindNavigation(history);
   document.querySelectorAll('.edit-day').forEach(button => button.addEventListener('click', () => form(button.dataset.entry)));
   
-  $('#historyExport').addEventListener('click', () => $('#exportDialog').showModal());
+  $('#historyExport').addEventListener('click', openExportDialog);
   $('#closePeriod').addEventListener('click', closure);
   $('#importData').addEventListener('click', () => {
     if (Native) Native.importData(); else $('#importInput').click();

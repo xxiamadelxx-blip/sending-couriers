@@ -18,10 +18,15 @@
   <nav id="bottomNav" class="bottom-nav" aria-label="Основная навигация" hidden></nav>
   <div id="toast" role="status" class="toast" hidden></div>
   <dialog id="exportDialog" aria-labelledby="exportTitle">
+    <div id="exportPeriodLabel" class="export-dialog-eyebrow"></div>
     <h2 id="exportTitle">Экспорт для ChatGPT</h2>
-    <button id="shareReport" class="button primary" type="button">Поделиться файлом</button>
-    <button id="saveReport" class="button outline" type="button">Сохранить файл</button>
-    <button id="backupReport" class="button quiet" type="button">Резервная копия JSON</button>
+    <p class="export-dialog-description">Отчёт по выбранному периоду: отправьте файл или сохраните его на устройстве.</p>
+    <button id="shareReport" class="button primary" type="button">Поделиться отчётом</button>
+    <button id="saveReport" class="button outline" type="button">Сохранить отчёт</button>
+    <div class="export-dialog-backup">
+      <div class="export-dialog-section-label">КОПИЯ ДАННЫХ</div>
+      <button id="backupReport" class="button export-backup-button" type="button"><span><strong>Резервная копия JSON</strong><small>Все записи для восстановления</small></span></button>
+    </div>
     <button id="closeExport" class="button quiet" type="button">Закрыть</button>
   </dialog>
   <dialog id="importDialog" aria-labelledby="importTitle">
