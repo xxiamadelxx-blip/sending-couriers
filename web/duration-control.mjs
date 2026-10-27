@@ -12,7 +12,7 @@ export function syncDuration(root,id){
   slider.value=min??0;slider.setAttribute('aria-valuetext',spoken(min));slider.disabled=input.disabled;
   // Presentation only: the approved Forecast screen colors the elapsed track.
   // The numeric value, snapping, and gestures remain unchanged.
-  slider.style.setProperty('--duration-fill',`${Math.max(0,Math.min(100,(min??0)/1440*100))}%`);
+  slider.style?.setProperty?.('--duration-fill',`${Math.max(0,Math.min(100,(min??0)/1440*100))}%`);
   control.classList.toggle('duration-unknown',min==null);control.classList.toggle('duration-disabled',input.disabled);
   control.querySelectorAll('button').forEach(b=>b.disabled=input.disabled);
 }
