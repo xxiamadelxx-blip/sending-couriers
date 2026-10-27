@@ -1201,3 +1201,157 @@ dialog .button{margin:8px 0 0}
 :root[data-theme="light"] .period-page .cycle-settings #configureCycle svg{
   color:inherit;
 }
+
+
+/* Owner-approved Forecast SIMPLE presentation / 27 Oct 2026.
+   IMPORTANT: no changes to bottom-nav icons, button positioning, Home pace
+   gauge, any model inputs, persistence or 15-minute slider semantics.
+   This reproduces the approved content area, not the mockup's fake nav. */
+.forecast-page .forecast-simple-hero{
+  padding:16px 17px 17px;
+  margin:8px 0 13px;
+}
+.forecast-page .forecast-simple-hero .forecast-eyebrow{
+  margin:0 0 5px;
+  font-size:12px;
+  line-height:1.4;
+}
+.forecast-page .forecast-simple-hero h2{
+  margin:0 0 10px;
+  padding-bottom:11px;
+  border-bottom:1px solid #45515b;
+  font-size:12px;
+  line-height:1.3;
+  font-weight:850;
+}
+.forecast-page .forecast-simple-hero .forecast-number{
+  margin:0;
+  line-height:1.15;
+}
+.forecast-page .forecast-simple-hero .forecast-number[hidden]{display:none!important}
+.forecast-page .forecast-simple-hero .forecast-band.forecast-insufficient{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin:0;
+  min-height:39px;
+  font-size:13px;
+  line-height:1.35;
+}
+.forecast-page .forecast-insufficient-mark{
+  flex:0 0 auto;
+  display:block;
+  width:7px;
+  height:7px;
+  margin-top:5px;
+  background:var(--signal-panel);
+}
+.forecast-page .forecast-insufficient-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+.forecast-page .forecast-insufficient-copy strong{
+  color:var(--console-hero-ink);
+  font-size:14px;
+  line-height:1.25;
+  font-weight:750;
+}
+.forecast-page .forecast-insufficient-copy small{
+  color:var(--console-label);
+  font-size:12px;
+  line-height:1.35;
+}
+.forecast-page .forecast-simple-plan{
+  padding:17px 15px 15px;
+  margin:0 0 12px;
+}
+.forecast-page .forecast-simple-plan h2{
+  font-size:21px;
+  font-weight:850;
+  margin:0 0 6px;
+}
+.forecast-page .forecast-simple-plan .duration-control{
+  margin:6px 0!important;
+  padding:10px 0 12px;
+}
+.forecast-page .forecast-simple-plan .duration-control+.duration-control{
+  margin:10px 0 0!important;
+  padding-top:14px;
+  border-top:1px solid var(--line);
+}
+.forecast-page .forecast-simple-plan .duration-heading{gap:8px}
+.forecast-page .forecast-simple-plan .duration-heading label{
+  color:var(--ink);
+  margin:0;
+  font-size:15px;
+  line-height:1.3;
+  font-weight:700;
+}
+.forecast-page .forecast-simple-plan .duration-value{
+  gap:5px;
+  align-items:baseline;
+}
+.forecast-page .forecast-simple-plan .duration-value input{
+  width:65px;
+  max-width:25vw;
+  min-height:46px;
+  height:46px;
+  padding:5px 2px;
+  border:0!important;
+  border-bottom:2px solid transparent!important;
+  border-radius:0!important;
+  background:transparent!important;
+  text-align:right;
+  color:var(--ink);
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:27px;
+  line-height:1.15;
+  font-weight:850;
+  font-variant-numeric:tabular-nums;
+  box-shadow:none;
+}
+.forecast-page .forecast-simple-plan .duration-value input:focus{
+  border-bottom-color:var(--teal)!important;
+  outline:none;
+}
+.forecast-page .forecast-simple-plan .duration-value>span{
+  font-size:14px;
+  font-weight:600;
+}
+.forecast-page .forecast-simple-plan .duration-track{
+  margin-top:3px;
+  gap:11px;
+}
+.forecast-page .forecast-simple-plan .duration-track button{
+  border-radius:3px!important;
+  font-size:26px;
+  font-weight:650;
+}
+.forecast-page .forecast-simple-plan .duration-slider::-webkit-slider-runnable-track{
+  height:6px;
+  border-radius:4px;
+  background:linear-gradient(to right,
+    var(--teal) 0%,
+    var(--teal) var(--duration-fill,0%),
+    var(--line) var(--duration-fill,0%),
+    var(--line) 100%);
+}
+.forecast-page .forecast-simple-plan .duration-slider::-webkit-slider-thumb{
+  width:28px;
+  height:28px;
+  margin-top:-11px;
+  border:0;
+  border-radius:50%;
+  background:var(--teal);
+  box-shadow:none;
+}
+.forecast-page .forecast-import-button{
+  margin-top:8px;
+}
+@media(max-width:374px){
+  .forecast-page .forecast-simple-plan{padding:16px 13px 14px}
+  .forecast-page .forecast-simple-plan .duration-heading label{font-size:14px}
+  .forecast-page .forecast-simple-plan .duration-track{gap:7px}
+}
