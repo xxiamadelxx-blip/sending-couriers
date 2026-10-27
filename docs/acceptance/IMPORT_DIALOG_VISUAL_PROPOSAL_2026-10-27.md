@@ -1,6 +1,6 @@
 # JSON import dialog visual proposal · 27 October 2026
 
-**Status: OWNER APPROVED ILLUSTRATION; SCOPED IMPLEMENTATION CODED; ANDROID VISUAL REVIEW PENDING.** The owner explicitly replied «Обобряю». The current and proposed images here are browser renderings with seven synthetic entries. They are not Android evidence or an implemented design PASS.
+**Status: SCOPED ANDROID VISUAL PASS, OWNER APPROVED.** The owner approved the illustration with «Обобряю», then approved the four implemented Android images with «Да да да ты мне эти скриншоты уже четвертый раз показываешь». This acceptance covers only the JSON import dialog at 360/390 dp in dark/light themes with the synthetic 7/7/0 preview. The repeated display of identical images was unnecessary; do not show them again unless the implementation changes or the owner asks.
 
 ## Reviewed state
 
@@ -22,6 +22,6 @@ Browser renderings of the implementation were captured at 360/390 in both themes
 
 The exact source head `6974964935094019d5734c5e21761f4ae594fc4c` was tested on Android 35 in [run #40598371310](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40598371310), artifact [#12778507487](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40598371310/artifacts/12778507487). GitHub checked out merge SHA `44f09bd684d3611f8d9e558cf61cc87f5e48217f`; the source tree for this dialog is the head above. The native captures are `ui-after/import-dialog-{360,390}-{dark,light}.png` and matching XML. Local copies are `design/review/import-dialog-android-after-{360,390}-{dark,light}.png` and remain untracked.
 
-All four Android images were visually inspected against the approved browser illustration: the title, 7/7/0 preview cards, merge explanation, separate 12-week notice, and Import/Cancel actions are visible and readable, with no clipping in either width or theme. These observations are an independent visual review, not owner acceptance. The owner verdict on the implemented Android dialog is **PENDING**.
+All four Android images were visually inspected against the approved browser illustration: the title, 7/7/0 preview cards, merge explanation, separate 12-week notice, and Import/Cancel actions are visible and readable, with no clipping in either width or theme. The owner explicitly accepted the implemented Android appearance. **Scoped visual verdict: PASS.** The previous state was captured in browser, not as Android screenshots, so the comparison to the previous dialog is limited to that browser baseline.
 
 The scoped native `ui_matrix`, 36-screen action layout, empty JSON backup before/after restart, repeated XLSX import, and temporary-signer transfer upgrade all passed. The overall CI remains **FAIL** due the previously known `native_edit_labels` and `large_font_form` gates. Neither an owner-signed APK upgrade nor TalkBack speech was tested; the overall release remains **NOT READY**.
