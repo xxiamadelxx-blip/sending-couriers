@@ -12,12 +12,12 @@
 - Replace dashed box with a slate, coral left-rail empty-state panel and clear headline. Keep all labels factual, no synthetic forecast or earnings.
 - Add **Добавить слот** shortcut as a proposed new prominent CTA, which would need to reuse the existing `form()` action. This is **not currently implemented** and owner approval is explicitly required.
 - Visually group the three pre-existing actions `Экспорт для ChatGPT`, `Импорт JSON`, and `Закрытие периода` as readable rows with subtitles. Preserve their original semantics. No new business behaviors are approved.
-- Retain the original status bar, header, **period picker** and fixed bottom navigation **pixel-identically** in the illustration. The early first draft was **REJECTED BEFORE PRESENTATION** because it mistakenly obscured the period picker and rendered broken pseudo-icons. The corrected comparison uses text, vector chevrons, no missing glyphs. This is only a proposal, not native implementation.
+- Retain the original status bar, header, **period picker** and fixed bottom navigation **pixel-identically** in the illustration. The early first draft was **REJECTED BEFORE PRESENTATION** because it mistakenly obscured the period picker and rendered broken pseudo-icons. The corrected image uses text, drawn vector chevrons and readable icon outlines, without broken glyphs. This is only a proposal, not native implementation.
 
 ## Review artifacts in the current conversation
-- `/mnt/data/courier-empty-history-review/history-empty-before-proposal.png`: two-column comparison, real native screenshot on left and clearly labeled proposed image on right.
+- `/mnt/data/courier-empty-history-review/history-empty-current-android.png`: original Android native screenshot shown separately from the proposed PNG.
 - `/mnt/data/courier-empty-history-review/history-empty-current-android.png`: real Android original.
-- `/mnt/data/courier-empty-history-review/history-empty-concept-fixed.png`: clearly non-implemented concept. Header/period picker and lower nav crop verified identical to source bytes.
+- `/mnt/data/history-empty-proposed-corrected.png`: clearly non-implemented concept. Header/period picker and lower nav crop verified identical to source bytes.
 - No repository attachment URL is claimed for the local PNGs. Recreate from exact source screenshot if session is lost.
 
 ## Previous milestone: approved Forecast
