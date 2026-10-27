@@ -59,7 +59,7 @@ def choose_workbook():
     ready = wait_node("История загружена: 1 дней", 20)[0]
     assert find_node(ready, "Прогноз") is not None, "Forecast did not return after XLSX import"
     assert find_node(ready, "Не удалось прочитать файл") is None
-    wait_node("Пока мало данных о рабочем времени", 25)
+    wait_node("Пока мало данных", 25)  # Same insufficient-history state, new approved wording.
     screenshot("xlsx-after-import")
 
 
