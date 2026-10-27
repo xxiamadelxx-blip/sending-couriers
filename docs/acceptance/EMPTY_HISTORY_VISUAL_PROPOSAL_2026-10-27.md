@@ -1,6 +1,6 @@
 # Empty History visual review, owner corrections · 27 October 2026
 
-**STATUS: VISUAL PROPOSAL v3, NOT APPROVED, NOT IMPLEMENTED.** No production app changes are authorized. This document supersedes misleading earlier descriptions of the v1/v2 sketches.
+**CURRENT STATUS: REVISED CONCEPT APPROVED FOR IMPLEMENTATION; LOCAL UI CODED; ANDROID VISUAL REVIEW PENDING.** The older v1/v2 sketches were rejected and the v3 draft was superseded by the reviewed illustration. Owner approval of that illustration authorizes this scoped implementation, not a visual PASS for the Android build.
 
 ## What owner rejected
 
@@ -22,6 +22,12 @@
 
 ## Scope and next stage
 
-The user must review the **ordinary PNG itself** before any production implementation. If they approve it, edit only empty History content/spacing and selector-chevron inset to match v3, preserving actions, data, screen destinations and complete bottom bar. Then capture real Android screenshots at 360/390 in dark/light themes and show them before asking for owner visual PASS.
+The owner reviewed the revised **ordinary PNG** and approved implementation. The scoped change preserves actions, data, screen destinations and the complete bottom bar. Capture real Android screenshots at 360/390 in dark/light themes and show them before asking for owner visual PASS.
 
 The next independently available design step is visual review of import/export dialogs. Do not change those dialogs before another owner-approved visual proposal. Work on tests and normal app functionality remains separate from design acceptance. The overall release is NOT READY.
+
+## Current review artifact · 27 October 2026
+
+The actual Android empty-History baseline is in the [Android35 run artifact #12716949585](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40466490750/artifacts/12716949585), `ui-after/00-empty-history-390-dark.png`. A revised illustration generated from that Android screenshot was shown to the owner in this conversation; it is **not** a capture of an implemented APK and its unchanged-looking header, selector and navigation must not be treated as pixel-identical source regions. It keeps the existing period picker and central `+`, introduces no duplicate add action, and aligns the two section labels with the empty-card text. Action titles and secondary labels are visually centered between side icons.
+
+**Owner decision: APPROVED FOR IMPLEMENTATION in the current conversation.** The scoped implementation is in `web/app.mjs` and `web/style.css`: empty History gets the approved card and action hierarchy; the native period selector keeps its function with an inset chevron, the five bottom actions remain, and populated History keeps its previous footer. Local browser renderings were captured at 360/390 in both themes and visually inspected; they are not committed source assets. Browser interactions verified period change, export open/close, closure navigation, and a saved populated slot. `npm test` and syntax/diff checks passed. These browser images are **not Android evidence**. Real Android 35 images at 360/390 in both themes and owner review are required before visual PASS.

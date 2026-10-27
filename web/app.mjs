@@ -495,10 +495,11 @@ function dayCaption(e) {
 }
 
 function history() {
-  app.className = '';
   view = 'history'; editingId = null;
   bottomNav('history');
   const s = calculate(state, selectedPeriod);
+  const empty = s.entries.length === 0;
+  app.className = empty ? 'history-empty' : '';
   const card = (e, title) => {
     const readingHtml = `<div class="day-meters"><div class="day-meter"><strong>${hoursText(e.dailyHours)}<span> ч</span></strong><small>Отработано</small></div><div class="day-meter"><strong>${e.dailyOrders ?? '—'}</strong><small>Заказов</small></div></div><p class="day-delta" ${!dayCaption(e) && e.dailyHours != null && e.dailyOrders != null ? 'hidden' : ''}>${esc(dayCaption(e))}${e.dailyHours == null ? ' · часы не записаны' : ''}${e.dailyOrders == null ? ' · заказы не записаны' : ''}</p>`;
     return `<article class="day-card"><div class="day-head"><h2>${esc(title)}</h2><button class="edit-day" data-date="${e.date}" data-entry="${esc(e.id)}" type="button" aria-label="Редактировать ${esc(title)}">Изменить</button></div>${readingHtml}<div class="day-money"><div class="day-row"><span>Вознаграждение</span>${amount(e.reward)}</div><div class="day-row"><span>Чаевые</span>${amount(e.tips)}</div><div class="day-row"><span>Отдельные бонусы</span>${amount(e.separateBonus)}</div>${e.displayedNet != null ? `<div class="day-row"><span>Итог на экране</span>${amount(e.displayedNet)}</div>` : ''}</div>${e.note ? `<p class="day-note">${esc(e.note)}</p>` : ''}</article>`;
@@ -508,9 +509,17 @@ function history() {
     if (d.entries.length === 1) return card(d.entries[0], formatDate(date, true));
     return `<section class="day-group"><h2>${esc(formatDate(date, true))}</h2><div class="day-summary"><p class="day-summary-counters">${hoursText(d.hours)} ч · ${d.orders ?? '—'} заказов</p><strong class="day-summary-reward">${esc(money(d.paidReward))}</strong></div><div class="slot-list">${d.entries.map((e, i) => card(e, `Слот ${i + 1}`)).reverse().join('')}</div></section>`;
   });
-  app.innerHTML = `${heading('История')}${navigation()}<div class="history-list">${groups.join('')}</div>${s.entries.length ? '' : '<div class="empty-history"><h2>Пока нет записей</h2><p>Добавьте часы, заказы и выплаты за слот.</p></div>'}
+  const emptyFooter = `<div class="history-footer history-empty-footer">
+      <p class="history-section-label">Работа с данными</p>
+      <button class="button history-action" id="historyExport" type="button" aria-label="Экспорт для ChatGPT"><span class="history-action-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Экспорт для ChatGPT</strong><small>Отчёт о выбранном периоде</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
+      <button class="button history-action" id="importData" type="button" aria-label="Импорт JSON"><span class="history-action-icon history-import-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Импорт JSON</strong><small>Восстановить записи из копии</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
+      <p class="history-section-label history-period-label">Действие с периодом</p>
+      <button class="button history-action history-period-action" id="closePeriod" type="button" aria-label="${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}"><span class="history-action-icon" aria-hidden="true">${icon.calendar}</span><span class="history-action-copy"><strong>${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</strong></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
+    </div>`;
+  const filledFooter = `<div class="history-footer"><button class="button quiet export-action" id="historyExport" type="button">${icons.share}Экспорт для ChatGPT</button><button class="button quiet" id="closePeriod" type="button">${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</button><button class="button quiet" id="importData" type="button">Импорт JSON</button></div>`;
+  app.innerHTML = `${heading('История')}${navigation()}<div class="history-list">${groups.join('')}</div>${empty ? '<section class="empty-history"><h2>Пока нет записей</h2><p>Добавьте часы, заказы и выплаты за слот через «+» внизу экрана.</p></section>' : ''}
     ${s.closure ? `<p class="closure-fact">Период закрыт. Финальная доплата: ${esc(money(s.closure.finalAdjustment))}</p>` : ''}
-    <div class="history-footer"><button class="button quiet export-action" id="historyExport" type="button">${icons.share}Экспорт для ChatGPT</button><button class="button quiet" id="closePeriod" type="button">${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</button><button class="button quiet" id="importData" type="button">Импорт JSON</button><input type="file" id="importInput" accept=".json,application/json" hidden></div>`;
+    ${empty ? emptyFooter : filledFooter}<input type="file" id="importInput" accept=".json,application/json" hidden>`;
   $('#goBack').addEventListener('click', summary);
   bindNavigation(history);
   document.querySelectorAll('.edit-day').forEach(button => button.addEventListener('click', () => form(button.dataset.entry)));

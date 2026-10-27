@@ -1365,3 +1365,96 @@ dialog .button{margin:8px 0 0}
   font-size:12px;
   line-height:1.4;
 }
+
+/* Owner-approved empty History proposal, 27 Oct 2026. Keep the period
+   controls and bottom navigation; only the empty content uses these cards. */
+.history-empty .period-navigation{position:relative}
+.history-empty .period-select{
+  appearance:none;
+  -webkit-appearance:none;
+  padding-right:36px;
+}
+.history-empty .period-navigation::after{
+  content:"";
+  position:absolute;
+  right:70px;
+  top:18px;
+  width:8px;
+  height:8px;
+  border-right:1.5px solid var(--ink);
+  border-bottom:1.5px solid var(--ink);
+  transform:rotate(45deg);
+  pointer-events:none;
+}
+.history-empty .empty-history{
+  margin-top:6px;
+  padding:20px 20px 19px;
+  text-align:left;
+  border:1px solid var(--line);
+  border-left:5px solid var(--teal);
+  border-radius:3px;
+  background:var(--console-hero);
+  color:var(--console-hero-ink);
+}
+.history-empty .empty-history h2{
+  margin:0 0 9px;
+  font-size:22px;
+  line-height:1.2;
+  font-weight:850;
+  letter-spacing:-.03em;
+}
+.history-empty .empty-history p{
+  color:var(--console-label);
+  font-size:14px;
+  line-height:1.45;
+}
+.history-empty .history-empty-footer{
+  display:grid;
+  gap:8px;
+  margin-top:19px;
+}
+.history-empty .history-section-label{
+  margin:0 0 1px;
+  padding-left:26px;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.4;
+  font-weight:800;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+}
+.history-empty .history-period-label{margin-top:14px}
+.history-empty .history-empty-footer .history-action{
+  display:grid;
+  grid-template-columns:32px minmax(0,1fr) 32px;
+  align-items:center;
+  width:100%;
+  min-height:61px;
+  margin:0;
+  padding:11px 15px;
+  border:1px solid var(--line);
+  border-radius:3px;
+  background:var(--console-hero);
+  color:var(--console-hero-ink);
+}
+.history-empty .history-action-icon,
+.history-empty .history-action-chevron{display:flex;align-items:center;color:var(--teal)}
+.history-empty .history-action-icon svg{width:23px;height:23px}
+.history-empty .history-import-icon svg{transform:scaleX(-1)}
+.history-empty .history-action-chevron{justify-content:flex-end}
+.history-empty .history-action-chevron svg{width:20px;height:20px}
+.history-empty .history-action-copy{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  min-width:0;
+  text-align:center;
+}
+.history-empty .history-action-copy strong{font-size:16px;line-height:1.25;font-weight:800}
+.history-empty .history-action-copy small{margin-top:3px;color:var(--console-label);font-size:12px;line-height:1.25;font-weight:400}
+.history-empty .history-empty-footer .history-period-action{
+  min-height:54px;
+  background:transparent;
+  color:var(--ink);
+}
+:root[data-theme="light"] .history-empty .history-period-action .history-action-copy strong{color:var(--ink)}
