@@ -12,7 +12,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 SCREENS = ('home-390-dark', 'forecast-390-dark', 'history-390-dark',
-           'form-390-dark', 'settings-main-390-dark', 'export-dialog-360-dark')
+           'form-390-dark', 'settings-main-390-dark', 'export-dialog-360-dark',
+           'import-dialog-360-dark')
 BOTTOM = ('Главная', 'Период', 'Добавить слот', 'Прогноз', 'Настройки')
 
 
@@ -108,6 +109,8 @@ def inspect(directory):
     required('settings-main-390-dark', 'Сохранить условия')
     for label in ('Поделиться отчётом', 'Сохранить отчёт', 'Резервная копия JSON', 'Закрыть'):
         required('export-dialog-360-dark', label)
+    for label in ('Импортировать', 'Отмена'):
+        required('import-dialog-360-dark', label)
     # UIAutomator does not expose the complete HTML label-for association.
     form_labels = ('Часы за слот', 'Заказы за слот', 'Вознаграждение')
     present = {name(n) for n in snapshots['form-390-dark'].iter('node')}

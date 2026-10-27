@@ -85,6 +85,36 @@ def tap_payment_tab(label, previous):
     device.tap_node(label)
 
 
+def preview_json_import(suffix):
+    """Open a synthetic JSON file through Android DocumentsUI, then cancel."""
+    name = 'Courier-QA-import-preview.json'
+    device.tap_node('Импорт JSON')
+    time.sleep(2)
+    root = device.dump('json-import-picker-current')
+    if device.find_node(root, name) is None:
+        destination = device.find_node(root, 'Downloads') or device.find_node(root, 'Загрузки')
+        if destination is None:
+            menu = next((n for n in root.iter('node') if n.get('content-desc', '')
+                         in ('Show roots', 'Показать меню навигации')), None)
+            assert menu is not None, 'JSON picker has no Downloads or root menu'
+            bounds = list(map(int, re.findall(r'\d+', menu.get('bounds', ''))))
+            device.adb('shell', 'input', 'tap', str((bounds[0]+bounds[2])//2),
+                       str((bounds[1]+bounds[3])//2))
+            root = device.dump('json-import-picker-roots')
+            destination = device.find_node(root, 'Downloads') or device.find_node(root, 'Загрузки')
+            assert destination is not None, 'JSON picker Downloads root missing'
+        bounds = list(map(int, re.findall(r'\d+', destination.get('bounds', ''))))
+        device.adb('shell', 'input', 'tap', str((bounds[0]+bounds[2])//2),
+                   str((bounds[1]+bounds[3])//2))
+    device.tap_node(name)
+    device.wait_node('Импорт данных', 30)
+    opened = capture(f'import-dialog-{suffix}')
+    for label in ('Импортировать', 'Отмена'):
+        assert device.find_node(opened, label) is not None, f'Import action missing: {label}'
+    device.tap_node('Отмена')
+    device.wait_node('Пока нет записей', 20)
+
+
 def main():
     assert args.apk.is_file()
     # This dedicated CI emulator contains only facts created by these QA scripts.
@@ -96,6 +126,21 @@ def main():
     device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
     device.wait_home(45)
     if args.phase == 'after' and args.focus == 'full':
+        name = 'Courier-QA-import-preview.json'
+        fixture = out / name
+        fixture.write_text(json.dumps({
+            'schemaVersion': 4,
+            'entries': [{'id': f'qa-import-{i}', 'date': f'2026-10-{16+i:02d}',
+                         'dailyHours': 4, 'dailyOrders': 8, 'reward': 1200}
+                        for i in range(7)],
+            'closures': {}
+        }))
+        device_path = '/sdcard/Download/' + name
+        device.adb('push', str(fixture), device_path)
+        fixture.unlink()
+        device.adb('shell', 'am', 'broadcast', '-a',
+                   'android.intent.action.MEDIA_SCANNER_SCAN_FILE',
+                   '-d', 'file://' + device_path)
         # Independent native empty-state acceptance: all width/theme layouts
         # before creating any synthetic facts. An abandoned form must remain
         # empty after history navigation and after Android force-stop.
@@ -121,6 +166,7 @@ def main():
                 device.tap_node('Записи периода')
                 device.wait_node('Пока нет записей', 20)
                 assert_empty_history(capture(f'00-empty-history-{suffix}'))
+                preview_json_import(suffix)
                 device.tap_node('Главная')
                 device.wait_node('Смена ещё не записана', 20)
         # The XML screen alone cannot prove an empty native database. Save the

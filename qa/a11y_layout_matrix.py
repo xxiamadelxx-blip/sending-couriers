@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent real Android35 UiAutomator XML matrix, NOT TalkBack speech QA.
 
-Seven native surfaces and export dialog × two widths × two themes. Editable fields
+Seven native surfaces and both file dialogs × two widths × two themes. Editable fields
 are NOT required to have content-desc: Android recommends hint/labelFor and
 warns that editable contentDescription can interfere with text navigation.
 """
@@ -15,7 +15,7 @@ SURFACES = ('home', 'forecast', 'history', 'form', 'period',
             'settings-main', 'settings-more')
 WIDTHS_DP = (360, 390)
 THEMES = ('dark', 'light')
-SCREENS = tuple(f'{s}-{w}-{t}' for s in SURFACES + ('export-dialog',)
+SCREENS = tuple(f'{s}-{w}-{t}' for s in SURFACES + ('export-dialog', 'import-dialog')
                 for w in WIDTHS_DP for t in THEMES)
 NAV = ('Главная', 'Период', 'Добавить слот', 'Прогноз', 'Настройки')
 MIN_PX = 144  # Android emulator 480dpi, 3px/dp: 48dp = 144px
@@ -77,6 +77,8 @@ def inspect_all_layouts(directory):
             required.extend((s, 'Button') for s in (
                 'Поделиться отчётом', 'Сохранить отчёт',
                 'Резервная копия JSON', 'Закрыть'))
+        elif screen.startswith('import-dialog-'):
+            required.extend((s, 'Button') for s in ('Импортировать', 'Отмена'))
         else:
             surface = screen.rsplit('-', 2)[0]
             theme = screen.rsplit('-', 1)[-1]

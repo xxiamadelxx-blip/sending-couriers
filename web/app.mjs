@@ -594,7 +594,13 @@ window.receiveImport = text => {
     const raw = JSON.parse(text);
     const checked = normalizeState(raw);
     pendingImport = raw;
-    $('#importDescription').textContent = `Записей в файле: ${checked.entries.length}; дней: ${new Set(checked.entries.map(e => e.date)).size}; закрытых периодов: ${Object.keys(checked.closures).length}.`;
+    const entriesCount = checked.entries.length;
+    const daysCount = new Set(checked.entries.map(e => e.date)).size;
+    const closuresCount = Object.keys(checked.closures).length;
+    $('#importDescription').textContent = `Записей в файле: ${entriesCount}; дней: ${daysCount}; закрытых периодов: ${closuresCount}.`;
+    $('#importEntriesCount').textContent = entriesCount;
+    $('#importDaysCount').textContent = daysCount;
+    $('#importClosuresCount').textContent = closuresCount;
     $('#importError').hidden = true;
     $('#importDialog').showModal();
   } catch (error) { notify(`Не удалось импортировать: ${error.message}`); }

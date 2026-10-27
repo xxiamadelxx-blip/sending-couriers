@@ -30,12 +30,15 @@
     <button id="closeExport" class="button quiet" type="button">Закрыть</button>
   </dialog>
   <dialog id="importDialog" aria-labelledby="importTitle">
+    <div class="import-eyebrow">ПРОВЕРКА ФАЙЛА</div>
     <h2 id="importTitle">Импорт данных</h2>
-    <p id="importDescription"></p>
-    <p class="hint">Совпадающие идентификаторы записей будут заменены. Другие слоты сохранятся. Другая дата начала 12 недель потребует сначала выбрать нужную дату во вкладке «Период».</p>
+    <p id="importDescription" class="sr-only"></p>
+    <div class="import-stats" aria-hidden="true"><div><strong id="importEntriesCount">—</strong><small>ЗАПИСЕЙ</small></div><div><strong id="importDaysCount">—</strong><small>ДНЕЙ</small></div><div><strong id="importClosuresCount">—</strong><small>ЗАКРЫТЫХ<br>ПЕРИОДОВ</small></div></div>
+    <p class="import-merge">Совпадающие записи заменятся. Остальные слоты сохранятся.</p>
+    <div class="import-cycle"><strong>НАЧАЛО 12 НЕДЕЛЬ</strong><span>Если дата в файле отличается, выберите нужную дату во вкладке «Период».</span></div>
     <div id="importError" class="error" role="alert" hidden></div>
     <button id="confirmImport" class="button primary" type="button">Импортировать</button>
-    <button id="cancelImport" class="button quiet" type="button">Отмена</button>
+    <button id="cancelImport" class="button outline" type="button">Отмена</button>
   </dialog>
 </body>
 </html>

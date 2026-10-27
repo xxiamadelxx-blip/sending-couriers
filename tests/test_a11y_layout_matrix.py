@@ -12,13 +12,13 @@ def nodes(*items):
 
 
 class NativeLayoutMatrixTests(unittest.TestCase):
-    def test_eight_surfaces_four_layouts(self):
+    def test_nine_surfaces_four_layouts(self):
         expected = {f'{s}-{w}-{t}' for s in (
             'home', 'forecast', 'history', 'form', 'period',
-            'settings-main', 'settings-more', 'export-dialog')
+            'settings-main', 'settings-more', 'export-dialog', 'import-dialog')
             for w in (360, 390) for t in ('dark', 'light')}
         self.assertEqual(set(SCREENS), expected)
-        self.assertEqual(len(SCREENS), 32)
+        self.assertEqual(len(SCREENS), 36)
 
     def test_sufficient_48dp_target(self):
         root = nodes('<node class="android.widget.Button" clickable="true" '
