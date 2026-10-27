@@ -1,6 +1,6 @@
 # Export dialog visual proposal · 27 October 2026
 
-**Status: OWNER APPROVED ILLUSTRATION; SCOPED IMPLEMENTATION CODED; ANDROID VISUAL REVIEW PENDING.** The owner explicitly replied «Да, реализуйте эскиз». The illustrative previews and browser captures are not Android design evidence or a visual PASS.
+**Status: SCOPED EXPORT DIALOG VISUAL PASS BY OWNER ON REAL ANDROID 35 CAPTURES.** The owner first approved the illustration («Да, реализуйте эскиз»), then approved the implemented Android dialog («Да, окно устраивает»). This does not approve the overall UI-MVP release.
 
 ## Current Android evidence
 
@@ -18,4 +18,8 @@ Two standalone browser-rendered illustrations at 360 CSS px, dark and light, wer
 
 Owner approval of this illustration authorizes only this scoped dialog implementation. The implementation updates `web/index.html`, `web/app.mjs`, and scoped `web/style.css`, keeping the existing file actions, dialog ids, export content, and native share/save path. The period label is populated when the dialog opens. `npm test` passed (20/20), syntax and diff checks passed, and browser captures at 360/390 in both themes were inspected. Browser interaction verified open/close and Markdown/JSON downloads. Browser captures are not Android acceptance evidence.
 
-Capture real Android 35 after images at 360 and 390 dp in both themes, visually inspect against the Android baseline and approved illustration, then ask for a separate owner verdict on the implemented screen. The overall release remains NOT READY.
+## Implemented Android evidence
+
+The final scoped source is `c740651eb6cda9e5d4d04ea760bf69c8dc7b5ebf` in [Android 35 run #40530403006](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40530403006), [artifact #12748480089](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40530403006/artifacts/12748480089). Four real captures, `ui-after/export-dialog-{360,390}-{dark,light}.png`, were visually inspected against the earlier Android dark 360 baseline and approved illustrations and shown to the owner. They are also available locally in the untracked `design/review/` folder. The owner's explicit response after viewing them was «Да, окно устраивает». **Visual status: PASS for this implemented export dialog only.**
+
+The independent Android UI matrix, four-layout named-action audit, repeated XLSX import, and same-temporary-signer transfer upgrade gates passed. Full CI remains FAIL because the historical `native_edit_labels` and `large_font_form` diagnostics failed again. This is not a design verdict. A real owner-signed upgrade remains NOT RUN. The overall release is NOT READY.
