@@ -1,6 +1,6 @@
 # Empty History visual review, owner corrections · 27 October 2026
 
-**CURRENT STATUS: REVISED CONCEPT IMPLEMENTED; REAL ANDROID 35 CAPTURES REVIEWED; OWNER VISUAL VERDICT PENDING.** The older v1/v2 sketches were rejected and the v3 draft was superseded by the reviewed illustration. Owner approval of that illustration authorized this scoped implementation, not a visual PASS for the Android build.
+**CURRENT STATUS: SCOPED EMPTY HISTORY VISUAL PASS BY OWNER ON REAL ANDROID 35 CAPTURES.** The older v1/v2 sketches were rejected and the v3 draft was superseded by the reviewed illustration. The owner approved the implemented empty History after seeing real 360/390 Android screenshots in both themes. This does not approve the overall UI-MVP release.
 
 ## What owner rejected
 
@@ -34,6 +34,6 @@ The actual Android empty-History baseline is in the [Android35 run artifact #127
 
 ## Implemented Android 35 evidence
 
-The implementation is source SHA `9506c68474279163a45f7e6b78b7effe75065ea8` in [CI run #40506733392](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40506733392), [artifact #12735759862](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40506733392/artifacts/12735759862). Its real Android captures are `ui-after/00-empty-history-{360,390}-{dark,light}.png`. All four were visually inspected and shown to the owner alongside the matched earlier Android baseline captures; the owner verdict on the implemented build is pending. **Visual status: NOT VERIFIED; no design PASS yet.**
+The implementation is source SHA `9506c68474279163a45f7e6b78b7effe75065ea8` in [CI run #40506733392](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40506733392), [artifact #12735759862](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40506733392/artifacts/12735759862). Its real Android captures are `ui-after/00-empty-history-{360,390}-{dark,light}.png`. All four were visually inspected and shown to the owner alongside matched earlier Android baselines. The owner's explicit response after viewing them was: «Да, экран устраивает». **Visual status: PASS for this implemented empty History screen only.**
 
 The independent Android UI matrix, action layout, repeated XLSX import, and same-temporary-signer transfer upgrade gates passed on this SHA. The full CI run failed due the historical `native_edit_labels` diagnostic (blank UiAutomator EditText `content-desc`) and `large_font_form` 200% label clipping. These failures are preserved as FAIL and are not evidence for or against the visual design. A real owner-signed upgrade is still NOT RUN. Local review PNGs in `design/review/` are untracked and are not part of the submitted implementation.
