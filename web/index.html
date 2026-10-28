@@ -30,17 +30,14 @@
   <dialog id="exportDialog" aria-labelledby="exportTitle">
     <div id="exportPeriodLabel" class="export-dialog-eyebrow"></div>
     <h2 id="exportTitle">Экспорт для ChatGPT</h2>
-    <p class="export-dialog-description">Отчёт по выбранному периоду: отправьте файл или сохраните его на устройстве.</p>
     <button id="shareReport" class="button primary" type="button">Поделиться отчётом</button>
     <button id="saveReport" class="button outline" type="button">Сохранить отчёт</button>
     <div class="export-dialog-backup">
-      <div class="export-dialog-section-label">КОПИЯ ДАННЫХ</div>
       <button id="backupReport" class="button export-backup-button" type="button" aria-label="Резервная копия JSON"><span><strong>Резервная копия JSON</strong><small>Все записи для восстановления</small></span></button>
     </div>
     <button id="closeExport" class="button quiet" type="button">Закрыть</button>
   </dialog>
   <dialog id="importDialog" aria-labelledby="importTitle">
-    <div class="import-eyebrow">ПРОВЕРКА ФАЙЛА</div>
     <h2 id="importTitle">Импорт данных</h2>
     <p id="importDescription" class="sr-only"></p>
     <div class="import-stats" aria-hidden="true"><div><strong id="importEntriesCount">—</strong><small>ЗАПИСЕЙ</small></div><div><strong id="importDaysCount">—</strong><small>ДНЕЙ</small></div><div><strong id="importClosuresCount">—</strong><small>ЗАКРЫТЫХ<br>ПЕРИОДОВ</small></div></div>
