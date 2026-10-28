@@ -1,6 +1,6 @@
 # Period closure form visual proposal · 28 October 2026
 
-**Status: OWNER APPROVED ILLUSTRATION; IMPLEMENTATION CODED; ANDROID VISUAL REVIEW PENDING.** The owner explicitly replied «Да, реализуйте эскиз». Approval authorizes the scoped form layout and copy; it is not an implemented visual PASS.
+**Status: SCOPED ANDROID VISUAL PASS, OWNER APPROVED.** The owner approved the illustration with «Да, реализуйте эскиз», then explicitly accepted the implemented Android screen with «Одобрено». This acceptance covers the blank closure form at 360/390 dp in both themes, on the synthetic period shown below; it does not change the overall release status.
 
 ## Current and proposed state
 
@@ -14,6 +14,6 @@ The proposal images are browser renderings of a temporary DOM/CSS prototype, not
 
 The exact implementation source is `74129b78a996b27bc91cecd284eb8345987bd5dd`, Android 35 run [#40664034027](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40664034027), artifact [#12806124280](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40664034027/artifacts/12806124280). GitHub's pull-request merge SHA is `6a39ab0babadad23571c2f771d5bc1b8c75703c4`. Both artifacts contain `ui-after/closure-{360,390}-{dark,light}.png` and matching native XML. Local untracked copies are `design/review/closure-android-{before,after}-{360,390}-{dark,light}.png`.
 
-All eight native images were visually inspected in matched width and theme pairs on the same synthetic period and blank closure form. The new period panel, grouped amount and note fields, explanatory copy and Save action are visible and readable; no text or action is clipped in any of the four implemented views. This is an independent visual observation. **Owner verdict on implemented Android appearance: PENDING.**
+All eight native images were visually inspected in matched width and theme pairs on the same synthetic period and blank closure form. The new period panel, grouped amount and note fields, explanatory copy and Save action are visible and readable; no text or action is clipped in any of the four implemented views. The owner explicitly accepted the implemented appearance. **Scoped visual verdict: PASS.** The previously accepted screenshots should not be shown again unless this screen changes or the owner asks.
 
 The new source's native `ui_matrix`, action layout, repeated XLSX import, and temporary-signer transfer upgrade are PASS. Overall CI remains **FAIL** due the previously known `native_edit_labels` and `large_font_form` gates. An owner-signed Android upgrade and TalkBack speech were not tested; the overall release remains **NOT READY**.
