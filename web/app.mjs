@@ -543,11 +543,11 @@ function history() {
 }
 
 function closure() {
-  app.className = '';
+  app.className = 'closure-page';
   view = 'closure';
   $('#bottomNav').hidden = true;
   const old = state.closures[selectedPeriod];
-  app.innerHTML = `${heading('Закрытие периода')}<p class="closure-info">${esc(periodLabel(selectedPeriod))}</p><form id="closureForm" novalidate>${field('finalAdjustment', 'Финальная доплата', old?.finalAdjustment == null ? '' : String(old.finalAdjustment).replace('.', ','), { signed: true, note: 'Фактическая сумма «Бонусы и корректировки»' })}<div class="additional"><div class="field"><label for="closureNote">Примечание</label><textarea id="closureNote" name="note" placeholder="Необязательно" maxlength="4000">${esc(old?.note)}</textarea></div></div><div id="closureError" class="error" role="alert" hidden></div><div class="save-area"><button class="button primary" type="submit">Сохранить закрытие</button></div>${old ? '<button type="button" id="reopenPeriod" class="danger-button">Снять отметку о закрытии</button>' : ''}</form>`;
+  app.innerHTML = `${heading('Закрытие периода')}<p class="closure-info"><span class="closure-period-label">ПЕРИОД</span>${esc(periodLabel(selectedPeriod))}</p><p class="closure-explainer">Зафиксируйте фактическую доплату. Записи за слоты останутся доступны для редактирования.</p><form id="closureForm" novalidate>${field('finalAdjustment', 'Финальная доплата', old?.finalAdjustment == null ? '' : String(old.finalAdjustment).replace('.', ','), { signed: true, note: 'Фактическая сумма «Бонусы и корректировки»' })}<div class="additional"><div class="field"><label for="closureNote">Примечание</label><textarea id="closureNote" name="note" placeholder="Необязательно" maxlength="4000">${esc(old?.note)}</textarea></div></div><div id="closureError" class="error" role="alert" hidden></div><div class="save-area"><button class="button primary" type="submit">Сохранить закрытие</button></div><p class="closure-later">Закрытие можно изменить позже</p>${old ? '<button type="button" id="reopenPeriod" class="danger-button">Снять отметку о закрытии</button>' : ''}</form>`;
   $('#goBack').addEventListener('click', history);
   $('#closureForm').addEventListener('submit', event => {
     event.preventDefault();

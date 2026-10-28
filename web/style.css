@@ -1484,3 +1484,19 @@ dialog .button{margin:8px 0 0}
   color:var(--ink);
 }
 :root[data-theme="light"] .history-empty .history-period-action .history-action-copy strong{color:var(--ink)}
+
+/* Approved period closure form: keep its fields and save behavior scoped here. */
+.closure-page .page-heading{margin-bottom:18px}
+.closure-page .closure-info{border:1px solid var(--line);border-left:4px solid var(--teal);background:var(--field);padding:12px 16px;margin:0 0 12px;font-size:17px;font-weight:760;line-height:1.35}
+.closure-page .closure-period-label{display:block;color:var(--teal);font-size:10px;letter-spacing:.14em;font-weight:850;margin-bottom:5px}
+.closure-page .closure-explainer{color:var(--muted);font-size:14px;line-height:1.45;margin:0 0 22px}
+.closure-page #closureForm>.field{background:var(--field);border:1px solid var(--line);padding:18px 16px 16px}
+.closure-page #closureForm>.field label{font-size:17px;font-weight:800;margin-bottom:3px}
+.closure-page #closureForm>.field input{min-height:58px;font-size:22px;font-weight:750;border-radius:3px;background:var(--bg)}
+.closure-page #closureForm>.field .field-note{font-size:12px;line-height:1.4;margin-top:3px}
+.closure-page #closureForm .additional{margin:12px 0 0;border:1px solid var(--line);background:var(--field);padding:16px}
+.closure-page #closureForm .additional label{font-size:16px;font-weight:750}
+.closure-page #closureForm .additional textarea{min-height:84px;border-radius:3px;background:var(--bg);font-size:16px}
+.closure-page #closureForm .save-area{margin-top:18px;padding:0;background:transparent;border:0}
+.closure-page #closureForm .save-area .button{min-height:55px;font-size:16px}
+.closure-page .closure-later{color:var(--muted);text-align:center;font-size:12px;line-height:1.4;margin:12px 0 0}
