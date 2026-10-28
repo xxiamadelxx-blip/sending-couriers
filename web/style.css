@@ -1511,3 +1511,11 @@ dialog .button{margin:8px 0 0}
     padding-top:0;
   }
 }
+
+/* Approved premium-card contrast: match its dark amounts to the existing
+   dark text on the yellow income panel in the night theme. */
+:root[data-theme="dark"] #homeDeck .income-hero .premiums-card,
+:root[data-theme="dark"] #homeDeck .income-hero .premiums-card .card-heading,
+:root[data-theme="dark"] #homeDeck .income-hero .premiums-card .premium-teasers strong{
+  color:#252a2c;
+}
