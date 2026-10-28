@@ -286,7 +286,7 @@ function settings() {
   // including after loading another date's historical tariff.
   const rateInput = $('#hourlyRate');
   const sizeRateInput = () => {
-    rateInput.style.width = `${Math.max(4, Math.min(10, rateInput.value.length + 1))}ch`;
+    rateInput.style.width = `${Math.max(3.25, Math.min(10, rateInput.value.length + .25))}ch`;
   };
   rateInput.addEventListener('input', sizeRateInput);
   sizeRateInput();
