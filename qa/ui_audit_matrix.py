@@ -303,6 +303,23 @@ def main():
                 )
             text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')))
             assert '9 ч' in text and '18 заказов' in text and '3 200' in text, text
+            if args.phase == 'after' and args.focus == 'full':
+                for attempt in range(8):
+                    current = device.dump(f'closure-action-{suffix}-{attempt}')
+                    action = device.find_node(current, 'Закрытие периода')
+                    nav = device.find_node(current, 'Главная')
+                    bounds = list(map(int, re.findall(r'\d+', action.get('bounds', '')))) if action is not None else []
+                    nav_bounds = list(map(int, re.findall(r'\d+', nav.get('bounds', '')))) if nav is not None else []
+                    if len(bounds) == 4 and len(nav_bounds) == 4 and 0 < bounds[1] < bounds[3] <= nav_bounds[1]:
+                        break
+                    device.adb('shell', 'input', 'swipe', '540', '1800', '540', '650', '350')
+                else:
+                    raise AssertionError('Closure action not visible after History scroll: ' + suffix)
+                device.tap_node('Закрытие периода')
+                device.wait_node('Сохранить закрытие', 20)
+                capture('closure-' + suffix)
+                device.tap_node('Назад')
+                device.wait_node('История', 20)
             device.tap_node('Прогноз')
             device.wait_node('Импортировать отчёт')
             capture('forecast-' + suffix)
