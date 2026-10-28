@@ -1500,3 +1500,14 @@ dialog .button{margin:8px 0 0}
 .closure-page #closureForm .save-area{margin-top:18px;padding:0;background:transparent;border:0}
 .closure-page #closureForm .save-area .button{min-height:55px;font-size:16px}
 .closure-page .closure-later{color:var(--muted);text-align:center;font-size:12px;line-height:1.4;margin:12px 0 0}
+
+/* Keep the date label visible above the keyboard on the 360dp slot form. */
+@media(max-width:374px) and (max-height:520px){
+  :root[data-text-scale="standard"] .form-page:has(#dailyHours:focus, #dailyOrders:focus) .form-scroll{
+    padding-top:10px;
+  }
+  :root[data-text-scale="standard"] .form-page:has(#dailyHours:focus, #dailyOrders:focus) .form-section-heading:first-of-type{
+    margin-top:-3px;
+    padding-top:0;
+  }
+}
