@@ -319,7 +319,7 @@ def main():
                 device.wait_node('Сохранить закрытие', 20)
                 capture('closure-' + suffix)
                 device.tap_node('Назад')
-                device.wait_node('История', 20)
+                device.wait_node('ИСТОРИЯ', 20)
             device.tap_node('Прогноз')
             device.wait_node('Импортировать отчёт')
             capture('forecast-' + suffix)
