@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <color name="background">#f4f7f3</color>
-  <color name="accent">#176541</color>
+  <color name="background">#eae7de</color>
+  <color name="accent">#a93718</color>
   <bool name="light_bars">true</bool>
   <style name="AppThemeBase" parent="android:style/Theme.Material.Light.NoActionBar">
     <item name="android:fontFamily">sans</item>
@@ -17,16 +17,16 @@
   <style name="AppTheme" parent="AppThemeBase" />
   <style name="AppThemeLight" parent="android:style/Theme.Material.Light.NoActionBar">
     <item name="android:fontFamily">sans</item>
-    <item name="android:windowBackground">#f4f7f3</item>
-    <item name="android:colorAccent">#176541</item>
+    <item name="android:windowBackground">#eae7de</item>
+    <item name="android:colorAccent">#a93718</item>
     <item name="android:windowLightStatusBar">true</item>
     <item name="android:windowLightNavigationBar">true</item>
     <item name="android:forceDarkAllowed">false</item>
   </style>
   <style name="AppThemeDark" parent="android:style/Theme.Material.NoActionBar">
     <item name="android:fontFamily">sans</item>
-    <item name="android:windowBackground">#000000</item>
-    <item name="android:colorAccent">#a4dcbc</item>
+    <item name="android:windowBackground">#10151a</item>
+    <item name="android:colorAccent">#ff7952</item>
     <item name="android:windowLightStatusBar">false</item>
     <item name="android:windowLightNavigationBar">false</item>
     <item name="android:forceDarkAllowed">false</item>

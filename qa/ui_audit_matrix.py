@@ -57,6 +57,17 @@ def capture(name):
     return root
 
 
+def capture_startup(mode):
+    """Keep several unaltered Android frames from a real cold start for visual review."""
+    device.adb('shell', 'am', 'force-stop', device.PACKAGE)
+    device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+    for index in range(5):
+        (out / f'startup-{mode}-{index}.png').write_bytes(
+            device.adb('exec-out', 'screencap', '-p', binary=True))
+        time.sleep(.15)
+    device.wait_home(45)
+
+
 def durations(root):
     return [float(n.get('text', '').replace(',', '.')) for n in root.iter('node')
             if n.get('class') == 'android.widget.EditText']
@@ -126,6 +137,10 @@ def main():
     device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
     device.wait_home(45)
     if args.phase == 'after' and args.focus == 'full':
+        capture_startup('dark')
+        theme('light')
+        capture_startup('light')
+        theme('dark')
         name = 'Courier-QA-import-preview.json'
         fixture = out / name
         fixture.write_text(json.dumps({

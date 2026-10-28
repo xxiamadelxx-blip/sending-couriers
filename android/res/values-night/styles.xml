@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <color name="background">#000000</color>
-  <color name="accent">#a4dcbc</color>
+  <color name="background">#10151a</color>
+  <color name="accent">#ff7952</color>
   <bool name="light_bars">false</bool>
   <style name="AppThemeBase" parent="android:style/Theme.Material.NoActionBar">
     <item name="android:fontFamily">sans</item>

@@ -1519,3 +1519,7 @@ dialog .button{margin:8px 0 0}
 :root[data-theme="dark"] #homeDeck .income-hero .premiums-card .premium-teasers strong{
   color:#252a2c;
 }
+
+/* Match the short browser startup state to the native launch mark. */
+.splash-mark{width:108px;height:108px;flex:none}
+.splash h1{font-size:28px;line-height:1.04;text-transform:uppercase;letter-spacing:-.055em;font-weight:900}

@@ -2,7 +2,7 @@
 <resources>
   <style name="AppTheme" parent="AppThemeBase">
     <item name="android:windowSplashScreenBackground">@color/background</item>
-    <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_receipt</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher</item>
     <item name="android:windowSplashScreenIconBackgroundColor">@color/background</item>
   </style>
 </resources>

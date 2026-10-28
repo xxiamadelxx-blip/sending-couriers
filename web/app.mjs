@@ -105,7 +105,7 @@ function refreshWeather(force=false) {
 function applyAppearance() {
   const theme = state?.settings?.theme ?? 'dark';
   document.documentElement.dataset.theme = theme;
-  $('meta[name="theme-color"]').content = theme === 'dark' ? '#000000' : '#f4f7f3';
+  $('meta[name="theme-color"]').content = theme === 'dark' ? '#10151a' : '#eae7de';
   Native?.applyTheme?.(theme);
   const button = $('#themeToggle');
   if (button) {

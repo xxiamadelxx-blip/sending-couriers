@@ -147,13 +147,14 @@ public final class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER);
         layout.setBackgroundColor(bg);
         ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_receipt);
-        layout.addView(icon, new LinearLayout.LayoutParams(dp(86), dp(108)));
+        icon.setImageResource(R.drawable.ic_launcher);
+        layout.addView(icon, new LinearLayout.LayoutParams(dp(108), dp(108)));
         TextView label = new TextView(this);
-        label.setText("Доход курьера");
+        label.setText("ДОХОД\nКУРЬЕРА");
         label.setTextColor(AppAppearance.foreground(darkTheme));
         label.setTextSize(28);
         label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        label.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.topMargin = dp(24);
         layout.addView(label, lp);
