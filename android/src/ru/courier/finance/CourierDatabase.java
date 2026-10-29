@@ -285,10 +285,10 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                         checked.put("center_orders",normalized.getInt("center_orders"));
                         checked.put("source_status",normalized.getString("source_status"));
                         checked.put("record_json",values.toString());
-                        for(String key : new String[]{"window_label","claimed_publication","claimed_model"})
-                            if(normalized.has(key))checked.put(key,normalized.getString(key));
-                        for(String key : new String[]{"lower_orders","upper_orders"})
-                            if(normalized.has(key))checked.put(key,normalized.getInt(key));
+                        for(String field : new String[]{"window_label","claimed_publication","claimed_model"})
+                            if(normalized.has(field))checked.put(field,normalized.getString(field));
+                        for(String field : new String[]{"lower_orders","upper_orders"})
+                            if(normalized.has(field))checked.put(field,normalized.getInt(field));
                     }else if("historical_rule_specs".equals(table)){
                         checked.put("row_number",row);
                         checked.put("rule_label",normalized.getString("rule_label"));
