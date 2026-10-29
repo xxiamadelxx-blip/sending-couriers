@@ -7,6 +7,7 @@ import {
   goalText, percentText, APP_VERSION
 } from './core.mjs';
 import { icon } from './icons.mjs';
+import {periodDayMarkup} from './period-day-view.mjs';
 import { feedback as emitFeedback } from './feedback.mjs';
 import { mountForecast } from './forecast-ui.mjs';
 import {prepareForecast,forecastKey} from './forecast-runtime.mjs';
@@ -240,11 +241,32 @@ function periodDetails() {
   if(!leaveForecast())return;
   app.className = 'period-page'; view = 'period'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
+  // The Period tab is for correcting day/slot facts, not duplicating Home KPIs.
+  // Every displayed day total comes from the same existing calculateDay model.
+  const daily=periodDayMarkup(s.entries,date=>calculateDay(state,date),
+    date=>formatDate(date,true),hoursText,money,esc);
   app.innerHTML = `${heading('Период')}${navigation()}
-    <section class="detail-card period-overview" aria-label="Итоги периода"><h2>Итоги периода</h2><dl class="period-facts"><div><dt>Часы</dt><dd>${hoursText(s.hours)} ч</dd></div><div><dt>Заказы</dt><dd>${s.orders ?? '—'}</dd></div></dl><div class="period-reward"><span>Вознаграждение</span><strong id="periodReward">${esc(money(s.paidReward))}</strong></div></section>
-    ${paymentStatus(s)}
-    <section class="detail-card cycle-settings"><div class="cycle-header"><h2>12 недель</h2>${cycle.start ? `<span>Цикл ${cycle.cycleNumber}</span>` : ''}</div>${cycle.start ? `<p class="cycle-dates" id="cycleDates">${esc(formatDate(cycle.start))} — ${esc(formatDate(cycle.end))}</p><progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress><p class="hint">${cycle.status === 'not-started' ? 'Ещё не начался' : `День ${cycle.elapsedDays} из 84`}</p>` : ''}<details id="cycleConfig" class="cycle-config"><summary id="configureCycle">${cycle.start ? 'Изменить дату начала' : 'Указать дату начала'}${icons.down}</summary><form id="settingsForm" novalidate><div class="field cycle-start"><label for="premiumCycleStart">Начало первого цикла</label><input type="date" id="premiumCycleStart" name="premiumCycleStart" min="1900-01-01" max="2200-10-09" value="${esc(state.settings.premiumCycleStart ?? '')}"></div><p class="hint settings-preview" id="cyclePreview"></p><div class="error" id="settingsError" role="alert" hidden></div><button class="button primary" id="saveSettings" type="submit">Сохранить дату</button></form></details></section>
-    <div class="actions period-actions"><button class="button quiet" id="periodHistory" type="button">Записи периода${icons.chevron}</button><button class="button quiet export-action" id="periodExport" type="button">${icons.share}Экспорт для ChatGPT</button></div>`;
+    <div class="period-notice">${paymentStatus(s)}</div>
+    <section class="detail-card cycle-settings period-cycle-compact" aria-label="Цикл премии">
+      <div class="cycle-header"><h2>12 недель</h2>${cycle.start ? `<span>Цикл ${cycle.cycleNumber} · День ${cycle.elapsedDays} из 84</span>` : ''}</div>
+      ${cycle.start ? `<progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress>` : ''}
+      <details id="cycleConfig" class="cycle-config"><summary id="configureCycle">${cycle.start ? 'Изменить дату начала' : 'Указать дату начала'}${icons.down}</summary>
+        <form id="settingsForm" novalidate>
+          <div class="field cycle-start"><label for="premiumCycleStart">Начало первого цикла</label><input type="date" id="premiumCycleStart" name="premiumCycleStart" min="1900-01-01" max="2200-10-09" value="${esc(state.settings.premiumCycleStart ?? '')}"></div>
+          <p class="hint settings-preview" id="cyclePreview"></p>
+          <div class="error" id="settingsError" role="alert" hidden></div>
+          <button class="button primary" id="saveSettings" type="submit">Сохранить дату</button>
+        </form>
+      </details>
+    </section>
+    <section class="period-days" aria-labelledby="periodDaysHeading">
+      <div class="period-days-heading"><h2 id="periodDaysHeading">Записи по дням</h2></div>
+      <div class="period-days-list">${daily}</div>
+    </section>
+    <div class="actions period-actions">
+      <button class="button quiet" id="periodHistory" type="button">Записи периода${icons.chevron}</button>
+      <button class="button quiet export-action" id="periodExport" type="button">${icons.share}Экспорт для ChatGPT</button>
+    </div>`;
   bottomNav('period'); $('#goBack').addEventListener('click', summary); bindNavigation(periodDetails);
   function previewCycle() {
     try {
@@ -260,7 +282,9 @@ function periodDetails() {
     catch (error) { $('#settingsError').textContent = error.message; $('#settingsError').hidden = false; feedback('error'); }
   });
   $('#periodExport').addEventListener('click', openExportDialog);
-  $('#periodHistory').addEventListener('click', history); resetScroll();
+  $('#periodHistory').addEventListener('click', history);
+  app.querySelectorAll('.period-slot-edit').forEach(button=>button.addEventListener('click',()=>form(button.dataset.entry,'period')));
+  resetScroll();
 }
 function settings() {
   if(!leaveForecast())return;
@@ -371,7 +395,7 @@ function installLargeTextFormLabelFocusGuard() {
     window.removeEventListener('resize', schedule);
   };
 }
-function form(id = null) {
+function form(id = null, returnTo = 'history') {
   if(!leaveForecast())return;
   const original = state.entries.find(e => e.id === id);
   if (id != null && !original) { notify('Запись не найдена. Откройте историю.'); return; }
@@ -403,7 +427,7 @@ function form(id = null) {
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
   app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = '—'; });
   installLargeTextFormLabelFocusGuard();
-  $('#goBack').addEventListener('click', () => { history(); });
+  $('#goBack').addEventListener('click', () => { returnTo === 'period' ? periodDetails() : history(); });
   let workingDirty=false;
   function renderWorking(date) {
     workingDirty=false;
@@ -475,7 +499,7 @@ function form(id = null) {
       persist(next);
       selectedPeriod = periodFor(fields.date).id;
       document.activeElement?.blur();
-      summary(); notify('Запись сохранена');
+      (returnTo === 'period' ? periodDetails : summary)(); notify('Запись сохранена');
     } catch (error) {
       saving = false; $('#saveDay').disabled = false;
       feedback('error');
@@ -485,7 +509,7 @@ function form(id = null) {
   });
   $('#deleteDay')?.addEventListener('click', () => {
     if (!confirm('Удалить только эту запись?')) return;
-    try { persist({ ...state, entries: state.entries.filter(row => row.id !== editingId) }); history(); notify('Запись удалена'); }
+    try { persist({ ...state, entries: state.entries.filter(row => row.id !== editingId) }); (returnTo === 'period' ? periodDetails : history)(); notify('Запись удалена'); }
     catch (error) { notify(error.message); }
   });
   resetScroll();
