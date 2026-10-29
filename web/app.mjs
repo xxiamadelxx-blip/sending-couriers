@@ -298,8 +298,10 @@ function periodDetails() {
     if (!gross && !through) return null;
     if (!gross || !through) throw new Error('Укажите и накопленную сумму, и дату её окончания.');
     return {cycleStart:$('#premiumCycleStart').value,through,grossIncome:gross,
-      source:opening && gross.replace(/\\s/g,'').replace(',','.')===String(opening.grossIncome) && through===opening.through ? opening.source : 'manual'};
+      source:$('#cycleOpeningGross').dataset.source || (opening && gross.replace(/\\s/g,'').replace(',','.')===String(opening.grossIncome) && through===opening.through ? opening.source : 'manual')};
   }
+  $('#cycleOpeningGross').addEventListener('input',e=>{ e.target.dataset.source='manual'; });
+  $('#cycleOpeningThrough').addEventListener('change',()=>{ $('#cycleOpeningGross').dataset.source='manual'; });
   $('#importCycleReport').addEventListener('click',()=>{
     if(Native) Native.importData(); else $('#cycleReportFile').click();
   });
@@ -657,6 +659,7 @@ window.receiveImport = text => {
       $('#premiumCycleStart').value=opening.cycleStart;
       $('#cycleOpeningThrough').value=opening.through;
       $('#cycleOpeningGross').value=String(opening.grossIncome);
+      $('#cycleOpeningGross').dataset.source='chatgpt';
       // Import is staged, not silently saved. The owner must confirm in settings.
       notify('Отчёт загружен. Проверьте сумму и нажмите «Сохранить»');
       return;
