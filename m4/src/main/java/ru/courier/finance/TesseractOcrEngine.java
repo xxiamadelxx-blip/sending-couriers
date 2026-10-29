@@ -12,7 +12,7 @@ import java.io.InputStream;
 
 /** Bundled, network-free Russian + English OCR. All methods run off the UI thread. */
 public final class TesseractOcrEngine implements AutoCloseable {
-    public static final String VERSION = "tesseract4android-4.9.0-tessdata-fast-87416418";
+    public static final String VERSION = "tesseract4android-4.9.0-tessdata-fast-87416418-native-1608";
     private final TessBaseAPI engine;
 
     public TesseractOcrEngine(Context context) throws Exception {
