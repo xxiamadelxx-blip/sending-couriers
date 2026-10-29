@@ -15,8 +15,8 @@ test('UI M1: slot edit form groups hours and money without discarding any existi
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));
- assert.ok(section.indexOf('paymentStatus(s)') < section.indexOf('class="detail-card cycle-settings period-cycle-compact"'));
- assert.ok(section.indexOf('class="detail-card cycle-settings period-cycle-compact"') < section.indexOf('class="period-days"'));
+ assert.ok(section.indexOf('class="period-days"') < section.indexOf('class="period-notice"'), 'Show editable day records before payout conditions');
+ assert.ok(section.indexOf('class="period-days"') < section.indexOf('class="detail-card cycle-settings period-cycle-compact"'), 'Cycle settings belong below daily records');
  assert.ok(section.includes('data-entry') || section.includes("querySelectorAll('.period-slot-edit')"));
  assert.doesNotMatch(section,/class="detail-card period-overview"/);
 });
