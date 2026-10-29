@@ -13,6 +13,24 @@ public final class YandexScreenParserTest {
         assertEquals(YandexScreenParser.ScreenType.INCOME,
             YandexScreenParser.parse("Yandex Pro\nIncome today: 1250").screenType);
     }
+    @Test public void classifiesRecordedSlotOrderListWithoutBrandLabel() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "Слот\nИнформация по слоту\nЗаказы\nИтого\n11:06\n100,00 ₽\nкоэф 1.0");
+        assertEquals(YandexScreenParser.ScreenType.ORDERS,result.screenType);
+        assertFalse(result.reviewRequired);
+    }
+    @Test public void classifiesRecordedOrderDetailsWithoutBrandLabel() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "Заказ\nСтатус\nКоэффициент спроса\nНомер заказа\nНачало\nЗавершение");
+        assertEquals(YandexScreenParser.ScreenType.ORDERS,result.screenType);
+        assertFalse(result.reviewRequired);
+    }
+    @Test public void classifiesRecordedIncomeBreakdownWithoutBrandLabel() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "День Неделя Месяц\nВознаграждение\nКомиссия партнёра\nНалог");
+        assertEquals(YandexScreenParser.ScreenType.INCOME,result.screenType);
+        assertFalse(result.reviewRequired);
+    }
     @Test public void queuesUnclassifiedYandexAndUnrelatedScreens() {
         YandexScreenParser.Result yandex=YandexScreenParser.parse("Яндекс Про\nНастройки карты");
         YandexScreenParser.Result unrelated=YandexScreenParser.parse("Заметки\nвстреча завтра 18:30");
