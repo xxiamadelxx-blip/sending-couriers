@@ -100,6 +100,41 @@ public final class M2DeviceProbeActivity extends Activity {
     eq(store.mirrorWorkbook(new JSONObject().put("sheets",incomplete).toString(),partialSha),15,"archive has 15 source rows");
     if(store.hasCompleteWorkbook(partialSha))
       throw new AssertionError("partial 15-tab workbook incorrectly authorized primary cutover");
+    // RED: a newer, fully typed workbook that omits a historical RAW row
+    // must never supersede the original source without owner confirmation.
+    JSONObject reduced=new JSONObject(sheets.toString());
+    reduced.getJSONObject("Заказы RAW").remove("3");
+    String reducedSha="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    eq(store.mirrorWorkbook(new JSONObject().put("sheets",reduced).toString(),reducedSha),15,
+      "reduced source is still archived for auditing");
+    if(store.hasCompleteWorkbook(reducedSha))
+      throw new AssertionError("newer XLSX with fewer orders superseded existing history");
+    eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM active_orders"),2,
+      "old confirmed RAW must remain active after reduced workbook");
+
+    // Actual native onUpgrade: emulate an older on-disk v1 database without
+    // deleting records, then let the production SQLiteOpenHelper reopen it.
+    store.close();
+    String path=App.instance.getDatabasePath(CourierDatabase.FILE_NAME).getPath();
+    SQLiteDatabase older=SQLiteDatabase.openDatabase(path,null,SQLiteDatabase.OPEN_READWRITE);
+    try {
+      try(Cursor views=older.rawQuery("SELECT name FROM sqlite_master WHERE type='view'",null)){
+        while(views.moveToNext()){
+          String name=views.getString(0);
+          if(!name.startsWith("active_"))throw new AssertionError("unexpected view: "+name);
+          older.execSQL("DROP VIEW IF EXISTS "+name);
+        }
+      }
+      older.setVersion(1);
+    } finally {older.close();}
+    store=new CourierDatabase(App.instance);
+    eq(count(store.getReadableDatabase(),"PRAGMA user_version"),2,"v1 to v2 migration");
+    eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM legacy_slot_facts"),2,
+       "two slots survive schema upgrade");
+    eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM active_orders"),2,
+       "active RAW survives schema upgrade");
+    if(!original.equals(store.readVerifiedState()))
+      throw new AssertionError("legacy state lost during v1-v2 migration");
     store.close();
   }
   static class App { static Activity instance; }
