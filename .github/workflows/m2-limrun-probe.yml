@@ -44,6 +44,6 @@ jobs:
           cp "$RUNNER_TEMP/m2-limrun-debug.apk" qa/m2-limrun-debug.apk
           printf '%s\n' "${{ github.sha }}" > qa/m2-limrun-source-sha.txt
           sha256sum qa/m2-limrun-debug.apk > qa/m2-limrun-apk-sha256.txt
-          git add qa/m2-limrun-debug.apk qa/m2-limrun-source-sha.txt qa/m2-limrun-apk-sha256.txt
+          git add -f qa/m2-limrun-debug.apk qa/m2-limrun-source-sha.txt qa/m2-limrun-apk-sha256.txt
           git commit -m "ci: temporary Android emulator probe for ${{ github.sha }}"
           git push origin HEAD:ci/m2-limrun-probe-temp
