@@ -178,3 +178,10 @@ test('approved History: day reward plus full per-slot fields and separate edit b
  assert.ok(section.includes('data-entry="${esc(e.id)}"'));
  assert.ok(section.includes("d.entries.map((e, i) => card(e, `Слот ${i + 1}`)"));
 });
+
+test('Period secondary 12-week tracker shows gross-income and 5% premium separately from paid amounts',()=>{
+ const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
+ assert.ok(section.indexOf('class="period-days"') < section.indexOf('class="cycle-bonus-metrics"'));
+ for(const name of ['Общий доход цикла','cycleTotalIncome','cyclePremium','Расчётная премия, выплата не подтверждена']) assert.ok(section.includes(name),name);
+ assert.match(css,/\.period-page \.period-cycle-compact #cyclePremium\{color:var\(--teal\)\}/);
+});

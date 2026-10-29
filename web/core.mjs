@@ -264,7 +264,7 @@ export function forecastFinances(state, start, overrides = {}, clockDate = today
 }
 export function calculatePremiumCycle(state, date = today()) {
   const anchor = state.settings?.premiumCycleStart;
-  if (!anchor) return { status: 'unconfigured', start: null, end: null, premium: null, hourlyBase: null, hours: null, entries: [], missingHours: 0, elapsedDays: 0, cycleNumber: null, boundaryEntries: [], boundaryNote: '', breakdown:[] };
+  if (!anchor) return { status: 'unconfigured', start: null, end: null, premium: null, totalIncome: null, hourlyBase: null, hours: null, entries: [], missingHours: 0, elapsedDays: 0, cycleNumber: null, boundaryEntries: [], boundaryNote: '', breakdown:[] };
   const stamp = dateMillis(date), first = dateMillis(anchor);
   const cycleNumber = Math.max(0, Math.floor((stamp - first) / (84 * DAY)));
   const startStamp = first + cycleNumber * 84 * DAY;
@@ -276,10 +276,24 @@ export function calculatePremiumCycle(state, date = today()) {
   const grouped = new Map();
   for (const entry of known) { const key = periodFor(entry.date).id; const rows=grouped.get(key)??[];rows.push(entry);grouped.set(key,rows); }
   const breakdown = [...grouped].sort(([a],[b])=>a.localeCompare(b)).flatMap(([periodId,rows])=>{
-    return ratedHours(state,rows).map(part=>({periodId,hours:part.hundredths/100,hourlyRate:part.hourlyRate,
-      cycleBonusPercent:part.cycleBonusPercent,hourlyBase:part.base,premium:percentage(part.base,part.cycleBonusPercent)}));
+    // Match the Home "Общий доход": hourly base + tips + separate bonuses.
+    // Group extras by the effective terms at each entry's date. Sum in kopecks.
+    const extras = new Map();
+    for (const entry of rows) {
+      const terms = paymentTermsFor(state,entry.date);
+      const key = `${terms.hourlyRate}|${terms.cycleBonusPercent}`;
+      extras.set(key,(extras.get(key)??0)+Math.round(entry.tips*100)+Math.round(entry.separateBonus*100));
+    }
+    return ratedHours(state,rows).map(part=>{
+      const incomeCents = Math.round(part.base*100)+(extras.get(`${part.hourlyRate}|${part.cycleBonusPercent}`)??0);
+      const totalIncome = incomeCents/100;
+      return {periodId,hours:part.hundredths/100,hourlyRate:part.hourlyRate,
+        cycleBonusPercent:part.cycleBonusPercent,hourlyBase:part.base,totalIncome,
+        premium:percentage(totalIncome,part.cycleBonusPercent)};
+    });
   });
   const hourlyBase = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.hourlyBase*100),0)/100;
+  const totalIncome = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.totalIncome*100),0)/100;
   const premium = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)/100;
   const boundaryEntries = state.entries.filter(e => {
     const legacy = e.legacyReading;
@@ -290,7 +304,7 @@ export function calculatePremiumCycle(state, date = today()) {
   });
   const boundaryNote = boundaryEntries.length ? 'Старые накопительные интервалы пересекают границу цикла или перенесены на другую дату. Часы отнесены по датам записей; точно разделить их по границе невозможно. Премия за 12 недель — оценка.' : '';
   return {
-    status: beforeStart ? 'not-started' : 'estimate', start, end, entries, hours, hourlyBase,
+    status: beforeStart ? 'not-started' : 'estimate', start, end, entries, hours, hourlyBase, totalIncome:beforeStart?null:totalIncome,
     premium: beforeStart ? null : premium, breakdown, missingHours: entries.length - known.length,
     elapsedDays: Math.min(84, Math.max(0, Math.floor((stamp - startStamp) / DAY) + 1)), cycleNumber: cycleNumber + 1,
     boundaryEntries, boundaryNote
@@ -564,14 +578,14 @@ export function markdownReport(state, id, exportDate = today()) {
     `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база по ставкам дат записей, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
     `- Начало 12-недельного отсчёта: ${state.settings?.premiumCycleStart ?? 'не настроено'}.`,
     `- Цикл 12 недель: ${cycle.start ? `${cycle.start} — ${cycle.end}` : 'не настроен'}.`,
-    `- База за 12 недель по введённым часам: ${money(cycle.hourlyBase)}. Премия по условиям периодов: ${money(cycle.premium)}.`,
-    '- Обе премии — оценка от почасовой базы, без чаевых, введённых бонусов и процента на другую премию. Не включены в фактически выплачено, основной доход и остаток; могут уже входить в введённые бонусы или финальную доплату.',
+    `- Почасовая база за 12 недель: ${money(cycle.hourlyBase)}. Общий доход цикла (база + чаевые + отдельные бонусы): ${money(cycle.totalIncome)}. Расчётная премия по ставкам периодов: ${money(cycle.premium)}. Выплата премии не подтверждена.`,
+    '- Премия за темп считается от почасовой базы. Премия за 12 недель — от общего дохода (база + чаевые + отдельные бонусы) по условиям дат записей. Обе премии не прибавляются повторно к общему доходу и не подтверждают фактическую выплату.',
     `- Записей цикла без часов: ${cycle.missingHours}; сумма известна только по введённым часам.`, '',
     ...(cycle.boundaryNote ? [`- Внимание: ${cycle.boundaryNote}`, `- Проверьте интервалы записей: ${cycle.boundaryEntries.map(e => `${e.id} (дата записи ${e.date}, прежний интервал ${e.legacyReading.fromDate ?? 'с начала двухнедельного периода'} — ${e.legacyReading.date})`).map(mdSafe).join('; ')}.`, ''] : []),
     '### Вклад периодов в премию за 12 недель',
-    '| Период и тарифная часть | Часы в цикле | Ставка | База | Процент | Премия |', '| --- | ---: | ---: | ---: | ---: | ---: |',
-    ...cycle.breakdown.map(b=>`| ${b.periodId} | ${hoursText(b.hours)} | ${money(b.hourlyRate)} | ${money(b.hourlyBase)} | ${percentText(b.cycleBonusPercent)}% | ${money(b.premium)} |`),
-    '- База и премия округляются до копеек отдельно для каждой ставки в периоде, затем складываются. Ставка относится к датам записей; старые накопительные интервалы не распределяются по неизвестным дням.', '',
+    '| Период и тарифная часть | Часы в цикле | Ставка | Общий доход | Процент | Премия |', '| --- | ---: | ---: | ---: | ---: | ---: |',
+    ...cycle.breakdown.map(b=>`| ${b.periodId} | ${hoursText(b.hours)} | ${money(b.hourlyRate)} | ${money(b.totalIncome)} | ${percentText(b.cycleBonusPercent)}% | ${money(b.premium)} |`),
+    '- Почасовая база и премия округляются до копеек по тарифным группам, общий доход складывается в копейках. Ставка относится к датам записей; старые накопительные интервалы не распределяются по неизвестным дням.', '',
     '### Записи 12-недельного цикла',
     '| Дата | ID записи | Часы |', '| --- | --- | ---: |',
     ...cycle.entries.map(e => `| ${e.date} | ${mdSafe(e.id)} | ${hoursText(e.dailyHours)} |`), '',

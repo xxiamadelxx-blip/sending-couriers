@@ -38,9 +38,9 @@ test('12-week premium covers exactly 84 days, rolls over and compounds neither p
   for (const [date, hours] of [['2026-10-06', 100], ['2026-10-07', 10], ['2026-12-29', 20], ['2026-12-30', 50]]) state = add(state, date, hours, hours * 3, { reward: 100, tips: 400, separateBonus: 500 });
   const cycle = core.calculatePremiumCycle(state, '2026-12-29');
   assert.equal(cycle.start, '2026-10-07'); assert.equal(cycle.end, '2026-12-29');
-  assert.equal(cycle.hours, 30); assert.equal(cycle.hourlyBase, 10800); assert.equal(cycle.premium, 540);
+  assert.equal(cycle.hours, 30); assert.equal(cycle.hourlyBase, 10800); assert.equal(cycle.totalIncome, 12600); assert.equal(cycle.premium, 630);
   assert.equal(cycle.entries.length, 2);
-  assert.equal(core.calculatePremiumCycle(state, '2026-12-30').premium, 900);
+  assert.equal(core.calculatePremiumCycle(state, '2026-12-30').premium, 945);
   assert.equal(core.calculatePremiumCycle(state, '2026-10-06').premium, null);
 });
 
@@ -93,4 +93,23 @@ test('legacy intervals crossing either cycle boundary warn without inventing a d
   const report=core.markdownReport(state,'2026-10-02','2026-10-10');
   assert.match(report,/точно разделить их по границе невозможно/);
   assert.match(report,/day-2026-12-30/);
+});
+
+test('12-week tracker follows the Home general income exactly, including tips and separate bonuses',()=>{
+ let state=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21'});
+ state=add(state,'2026-10-16',8,4,{reward:500,tips:120,separateBonus:200});
+ const home=core.calculate(state,'2026-10-16');
+ const cycle=core.calculatePremiumCycle(state,'2026-10-29');
+ assert.equal(home.grossUserIncome,3200);
+ assert.equal(cycle.start,'2026-08-21');assert.equal(cycle.end,'2026-11-12');
+ assert.equal(cycle.totalIncome,3200);
+ assert.equal(cycle.premium,160);
+ assert.equal(cycle.hourlyBase,2880);
+});
+test('12-week tracker reports unknown when no verified hours exist, never invents paid money',()=>{
+ let state=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21'});
+ assert.equal(core.calculatePremiumCycle(state,'2026-10-29').totalIncome,null);
+ state=add(state,'2026-10-18',null,null,{reward:500,tips:200,separateBonus:100});
+ const cycle=core.calculatePremiumCycle(state,'2026-10-29');
+ assert.equal(cycle.totalIncome,null);assert.equal(cycle.premium,null);assert.equal(cycle.missingHours,1);
 });
