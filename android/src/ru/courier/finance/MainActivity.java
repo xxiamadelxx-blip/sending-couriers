@@ -6,7 +6,7 @@ import android.app.UiModeManager;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -128,7 +128,7 @@ public final class MainActivity extends Activity {
             }
         });
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        launch = createLaunch(bg);
+        launch = createLaunch();
         root.addView(launch, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
         applyAppearance(darkTheme);
@@ -141,23 +141,27 @@ public final class MainActivity extends Activity {
         return new WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", null, new ByteArrayInputStream(new byte[0]));
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private View createLaunch(int bg) {
+    private View createLaunch() {
+        // Keep the original SHIFT CONTROL glyph; show it floating on graphite.
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
-        layout.setBackgroundColor(bg);
+        layout.setBackgroundColor(0xFF10151A);
+        FrameLayout mark = new FrameLayout(this);
+        View halo = new View(this);
+        GradientDrawable radial = new GradientDrawable();
+        radial.setShape(GradientDrawable.OVAL);
+        radial.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        radial.setGradientCenter(0.5f, 0.5f);
+        radial.setGradientRadius(dp(140));
+        radial.setColors(new int[]{0x24FF7952, 0x0DFFBD57, 0x0010151A});
+        halo.setBackground(radial);
+        mark.addView(halo, new FrameLayout.LayoutParams(dp(280), dp(280), Gravity.CENTER));
         ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_launcher);
-        layout.addView(icon, new LinearLayout.LayoutParams(dp(108), dp(108)));
-        TextView label = new TextView(this);
-        label.setText("ДОХОД\nКУРЬЕРА");
-        label.setTextColor(AppAppearance.foreground(darkTheme));
-        label.setTextSize(28);
-        label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        label.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-        lp.topMargin = dp(24);
-        layout.addView(label, lp);
+        icon.setImageResource(R.drawable.ic_brand_mark);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        mark.addView(icon, new FrameLayout.LayoutParams(dp(164), dp(164), Gravity.CENTER));
+        layout.addView(mark, new LinearLayout.LayoutParams(dp(280), dp(280)));
         return layout;
     }
 
@@ -176,7 +180,6 @@ public final class MainActivity extends Activity {
         }
         if (root != null) root.setBackgroundColor(bg);
         if (web != null) web.setBackgroundColor(bg);
-        if (launch != null) launch.setBackgroundColor(bg);
         // Android 12+ remembers this for the next system launch screen.
         if (Build.VERSION.SDK_INT >= 31 && (appliedNightMode == null || appliedNightMode != dark)) {
             appliedNightMode = dark;

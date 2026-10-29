@@ -1817,3 +1817,11 @@ dialog .button{margin:8px 0 0}
 .form-page .slot-mode-options [role="radio"].selected .slot-mode-indicator{border:6px solid var(--teal)}
 @media(max-width:374px){.form-page .form-grid{column-gap:9px}.form-page .form-grid .field-box input[type="text"]{padding-left:11px!important;font-size:17px!important}.form-page .form-grid .field-box .field-unit{right:10px}}
 :root[data-text-scale="large"] .form-page .form-grid{grid-template-columns:minmax(0,1fr)}
+
+/* Splash brand: reference's floating composition, ORIGINAL SHIFT CONTROL sign and pigments.
+   Initial loading surface only: saved light/dark content theme is untouched. */
+.splash{min-height:100dvh;margin:-30px -22px;display:grid;place-items:center;position:relative;isolation:isolate;overflow:hidden;background:#10151a}
+.splash::before{content:"";position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);width:clamp(270px,85vw,410px);height:clamp(270px,85vw,410px);border-radius:50%;background:radial-gradient(circle,rgba(255,121,82,.13) 0%,rgba(255,189,87,.04) 45%,transparent 72%);pointer-events:none}
+.splash-mark{position:relative;z-index:1;display:block;width:clamp(142px,43vw,186px);height:auto;aspect-ratio:1;filter:drop-shadow(0 0 9px rgba(255,121,82,.15))}
+@media(min-width:390px){.splash{margin-left:-24px;margin-right:-24px}}
+@media(prefers-reduced-motion:reduce){.splash-mark{animation:none}}

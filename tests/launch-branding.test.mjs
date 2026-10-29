@@ -23,7 +23,7 @@ test('native loading overlay and Android 12 splash use the exact same sign witho
  assert.match(mark,/android:rotation="270"/);
  assert.match(native,/icon\.setImageResource\(R\.drawable\.ic_brand_mark\)/);
  assert.doesNotMatch(native,/label\.setText\("ДОХОД\\nКУРЬЕРА"\)/);
- assert.match(native,/launch\.setBackground/);
+ assert.match(native,/layout\.setBackgroundColor\(0xFF10151A\)/);
  assert.match(v31,/android:windowSplashScreenAnimatedIcon">\@drawable\/ic_brand_mark/);
  assert.match(v31,/android:windowSplashScreenBackground">#10151a/);
  assert.match(native,/root\.removeView\(launch\)/,'launch overlay is still removed when the app is ready');
