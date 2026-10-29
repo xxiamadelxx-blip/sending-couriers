@@ -1,6 +1,6 @@
 # Period · Editable day ledger · 29 October 2026
 
-Status: **IMPLEMENTED IN SOURCE / ANDROID VISUAL VERDICT OPEN**. Scope: only **«Период»**, not Home, Forecast, navigation, money formulas or persisted data.
+Status: **OWNER APPROVED VISUAL PROPOSAL / ANDROID NATIVE QA OPEN**. Scope: only **«Период»**, not Home, Forecast, navigation, money formulas or persisted data.
 
 ## User-approved target (from the 29 October Android screenshot and explicit correction)
 
@@ -29,8 +29,14 @@ Status: **IMPLEMENTED IN SOURCE / ANDROID VISUAL VERDICT OPEN**. Scope: only **�
 | No duplicate Home KPIs | `periodDetails` markup plus native screenshots | Source changed; visual OPEN |
 | Conditions do not overlap cards | Scoped static layout + 360/390 Android captures, inspect images | NOT RUN on final SHA |
 | Persist changes and preserve numeric values | Core/NativeBridge tests and Android restart | NOT RUN on final SHA |
-| Owner visual acceptance | Before/after real Android screenshots | OPEN / requires explicit owner verdict |
+| Owner approval of synthetic visual proposal | Two inline previews shown in the 29 Oct 2026 chat, collapsed days and an expanded two-slot day; owner's explicit reply: «Одобряю» | **PASS for shown visual proposal only**; native Android screenshots still NOT RUN |
 
 ## Safety / limits
 
 The screenshot records must not be added to the public repo. Source checks do **not** establish Android design PASS or an installable APK. Existing historic QA failures for unrelated areas remain separately tracked; do not describe those as repaired. Verify a new SHA/CI run before an artifact can be issued.
+
+## Explicit owner visual decision · 29 October 2026
+
+**APPROVED**: The owner inspected the two *inline synthetic preview images* (collapsed list of daily cards; expanded day with two separately editable slots) and replied **«Одобряю»**. This locks the composition and task hierarchy for the Period screen: day ledger immediately after date selector; expandable day cards; per-slot edit; payout notice and compact 12-week cycle below. Keep exact graphite/orange visual direction and existing navigation. No new design exploration, palette revision, or Home redesign is authorized.
+
+**Approval scope:** proposal visuals with synthetic data only, not confirmation that the exact build renders correctly on the Android emulator. For real-app QA, inspect actual 360/390dp Android screenshots, exercise expansion, separate editing, saving, restart, and check absence of overlap. The present full CI run [#40846918821](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40846918821) for code SHA `587fc370c365a5c06126042d32d6b8c2711a2695` has model/unit/build PASS but Android 35 native checks were still in progress at the moment this decision was recorded. Do not mark final native, release, or owner-signed upgrade PASS on that evidence alone.
