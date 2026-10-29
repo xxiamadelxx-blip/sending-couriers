@@ -53,7 +53,7 @@ class UpgradeFromShippedSchemas(unittest.TestCase):
                     db.commit()
                 with sqlite3.connect(path) as db:
                     self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],3)
-                    self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0][0],"ok")
+                    self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
                     self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(),[])
                     self.assertEqual(db.execute("SELECT COUNT(*) FROM legacy_slot_facts").fetchone()[0],1)
                     self.assertEqual(db.execute("SELECT accounted_hundredths FROM legacy_slot_facts").fetchone()[0],650)
