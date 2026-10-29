@@ -60,6 +60,12 @@ android {
     buildTypes {
         debug { applicationIdSuffix '.m4probe' }
         release { minifyEnabled false }
+        m4Qa {
+            initWith release
+            applicationIdSuffix '.m4qa'
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
     }
     sourceSets {
         main {
