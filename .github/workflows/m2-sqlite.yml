@@ -18,6 +18,8 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_m2_sqlite_schema.py' -v
       - name: Historical Sheet 15-tab coverage and SQL integrity
         run: python3 -m unittest discover -s tests -p 'test_m2_sheet_archive.py' -v
+      - name: Verify historical forecast/rule/model archive contracts
+        run: python3 -m unittest discover -s tests -p 'test_m2_history_types.py' -v
       - name: Existing finance + model regression
         run: npm test
       - uses: android-actions/setup-android@v3
