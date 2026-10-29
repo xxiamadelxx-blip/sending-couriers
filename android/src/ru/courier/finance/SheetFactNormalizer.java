@@ -57,7 +57,7 @@ public final class SheetFactNormalizer {
      * Return a fully grounded normalized row, or NULL when the evidence cannot
      * justify one. Caller still keeps the original sheet row in all cases.
      */
-    public static JSONObject normalize(String sheet, JSONObject row) {
+    public static JSONObject normalize(String sheet, JSONObject row) throws Exception {
         if("Дневные итоги".equals(sheet)) {
             String date=iso(cell(row,"A"));Integer orders=whole(cell(row,"E"));
             if(date==null||orders==null)return null;

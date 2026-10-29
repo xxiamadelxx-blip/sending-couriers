@@ -4,12 +4,12 @@ import org.json.JSONObject;
 /** Actual production parser, independently computed expected facts. */
 public final class SheetFactsProbe {
     static void check(boolean v,String msg){if(!v)throw new AssertionError(msg);}
-    static JSONObject row(Object... pairs){
+    static JSONObject row(Object... pairs) throws Exception {
         JSONObject o=new JSONObject();
         for(int i=0;i<pairs.length;i+=2)o.put(String.valueOf(pairs[i]),pairs[i+1]);
         return o;
     }
-    public static void main(String[] ignored){
+    public static void main(String[] ignored) throws Exception {
         JSONObject day=SheetFactNormalizer.normalize("Дневные итоги",row("A","2026-10-14","E","12","G","1200"));
         check("aggregate_order_counts".equals(day.getString("table")) && day.getInt("order_count")==12,"14 October is a count aggregate");
         check(!day.has("reward_kopecks"),"whole slot sum is not order reward");
