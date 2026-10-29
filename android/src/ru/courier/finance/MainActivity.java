@@ -384,10 +384,16 @@ public final class MainActivity extends Activity {
                             factMirrorDatabase.mirrorWorkbook(text,sha);
                             // Promote only after both source history and legacy
                             // JSON are verified. Preserve the old JSON as backup.
-                            if(factMirrorDatabase.hasCompleteWorkbook(sha)){
+                            if(factMirrorDatabase.hasCompleteWorkbook(sha)
+                               && !preferences.getBoolean("m2_sqlite_primary",false)){
                                 String backup=preferences.getString("state","");
-                                if(!backup.isEmpty()&&factMirrorDatabase.matchesLegacy(backup))
-                                    preferences.edit().putBoolean("m2_sqlite_primary",true).commit();
+                                if(!backup.isEmpty()){
+                                    // Do not race the asynchronous startup mirror.
+                                    // First commit the freshest legacy JSON exactly.
+                                    factMirrorDatabase.mirrorLegacy(backup);
+                                    if(factMirrorDatabase.matchesLegacy(backup))
+                                        preferences.edit().putBoolean("m2_sqlite_primary",true).commit();
+                                }
                             }
                         } catch(Exception archiveError) {
                             // Old, user-visible import must continue. Source-parity
