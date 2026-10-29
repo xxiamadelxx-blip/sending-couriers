@@ -24,7 +24,7 @@ public final class YandexScreenParserTest {
 
     @Test public void extractsSlotAndVisibleOrderRowsWithoutAddingUnseenOrders() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
-            "Слот: 900,00 ₽\n339533360\nЗаказы\n900,00 ₽\n"
+            "Слот: 900,00 ₽\n339533360\n17:59 — 22:00\n9 заказов · 12,33 км\nЗаказы\n900,00 ₽\n"
                 +"18:18\nРесторан A\n100,00 ₽\nкоэф 1.0\n"
                 +"19:26\nРесторан B\n100,00 ₽\nкоэф 1.0\n"
                 +"Тип слота\nПлановый\nНачало\n2026.10.13 17:59\nЗавершение\n2026.10.13 22:04");
@@ -33,6 +33,8 @@ public final class YandexScreenParserTest {
         assertNotNull(slot);
         assertEquals("339533360",field(slot,"slot_id"));
         assertEquals("90000",field(slot,"slot_total_kopecks"));
+        assertEquals("9",field(slot,"slot_order_count"));
+        assertEquals("12.33",field(slot,"distance_km"));
         assertEquals("PLANNED",field(slot,"slot_type"));
         assertEquals("2026-10-13T17:59",field(slot,"started_at"));
         assertEquals("2026-10-13T22:04",field(slot,"completed_at"));
