@@ -49,6 +49,9 @@ jobs:
           target: default
           arch: x86_64
           profile: pixel_6
+          # Action's animation-disabling service calls can fail with ADB broken
+          # pipe before the user test script starts; keep app animations intact.
+          disable-animations: false
           script: |
             cp -a . "$RUNNER_TEMP/m2-debug-source"
             python3 - <<'PY'
