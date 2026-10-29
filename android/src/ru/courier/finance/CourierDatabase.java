@@ -249,6 +249,36 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                     fact.put("row_number",row);fact.put("raw_json",values.toString());
                     fact.put("created_at",when);fact.put("updated_at",when);
                     db.insertOrThrow("sheet_import_rows",null,fact);
+
+                    // Normalize only fields that carry unambiguous semantics.
+                    // Never create individual orders from spreadsheet aggregates.
+                    JSONObject normalized=SheetFactNormalizer.normalize(name,values);
+                    if(normalized==null)continue;
+                    String table=normalized.getString("table");
+                    ContentValues checked=new ContentValues();
+                    checked.put("id",sourceId+":"+name+":"+row);
+                    checked.put("source_id",sourceId);
+                    checked.put("source_kind","xlsx");
+                    checked.put("created_at",when);checked.put("updated_at",when);
+                    if("aggregate_order_counts".equals(table)){
+                        checked.put("date",normalized.getString("date"));
+                        checked.put("order_count",normalized.getInt("order_count"));
+                        checked.put("confidence",normalized.getString("confidence"));
+                    }else if("financial_ledger".equals(table)){
+                        checked.put("date",normalized.getString("date"));
+                        checked.put("kind",normalized.getString("kind"));
+                        checked.put("amount_kopecks",normalized.getLong("amount_kopecks"));
+                        checked.put("gross_or_net","unspecified");
+                        checked.put("confidence",normalized.getString("confidence"));
+                    }else if("period_snapshots".equals(table)){
+                        checked.put("period_start",normalized.getString("period_start"));
+                        checked.put("period_end",normalized.getString("period_end"));
+                        checked.put("seen_at",normalized.getString("seen_at"));
+                        checked.put("precision",normalized.getString("precision"));
+                        if(normalized.has("orders")) checked.put("orders",normalized.getInt("orders"));
+                        if(normalized.has("accounted_hundredths")) checked.put("accounted_hundredths",normalized.getInt("accounted_hundredths"));
+                    }else throw new SQLiteException("Unexpected sheet normalization table");
+                    db.insertOrThrow(table,null,checked);
                 }
             }
             long stored=countQuery(db,"SELECT COUNT(*) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
