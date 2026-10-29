@@ -28,7 +28,8 @@ public final class M2DeviceProbeActivity extends Activity {
     slots.put(new JSONObject().put("id","slot-pm").put("date","2026-10-18")
       .put("dailyOrders",9).put("dailyHours",5).put("reward",900));
     String original=new JSONObject().put("schemaVersion",6).put("entries",slots).toString();
-    if(!store.mirrorLegacy(original))throw new AssertionError("first mirror did not import");
+    boolean initial=store.mirrorLegacy(original);
+    if(!initial && !store.matchesLegacy(original))throw new AssertionError("existing mirror did not recover");
     if(!store.matchesLegacy(original))throw new AssertionError("legacy roundtrip hash mismatch");
     if(store.mirrorLegacy(original))throw new AssertionError("same JSON should be idempotent");
     SQLiteDatabase db=store.getReadableDatabase();
@@ -53,7 +54,8 @@ public final class M2DeviceProbeActivity extends Activity {
        .put("2",new JSONObject().put("A","2026-10-17").put("D",28).put("E",19).put("F",39)));
     String workbook=new JSONObject().put("sheets",sheets).toString();
     String sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    eq(store.mirrorWorkbook(workbook,sha),5,"5 source rows archived");
+    long archivedBefore=count(db,"SELECT COUNT(*) FROM sheet_import_rows");
+    eq(store.mirrorWorkbook(workbook,sha),archivedBefore==0?5:0,"5 source rows or verified restart");
     eq(store.mirrorWorkbook(workbook,sha),0,"same XLSX is idempotent");
     eq(count(db,"SELECT COUNT(*) FROM sheet_import_rows"),5,"source evidence rows");
     eq(count(db,"SELECT COUNT(*) FROM orders"),2,"two equal-time RAW deliveries not merged");
