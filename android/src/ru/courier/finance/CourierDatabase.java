@@ -339,6 +339,27 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         }
     }
 
+
+    /**
+     * Verify all fifteen archival sheets were committed as source evidence.
+     * This does not invent any missing order or training cutoff. An incomplete
+     * XLSX cannot switch the active storage backend.
+     */
+    public synchronized boolean hasCompleteWorkbook(String fileSha) {
+        if(fileSha==null||!fileSha.matches("[0-9a-f]{64}"))return false;
+        String sourceId="xlsx:"+fileSha;
+        SQLiteDatabase db=getReadableDatabase();
+        try(Cursor status=db.rawQuery(
+            "SELECT status FROM import_sources WHERE id=?",new String[]{sourceId})) {
+            if(!status.moveToFirst()||!"mirrored".equals(status.getString(0)))return false;
+        }
+        try(Cursor rows=db.rawQuery(
+            "SELECT COUNT(DISTINCT sheet_name) FROM sheet_import_rows WHERE source_id=?",
+            new String[]{sourceId})) {
+            return rows.moveToFirst()&&rows.getLong(0)==15;
+        }
+    }
+
     /**
      * Return the exact latest persisted app state, only after verifying the
      * source SHA. A damaged/missing DB must never masquerade as an empty day.

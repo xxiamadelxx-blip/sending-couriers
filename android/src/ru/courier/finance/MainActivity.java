@@ -61,10 +61,11 @@ public final class MainActivity extends Activity {
         super.onCreate(saved);
         preferences = getSharedPreferences("courier_finance", MODE_PRIVATE);
         factMirrorDatabase = new CourierDatabase(this);
-        // Source of truth remains the existing, intact JSON until verified
-        // M2 migration parity. Recover interrupted shadow writes on next launch.
-        mirrorFacts(preferences.getString("state", ""));
-        try { darkTheme = !"light".equals(new JSONObject(preferences.getString("state", "{}")).optJSONObject("settings").optString("theme")); }
+        // Existing JSON remains authoritative until the complete XLSX and
+        // legacy JSON have both passed native SQLite parity. No forced cutover.
+        if (!preferences.getBoolean("m2_sqlite_primary",false))
+            mirrorFacts(preferences.getString("state", ""));
+        try { darkTheme = !"light".equals(new JSONObject(storedState().isEmpty()?"{}":storedState()).optJSONObject("settings").optString("theme")); }
         catch (Exception ignored) { darkTheme = true; }
         setTheme(darkTheme ? R.style.AppThemeDark : R.style.AppThemeLight);
         if (saved != null && saved.getString("pendingSave") != null) {
@@ -200,6 +201,21 @@ public final class MainActivity extends Activity {
     private void error(String message) {
         runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
     }
+
+    /** Read the verified primary SQLite state, keeping the old JSON as fallback. */
+    private String storedState() {
+        String backup=preferences.getString("state","");
+        if(factMirrorDatabase==null||!preferences.getBoolean("m2_sqlite_primary",false))
+            return backup;
+        try {
+            String primary=factMirrorDatabase.readVerifiedState();
+            return primary==null?backup:primary;
+        }catch(Exception error){
+            Log.e("CourierSQLite","M2 verified read failed: "+error.getClass().getSimpleName());
+            return backup;
+        }
+    }
+
     private void mirrorFacts(String serialized) {
         if (serialized == null || serialized.isEmpty()) return;
         // During recovery or a legacy JVM probe, the mirror might not yet be
@@ -207,7 +223,10 @@ public final class MainActivity extends Activity {
         if (factMirrorExecutor == null || factMirrorDatabase == null) return;
         try {
             factMirrorExecutor.execute(() -> {
-                try { factMirrorDatabase.mirrorLegacy(serialized); }
+                try {
+                    if (!preferences.getBoolean("m2_sqlite_primary",false))
+                        factMirrorDatabase.mirrorLegacy(preferences.getString("state",""));
+                }
                 catch (Exception error) {
                     // Never log private financial content or reject a valid save.
                     Log.e("CourierSQLite", "M2 shadow copy failed: " + error.getClass().getSimpleName());
@@ -236,13 +255,22 @@ public final class MainActivity extends Activity {
                 }
             });
         }
-        @JavascriptInterface public String readState() { return preferences.getString("state", ""); }
+        @JavascriptInterface public String readState() { return storedState(); }
         @JavascriptInterface public boolean writeState(String value) {
             try {
                 if (value == null || value.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) return false;
                 JSONObject parsed = new JSONObject(value);
                 int schemaVersion = parsed.getInt("schemaVersion");
                 if ((schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 && schemaVersion != 6) || parsed.getJSONArray("entries").length() > 10000) return false;
+                if(factMirrorDatabase!=null&&preferences.getBoolean("m2_sqlite_primary",false)){
+                    // SQLite is the authoritative commit. Backup failures must
+                    // not cause the UI to roll back data that SQLite did save.
+                    factMirrorDatabase.mirrorLegacy(value);
+                    if(!factMirrorDatabase.matchesLegacy(value))return false;
+                    if(!preferences.edit().putString("state",value).commit())
+                        Log.w("CourierSQLite","Legacy backup update failed; SQLite commit retained");
+                    return true;
+                }
                 boolean saved = preferences.edit().putString("state", value).commit();
                 if (saved) mirrorFacts(value);
                 return saved;
@@ -352,7 +380,15 @@ public final class MainActivity extends Activity {
                             byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
                             StringBuilder digest=new StringBuilder(64);
                             for (byte h : hash) digest.append(String.format(java.util.Locale.ROOT,"%02x",h & 0xff));
-                            factMirrorDatabase.mirrorWorkbook(text,digest.toString());
+                            String sha=digest.toString();
+                            factMirrorDatabase.mirrorWorkbook(text,sha);
+                            // Promote only after both source history and legacy
+                            // JSON are verified. Preserve the old JSON as backup.
+                            if(factMirrorDatabase.hasCompleteWorkbook(sha)){
+                                String backup=preferences.getString("state","");
+                                if(!backup.isEmpty()&&factMirrorDatabase.matchesLegacy(backup))
+                                    preferences.edit().putBoolean("m2_sqlite_primary",true).commit();
+                            }
                         } catch(Exception archiveError) {
                             // Old, user-visible import must continue. Source-parity
                             // migration is NOT marked successful on a shadow error.

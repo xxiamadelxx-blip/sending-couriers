@@ -53,12 +53,19 @@ public final class M2DeviceProbeActivity extends Activity {
           .put("B","Финальная доплата почасовой гарантии").put("C","22 376,00")));
     sheets.put("Прогнозы",new JSONObject()
        .put("2",new JSONObject().put("A","2026-10-17").put("D",28).put("E",19).put("F",39)));
+    // All remaining historical sections must be present before promotion.
+    for(String name:new String[]{"Смены","Точность","Настройки","Календарь",
+        "Методика","Решения","Модели","Финансовые правила","Контроль",
+        "Аудит 19.10","Снимки периода"}){
+      sheets.put(name,new JSONObject().put("2",new JSONObject().put("A","source evidence")));
+    }
     String workbook=new JSONObject().put("sheets",sheets).toString();
     String sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     long archivedBefore=count(db,"SELECT COUNT(*) FROM sheet_import_rows");
-    eq(store.mirrorWorkbook(workbook,sha),archivedBefore==0?5:0,"5 source rows or verified restart");
+    eq(store.mirrorWorkbook(workbook,sha),archivedBefore==0?16:0,"16 source rows or verified restart");
+    if(!store.hasCompleteWorkbook(sha))throw new AssertionError("complete 15-sheet source not recognized");
     eq(store.mirrorWorkbook(workbook,sha),0,"same XLSX is idempotent");
-    eq(count(db,"SELECT COUNT(*) FROM sheet_import_rows"),5,"source evidence rows");
+    eq(count(db,"SELECT COUNT(*) FROM sheet_import_rows"),16,"source evidence rows");
     eq(count(db,"SELECT COUNT(*) FROM orders"),2,"two equal-time RAW deliveries not merged");
     eq(count(db,"SELECT COUNT(*) FROM orders WHERE completed_at LIKE '%18:57%'"),2,"equal completion times");
     eq(count(db,"SELECT SUM(order_count) FROM aggregate_order_counts WHERE source_kind='xlsx'"),29,"partial RAW remains 12/29 only when known");
@@ -74,6 +81,7 @@ public final class M2DeviceProbeActivity extends Activity {
     eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM orders"),2,"orders survive close-reopen");
     if(!store.matchesLegacy(original))throw new AssertionError("legacy survives close-reopen");
     if(!original.equals(store.readVerifiedState()))throw new AssertionError("verified read fails after reopening SQLite");
+    if(!store.hasCompleteWorkbook(sha))throw new AssertionError("archive parity lost after reopening");
     store.close();
   }
   static class App { static Activity instance; }
