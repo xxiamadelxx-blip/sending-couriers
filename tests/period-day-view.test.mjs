@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {periodDayMarkup, orderedPeriodDates} from '../web/period-day-view.mjs';
 
 const entries=[
@@ -38,4 +39,17 @@ test('No facts and malicious notes remain safe',()=>{
  assert.match(periodDayMarkup([],()=>null,date=>date,String,String,esc),/Пока нет записей/);
  const x=periodDayMarkup([{id:'safe',date:'2026-10-19',reward:0,dailyHours:1,dailyOrders:1,note:'<img src=x onerror=alert(1)>'}],()=>({hours:1,orders:1,paidReward:0}),date=>date,String,n=>n+' ₽',esc);
  assert.doesNotMatch(x,/<img/);assert.match(x,/&lt;img/);
+});
+
+// Layout hierarchy is a product requirement: daily records must precede secondary information.
+test('Period screen shows editable days before conditions and 12-week settings',()=>{
+ const source=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
+ const page=source.slice(source.indexOf('function periodDetails()'),source.indexOf('function settings()'));
+ const days=page.indexOf('class="period-days"');
+ const status=page.indexOf('class="period-notice"');
+ const cycle=page.indexOf('class="detail-card cycle-settings period-cycle-compact"');
+ assert.ok(days>=0 && status>=0 && cycle>=0,'Daily cards, conditions and cycle are present');
+ assert.ok(days<status && days<cycle,'Daily records must be first, secondary summaries below');
+ assert.doesNotMatch(page,/class="detail-card period-summary"|<h2>Итоги периода<\/h2>/,'Do not duplicate Home totals');
+ assert.match(page,/form\(button\.dataset\.entry,'period'\)/,'Edit opens the exact selected slot ID');
 });
