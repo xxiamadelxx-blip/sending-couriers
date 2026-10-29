@@ -26,6 +26,12 @@ def insert_v1_evidence(db):
 
 
 class M4VideoSchemaTest(unittest.TestCase):
+    def test_forecast_screen_exposes_video_import_action(self):
+        forecast_ui = (ROOT / "web/forecast-ui.mjs").read_text(encoding="utf8")
+        self.assertIn('id="importForecastVideo"', forecast_ui)
+        self.assertIn("Импортировать видео", forecast_ui)
+        self.assertIn("Native.importVideo()", forecast_ui)
+
     def test_private_evidence_is_not_added_to_android_backup_allowlist(self):
         backup = (ROOT / "android/res/xml/backup_rules.xml").read_text(encoding="utf8")
         extraction = (ROOT / "android/res/xml/data_extraction_rules.xml").read_text(encoding="utf8")

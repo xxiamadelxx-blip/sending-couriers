@@ -1829,3 +1829,8 @@ dialog .button{margin:8px 0 0}
 /* Approved 29 October pearlescent layered-mark splash artwork. Startup only; preserve saved app themes. */
 .splash .splash-art{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;max-width:none}
 .splash:has(.splash-art){background:#10151a;overflow:hidden;isolation:isolate;min-height:100dvh}
+
+
+/* M4: expose local video import beside report import on the forecast screen. */
+.forecast-import-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 22px}
+.forecast-page .forecast-import-actions .forecast-import-button{width:100%;min-width:0;margin:0;padding:8px 6px;font-size:clamp(12px,3.8vw,15px);line-height:1.25;white-space:normal}
