@@ -339,6 +339,21 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         }
     }
 
+    /**
+     * Return the exact latest persisted app state, only after verifying the
+     * source SHA. A damaged/missing DB must never masquerade as an empty day.
+     */
+    public synchronized String readVerifiedState() throws Exception {
+        try(Cursor cursor=getReadableDatabase().rawQuery(
+            "SELECT state_json,sha256 FROM legacy_state WHERE id=1",null)) {
+            if(!cursor.moveToFirst())return null;
+            String value=cursor.getString(0),expected=cursor.getString(1);
+            if(value==null||!sha256(value).equals(expected))
+                throw new SQLiteException("M2 state checksum mismatch");
+            return value;
+        }
+    }
+
     /** For parity review only: verify immutable copy corresponds to the original. */
     public synchronized boolean matchesLegacy(String raw) throws Exception {
         if(raw==null||raw.isEmpty()) return false;
