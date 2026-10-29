@@ -62,6 +62,13 @@ jobs:
           test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
           test "$(wc -c < m4-models/tessdata/rus.traineddata)" -eq 3861738
           test "$(wc -c < m4-models/tessdata/eng.traineddata)" -eq 4113088
+      - name: Publish pinned OCR models for short-lived QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-ocr-models-${{ github.sha }}
+          path: m4-models/tessdata/*.traineddata
+          retention-days: 1
+          if-no-files-found: error
       - name: Generate clearly synthetic pixel and MP4 fixtures
         run: |
           set -euo pipefail
