@@ -300,7 +300,7 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                         checked.put("date",normalized.getString("date"));
                         checked.put("kind",normalized.getString("kind"));
                         checked.put("amount_kopecks",normalized.getLong("amount_kopecks"));
-                        checked.put("gross_or_net","unspecified");
+                        checked.put("gross_or_net",normalized.optString("gross_or_net","unspecified"));
                         checked.put("confidence",normalized.getString("confidence"));
                     }else if("period_snapshots".equals(table)){
                         checked.put("source_kind","xlsx");checked.put("updated_at",when);
@@ -368,6 +368,15 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             // historic order or settlement. Preserve the last verified
             // projection and archive the reduced source for explicit review.
             // The owner may later approve a correction, never lose it silently.
+            // Do not auto-promote a revision of a previously verified
+            // workbook: equal row counts do not imply equal facts. Preserve
+            // every new export as evidence until correction review.
+            if(complete) {
+                long preceding=countQuery(db,
+                    "SELECT COUNT(*) FROM import_sources WHERE source_kind='xlsx'"+
+                    " AND status='mirrored' AND id<>'"+sourceId+"'");
+                if(preceding>0) complete=false;
+            }
             if(complete) {
                 for(String category:required) {
                     long older=countQuery(db,
@@ -437,6 +446,54 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             if(!integrity.moveToFirst()||!"ok".equals(integrity.getString(0)))return false;
         }
         return true;
+    }
+
+    /**
+     * The initial primary-store cutover is one-time and requires an independently
+     * audited, SHA-pinned canonical export plus exact sheet/typed row parity.
+     * A merely well-formed or truncated 15-tab workbook is NOT sufficient.
+     * Later revisions remain archived pending reconciliation, not overwritten.
+     */
+    public synchronized boolean isApprovedPrimarySource(String sha) {
+        if(!hasCompleteWorkbook(sha))return false;
+        try(InputStream in=appContext.getAssets().open("www/m2_source_contract_v1.json");
+            ByteArrayOutputStream buffer=new ByteArrayOutputStream()){
+            byte[] chunk=new byte[4096];int count;
+            while((count=in.read(chunk))!=-1){
+                buffer.write(chunk,0,count);
+                if(buffer.size()>16384)return false;
+            }
+            JSONObject contract=new JSONObject(new String(buffer.toByteArray(),StandardCharsets.UTF_8));
+            if(!sha.equals(contract.getString("sha256")))return false;
+            String sourceId="xlsx:"+sha;
+            SQLiteDatabase database=getReadableDatabase();
+            JSONObject sheetCounts=contract.getJSONObject("source_rows");
+            java.util.Iterator<String> names=sheetCounts.keys();
+            while(names.hasNext()){
+                String sheet=names.next();
+                try(Cursor c=database.rawQuery(
+                    "SELECT COUNT(*) FROM sheet_import_rows WHERE source_id=? AND sheet_name=?",
+                    new String[]{sourceId,sheet})){
+                    if(!c.moveToFirst()||c.getInt(0)!=sheetCounts.getInt(sheet))return false;
+                }
+            }
+            if(sheetCounts.length()!=15)return false;
+            JSONObject typed=contract.getJSONObject("typed_rows");
+            java.util.Iterator<String> tables=typed.keys();
+            while(tables.hasNext()){
+                String name=tables.next();
+                if(!java.util.Arrays.asList("orders","aggregate_order_counts",
+                    "financial_ledger","period_snapshots","historical_forecasts",
+                    "historical_rule_specs","historical_model_specs").contains(name))return false;
+                try(Cursor c=database.rawQuery("SELECT COUNT(*) FROM "+name+" WHERE source_id=?",
+                    new String[]{sourceId})){
+                    if(!c.moveToFirst()||c.getInt(0)!=typed.getInt(name))return false;
+                }
+            }
+            return typed.length()==7;
+        }catch(Exception failure){
+            return false; // Keep the existing JSON source authoritative.
+        }
     }
 
     /**

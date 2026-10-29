@@ -384,7 +384,7 @@ public final class MainActivity extends Activity {
                             factMirrorDatabase.mirrorWorkbook(text,sha);
                             // Promote only after both source history and legacy
                             // JSON are verified. Preserve the old JSON as backup.
-                            if(factMirrorDatabase.hasCompleteWorkbook(sha)
+                            if(factMirrorDatabase.isApprovedPrimarySource(sha)
                                && !preferences.getBoolean("m2_sqlite_primary",false)){
                                 String backup=preferences.getString("state","");
                                 if(!backup.isEmpty()){

@@ -21,6 +21,13 @@ public final class SheetFactsProbe {
         check("final_guarantee".equals(closing.getString("kind")) && closing.getLong("amount_kopecks")==2237600,"15 Oct closure is 2237600 kopecks, not a tip");
         check(SheetFactNormalizer.normalize("Финансовые факты",
             row("A","2026-10-15","B","Бонусы и корректировки","C","22376"))==null,"ambiguous category must await review");
+        JSONObject cycle=SheetFactNormalizer.normalize("Финансовые факты",
+            row("A","2026-10-07","B","Расчётный 12-недельный бонус 5%","C","11 197,87"));
+        check("cycle_premium".equals(cycle.getString("kind"))
+             && cycle.getLong("amount_kopecks")==1119787
+             && "conditional".equals(cycle.getString("gross_or_net"))
+             && "estimated_unpaid".equals(cycle.getString("confidence")),
+             "calculated 5% bonus is conditional, not a paid Yandex settlement");
         JSONObject park=SheetFactNormalizer.normalize("Финансовые факты",
             row("A","2026-09-14","B","Реальный бонус парка","C","3700"));
         check("park_bonus".equals(park.getString("kind")),"park income must not become Yandex 5 percent base");

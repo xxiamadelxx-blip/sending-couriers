@@ -111,6 +111,20 @@ public final class M2DeviceProbeActivity extends Activity {
       throw new AssertionError("newer XLSX with fewer orders superseded existing history");
     eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM active_orders"),2,
       "old confirmed RAW must remain active after reduced workbook");
+    // RED: replacing one delivery with a different timestamp while retaining
+    // identical row counts must NOT silently supersede the verified source.
+    JSONObject changed=new JSONObject(sheets.toString());
+    changed.getJSONObject("Заказы RAW").getJSONObject("3").put("M","18:59");
+    String sameSizeSha="dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    eq(store.mirrorWorkbook(new JSONObject().put("sheets",changed).toString(),sameSizeSha),16,
+       "changed export archived without dropping old evidence");
+    if(store.hasCompleteWorkbook(sameSizeSha))
+       throw new AssertionError("same-size revised XLSX silently superseded source");
+    eq(count(store.getReadableDatabase(),
+       "SELECT COUNT(*) FROM active_orders WHERE completed_at LIKE '%18:59%'"),0,
+       "unreviewed revision must not replace active order");
+    if(store.isApprovedPrimarySource(sha))
+       throw new AssertionError("synthetic 15-tab source must not authorize production cutover");
 
     // Actual native onUpgrade: emulate an older on-disk v1 database without
     // deleting records, then let the production SQLiteOpenHelper reopen it.

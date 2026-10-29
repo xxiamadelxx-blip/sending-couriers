@@ -133,10 +133,13 @@ public final class SheetFactNormalizer {
             else if(key.equals("комиссия партнёра"))kind="park_commission";
             else if(key.equals("налог"))kind="tax";
             else if(key.equals("реальный бонус парка")||key.equals("бонус парка"))kind="park_bonus";
-            else return null; // "Бонусы и корректировки" is ambiguous.
+            else if(key.equals("расчётный 12-недельный бонус 5%"))kind="cycle_premium";
+            else return null; // Ambiguous "Бонусы и корректировки" requires evidence.
+            boolean provisional="cycle_premium".equals(kind);
             return new JSONObject().put("table","financial_ledger")
                 .put("date",date).put("kind",kind).put("amount_kopecks",amount)
-                .put("confidence","reported_sheet");
+                .put("gross_or_net",provisional?"conditional":"unspecified")
+                .put("confidence",provisional?"estimated_unpaid":"reported_sheet");
             // No automatic addition to the Home total; confirmed closure wins later.
         }
         if("Прогнозы".equals(sheet)) {
