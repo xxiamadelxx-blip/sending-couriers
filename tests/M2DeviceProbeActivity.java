@@ -87,6 +87,27 @@ public final class M2DeviceProbeActivity extends Activity {
   static class App { static Activity instance; }
   @Override public void onCreate(Bundle saved){
     super.onCreate(saved);App.instance=this;
+    if(getIntent()!=null&&getIntent().getData()!=null&&"seed".equals(getIntent().getData().getHost())){
+      try {
+        CourierDatabase database=new CourierDatabase(this);
+        String verified=database.readVerifiedState();
+        if(verified==null||!verified.contains("slot-am"))
+          throw new AssertionError("must run courierm2://probe before seed");
+        database.close();
+        // Deliberately stale backup: live UI must follow the verified primary.
+        boolean saved=getSharedPreferences("courier_finance",MODE_PRIVATE).edit()
+          .putString("state","{\\"schemaVersion\\":6,\\"entries\\":[]}")
+          .putBoolean("m2_sqlite_primary",true).commit();
+        if(!saved)throw new AssertionError("cannot mark primary backend");
+        startActivity(new android.content.Intent(this,MainActivity.class));
+        finish();
+      }catch(Throwable problem){
+        TextView error=new TextView(this);
+        error.setText("M2 PRIMARY UI FAIL: "+problem.getMessage());
+        setContentView(error);
+      }
+      return;
+    }
     TextView display=new TextView(this);
     display.setTextSize(18);display.setPadding(24,80,24,24);
     display.setBackgroundColor(Color.WHITE);display.setTextColor(Color.BLACK);

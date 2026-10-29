@@ -39,6 +39,7 @@ jobs:
                <category android:name="android.intent.category.DEFAULT"/>
                <category android:name="android.intent.category.BROWSABLE"/>
                <data android:scheme="courierm2" android:host="probe"/>
+               <data android:scheme="courierm2" android:host="seed"/>
              </intent-filter>
            </activity>'''
           assert '<provider' in s
