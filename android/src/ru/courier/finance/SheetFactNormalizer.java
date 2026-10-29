@@ -61,11 +61,57 @@ public final class SheetFactNormalizer {
         catch(Exception ignored){return null;}
     }
 
+    private static String clock(String raw) {
+        if(raw==null)return null;
+        if(raw.matches("\\d{1,2}:\\d{2}(?::\\d{2})?")) {
+            String[] p=raw.split(":");
+            int h=Integer.parseInt(p[0]),m=Integer.parseInt(p[1]);
+            if(h>23||m>59)return null;
+            return String.format(Locale.ROOT,"%02d:%02d",h,m);
+        }
+        try {
+            BigDecimal fraction=new BigDecimal(raw);
+            if(fraction.signum()<0||fraction.compareTo(BigDecimal.ONE)>=0)return null;
+            int total=fraction.multiply(new BigDecimal("1440"))
+                .setScale(0,RoundingMode.HALF_UP).intValueExact();
+            if(total>=1440)return null;
+            return String.format(Locale.ROOT,"%02d:%02d",total/60,total%60);
+        }catch(Exception ignored){return null;}
+    }
+
     /**
      * Return a fully grounded normalized row, or NULL when the evidence cannot
      * justify one. Caller still keeps the original sheet row in all cases.
      */
     public static JSONObject normalize(String sheet, JSONObject row) throws Exception {
+        if("Заказы RAW".equals(sheet)) {
+            String date=iso(cell(row,"A"));
+            String confidence=cell(row,"K");
+            if(date==null||confidence==null)return null;
+            String level=confidence.toLowerCase(Locale.ROOT);
+            if(!level.equals("высокая")&&!level.equals("средняя"))return null;
+            String visible=cell(row,"C"),ordinal=cell(row,"D");
+            if(visible==null&&ordinal==null)return null;
+            String rewardRaw=cell(row,"E");
+            Long cents=kopecks(rewardRaw);
+            if(rewardRaw!=null&&cents==null)return null;
+            JSONObject result=new JSONObject().put("table","orders")
+                .put("date",date)
+                .put("confidence",level.equals("высокая")?"reported_high":"reported_medium")
+                .put("precision","sheet_partial");
+            if(cents!=null) result.put("reward_kopecks",cents);
+            String accepted=clock(cell(row,"L")),completed=clock(cell(row,"M"));
+            // Column C (visible time) is not an accepted or completed timestamp.
+            // If the two times cross midnight, keep raw evidence without
+            // claiming a particular day for completion.
+            if(accepted!=null)result.put("accepted_at",date+"T"+accepted+":00+03:00");
+            if(completed!=null&&(accepted==null||completed.compareTo(accepted)>=0))
+                result.put("completed_at",date+"T"+completed+":00+03:00");
+            if(result.has("accepted_at")||result.has("completed_at"))
+                result.put("precision","reported_times_partial");
+            // D is only a daily ordinal; no Yandex identifier is fabricated.
+            return result;
+        }
         if("Дневные итоги".equals(sheet)) {
             String date=iso(cell(row,"A"));Integer orders=whole(cell(row,"E"));
             if(date==null||orders==null)return null;
