@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "dev": "node preview.mjs",
-    "test": "python3 tools/generate_forecast_worker.py --check && node --test tests/core.test.mjs tests/pace.test.mjs tests/slots.test.mjs tests/premiums.test.mjs tests/preferences.test.mjs tests/payment-terms.test.mjs tests/payout-conditions.test.mjs tests/forecast.test.mjs tests/forecast-import.test.mjs tests/weather.test.mjs tests/forecast-fix.test.mjs tests/forecast-duration.test.mjs tests/model-1.7.4.test.mjs tests/slot-work.test.mjs tests/forecast-navigation-save.test.mjs tests/duration-pointer.test.mjs tests/home-dashboard.test.mjs tests/visual-direction.test.mjs tests/ui-mvp.test.mjs tests/forecast-approved-ui.test.mjs tests/period-day-view.test.mjs"
+    "test": "python3 tools/generate_forecast_worker.py --check && node --test tests/core.test.mjs tests/pace.test.mjs tests/slots.test.mjs tests/premiums.test.mjs tests/preferences.test.mjs tests/payment-terms.test.mjs tests/payout-conditions.test.mjs tests/forecast.test.mjs tests/forecast-import.test.mjs tests/weather.test.mjs tests/forecast-fix.test.mjs tests/forecast-duration.test.mjs tests/model-1.7.4.test.mjs tests/slot-work.test.mjs tests/forecast-navigation-save.test.mjs tests/duration-pointer.test.mjs tests/home-dashboard.test.mjs tests/visual-direction.test.mjs tests/ui-mvp.test.mjs tests/forecast-approved-ui.test.mjs tests/period-day-view.test.mjs tests/m2-cycle-premium-source.test.mjs"
   }
 }
