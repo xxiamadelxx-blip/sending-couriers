@@ -65,6 +65,14 @@ jobs:
           cp "$RUNNER_TEMP/courier-transfer-source/build/aligned.apk" "$RUNNER_TEMP/courier-transfer-unsigned.apk"
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$RUNNER_TEMP/apksigner.jar"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='29' versionName='1.7.15'"
+      - name: Preserve fresh unsigned transfer APK for owner signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: courier-transfer-unsigned-ready-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/courier-transfer-unsigned.apk
+            ${{ runner.temp }}/apksigner.jar
+          if-no-files-found: error
       - name: Build prior transfer version with the same temporary test signer
         run: |
           mkdir -p "$RUNNER_TEMP/courier-transfer-prior"
