@@ -28,7 +28,7 @@ import org.json.JSONObject;
  */
 public final class CourierDatabase extends SQLiteOpenHelper {
     public static final String FILE_NAME = "courier_facts_v1.db";
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
     private final Context appContext;
 
     public CourierDatabase(Context context) {
@@ -44,6 +44,7 @@ public final class CourierDatabase extends SQLiteOpenHelper {
     @Override public void onCreate(SQLiteDatabase db) {
         applySchema(db, "www/m2_schema_v1.sql");
         applySchema(db, "www/m2_views_v2.sql");
+        applySchema(db, "www/m3_schema_v1.sql");
     }
 
     private void applySchema(SQLiteDatabase db, String asset) {
@@ -83,12 +84,16 @@ public final class CourierDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int from, int to) {
-        if ((from == 1 || from == 2) && to == 3) {
-            // Legacy v1/v2 DBs lack subsequently added XLSX history tables.
-            // SQLiteOpenHelper wraps onUpgrade in a transaction. Reapply only
-            // missing schema objects and preserve all existing records.
+        if ((from == 1 || from == 2) && to == 4) {
+            // M2 adds the source archive; M3 adds append-only evaluation metadata.
+            // SQLiteOpenHelper wraps onUpgrade in a transaction; preserve every existing row.
             applySchema(db, "www/m2_schema_v1.sql", true);
             applySchema(db, "www/m2_views_v2.sql");
+            applySchema(db, "www/m3_schema_v1.sql");
+            return;
+        }
+        if (from == 3 && to == 4) {
+            applySchema(db, "www/m3_schema_v1.sql");
             return;
         }
         throw new SQLiteException("Unreviewed courier migration from " + from + " to " + to);
