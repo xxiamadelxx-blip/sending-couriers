@@ -364,6 +364,22 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             boolean complete=sheets.length()==15 && represented==15;
             for(String category:required)
                 complete &= normalizedExpected.getOrDefault(category,0)>0;
+            // A later exported workbook can omit an already-confirmed
+            // historic order or settlement. Preserve the last verified
+            // projection and archive the reduced source for explicit review.
+            // The owner may later approve a correction, never lose it silently.
+            if(complete) {
+                for(String category:required) {
+                    long older=countQuery(db,
+                        "SELECT COUNT(*) FROM "+category+
+                        " WHERE source_id IN (SELECT id FROM import_sources"+
+                        " WHERE source_kind='xlsx' AND status='mirrored')");
+                    if(normalizedExpected.getOrDefault(category,0)<older) {
+                        complete=false;
+                        break;
+                    }
+                }
+            }
             if(complete) {
                 ContentValues obsolete=new ContentValues();
                 obsolete.put("status","superseded");obsolete.put("updated_at",when);
