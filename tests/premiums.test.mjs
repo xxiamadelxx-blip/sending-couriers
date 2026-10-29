@@ -38,9 +38,9 @@ test('12-week premium covers exactly 84 days, rolls over and compounds neither p
   for (const [date, hours] of [['2026-10-06', 100], ['2026-10-07', 10], ['2026-12-29', 20], ['2026-12-30', 50]]) state = add(state, date, hours, hours * 3, { reward: 100, tips: 400, separateBonus: 500 });
   const cycle = core.calculatePremiumCycle(state, '2026-12-29');
   assert.equal(cycle.start, '2026-10-07'); assert.equal(cycle.end, '2026-12-29');
-  assert.equal(cycle.hours, 30); assert.equal(cycle.hourlyBase, 10800); assert.equal(cycle.totalIncome, 12600); assert.equal(cycle.premium, 630);
+  assert.equal(cycle.hours, 30); assert.equal(cycle.hourlyBase, 10800); assert.equal(cycle.totalIncome, 10800); assert.equal(cycle.premium, 540);
   assert.equal(cycle.entries.length, 2);
-  assert.equal(core.calculatePremiumCycle(state, '2026-12-30').premium, 945);
+  assert.equal(core.calculatePremiumCycle(state, '2026-12-30').premium, 900);
   assert.equal(core.calculatePremiumCycle(state, '2026-10-06').premium, null);
 });
 
@@ -95,15 +95,15 @@ test('legacy intervals crossing either cycle boundary warn without inventing a d
   assert.match(report,/day-2026-12-30/);
 });
 
-test('12-week tracker follows the Home general income exactly, including tips and separate bonuses',()=>{
+test('12-week tracker uses only eligible hourly pay, excluding Home tips and separate bonuses',()=>{
  let state=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21'});
  state=add(state,'2026-10-16',8,4,{reward:500,tips:120,separateBonus:200});
  const home=core.calculate(state,'2026-10-16');
  const cycle=core.calculatePremiumCycle(state,'2026-10-29');
  assert.equal(home.grossUserIncome,3200);
  assert.equal(cycle.start,'2026-08-21');assert.equal(cycle.end,'2026-11-12');
- assert.equal(cycle.totalIncome,3200);
- assert.equal(cycle.premium,160);
+ assert.equal(cycle.totalIncome,2880);
+ assert.equal(cycle.premium,144);
  assert.equal(cycle.hourlyBase,2880);
 });
 test('12-week tracker reports unknown when no verified hours exist, never invents paid money',()=>{
@@ -121,14 +121,14 @@ test('12-week historical opening income accumulates once; later slots remain ind
  const opening={cycleStart:'2026-08-21',through:'2026-10-15',grossIncome:'100000.00',source:'manual'};
  state=core.updateSettings(state,{cycleOpening:opening});
  const cycle=core.calculatePremiumCycle(state,'2026-10-29');
- assert.equal(cycle.totalIncome,102000);
- assert.equal(cycle.premium,5100);
+ assert.equal(cycle.totalIncome,101800);
+ assert.equal(cycle.premium,5090);
  assert.equal(cycle.excludedCount,1);
  assert.equal(cycle.entries.length,2,'Original facts are never deleted');
  assert.equal(core.calculate(state,'2026-10-16').grossUserIncome,2000,'Fortnight is unchanged');
  const restored=core.normalizeState(JSON.parse(JSON.stringify(state)));
  assert.deepEqual(restored.settings.cycleOpening,state.settings.cycleOpening);
- assert.equal(core.calculatePremiumCycle(restored,'2026-10-29').premium,5100);
+ assert.equal(core.calculatePremiumCycle(restored,'2026-10-29').premium,5090);
  assert.equal(core.calculatePremiumCycle(restored,'2026-11-13').opening,null,'Opening only belongs to its own 84-day cycle');
 });
 test('ChatGPT JSON opening report is parsed safely and repeated import cannot double the accumulator',()=>{

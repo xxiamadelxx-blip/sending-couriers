@@ -305,21 +305,14 @@ export function calculatePremiumCycle(state, date = today()) {
   const grouped = new Map();
   for (const entry of known) { const key = periodFor(entry.date).id; const rows=grouped.get(key)??[];rows.push(entry);grouped.set(key,rows); }
   const breakdown = [...grouped].sort(([a],[b])=>a.localeCompare(b)).flatMap(([periodId,rows])=>{
-    // Match the Home "Общий доход": hourly base + tips + separate bonuses.
-    // Group extras by the effective terms at each entry's date. Sum in kopecks.
-    const extras = new Map();
-    for (const entry of rows) {
-      const terms = paymentTermsFor(state,entry.date);
-      const key = `${terms.hourlyRate}|${terms.cycleBonusPercent}`;
-      extras.set(key,(extras.get(key)??0)+Math.round(entry.tips*100)+Math.round(entry.separateBonus*100));
-    }
-    return ratedHours(state,rows).map(part=>{
-      const incomeCents = Math.round(part.base*100)+(extras.get(`${part.hourlyRate}|${part.cycleBonusPercent}`)??0);
-      const totalIncome = incomeCents/100;
-      return {periodId,hours:part.hundredths/100,hourlyRate:part.hourlyRate,
-        cycleBonusPercent:part.cycleBonusPercent,hourlyBase:part.base,totalIncome,
-        premium:percentage(totalIncome,part.cycleBonusPercent)};
-    });
+    // User's 12-week 5% program is based on eligible Yandex hourly pay only.
+    // Tips and independent park/separate bonuses remain in Home money totals,
+    // but do not enter the premium base. Final guarantee cannot be added twice.
+    return ratedHours(state,rows).map(part=>({
+      periodId,hours:part.hundredths/100,hourlyRate:part.hourlyRate,
+      cycleBonusPercent:part.cycleBonusPercent,hourlyBase:part.base,
+      totalIncome:part.base,premium:percentage(part.base,part.cycleBonusPercent)
+    }));
   });
   const hourlyBase = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.hourlyBase*100),0)/100;
   const totalIncome = !opening && hours == null ? null : (

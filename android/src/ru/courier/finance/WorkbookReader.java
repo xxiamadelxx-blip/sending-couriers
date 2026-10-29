@@ -65,7 +65,7 @@ public final class WorkbookReader {
         for (int i=0; i<list.getLength(); i++) {
             Element sheet = (Element)list.item(i);
             String name = sheet.getAttribute("name");
-            if (!java.util.Arrays.asList("Смены", "Дневные итоги", "Заказы RAW", "Прогнозы", "Точность", "Модели", "Настройки", "Финансовые правила").contains(name)) continue;
+            if (!java.util.Arrays.asList("Смены", "Дневные итоги", "Заказы RAW", "Прогнозы", "Точность", "Модели", "Настройки", "Финансовые правила", "Календарь", "Методика", "Решения", "Финансовые факты", "Контроль", "Аудит 19.10", "Снимки периода").contains(name)) continue;
             String id = sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
             Document document = xml(parts.get(relations.get(id)));
             NodeList cells = document.getElementsByTagNameNS("*", "c");

@@ -1,0 +1,68 @@
+name: M2 SQLite parity
+on:
+  push:
+    branches: [m2/sqlite-shadow-migration-20261029]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: courier-m2-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-and-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: SQL integrity + migration contracts
+        run: python3 -m unittest discover -s tests -p 'test_m2_sqlite_schema.py' -v
+      - name: Historical Sheet 15-tab coverage and SQL integrity
+        run: python3 -m unittest discover -s tests -p 'test_m2_sheet_archive.py' -v
+      - name: Verify historical forecast/rule/model archive contracts
+        run: python3 -m unittest discover -s tests -p 'test_m2_history_types.py' -v
+      - name: Independently approved workbook manifest and cutover gate
+        run: python3 -m unittest discover -s tests -p 'test_m2_source_contract.py' -v
+      - name: M2 legacy v1 and v2 database upgrade and no-data-loss regression
+        run: python3 -m unittest discover -s tests -p 'test_m2_legacy_upgrade.py' -v
+      - name: Existing finance + model regression
+        run: npm test
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Android platform 35
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Compile Android sources + prepare test-only APK
+        run: |
+          cp -a . "$RUNNER_TEMP/m2-standalone"
+          python3 "$RUNNER_TEMP/m2-standalone/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m2-test-only.apk"
+          python3 "$RUNNER_TEMP/m2-standalone/tests/verify_native.py" --sdk "$ANDROID_HOME"
+      - name: Compile and run production XLSX reader against all 15 synthetic tabs
+        run: |
+          python3 qa/make_partial_xlsx.py "$RUNNER_TEMP/m2-15-tabs.xlsx"
+          python3 "$RUNNER_TEMP/m2-standalone/tests/verify_workbook.py" "$RUNNER_TEMP/m2-15-tabs.xlsx" "$RUNNER_TEMP/m2-15-tabs.json"
+      - name: Run actual conservative Java row normalization
+        run: |
+          mkdir -p "$RUNNER_TEMP/m2-standalone/build/sheet-probe"
+          javac -encoding UTF-8 -cp "$RUNNER_TEMP/m2-standalone/build/classes:$RUNNER_TEMP/tools/test-deps/json-20250517.jar:$ANDROID_HOME/platforms/android-35/android.jar"             -d "$RUNNER_TEMP/m2-standalone/build/sheet-probe" "$RUNNER_TEMP/m2-standalone/tests/SheetFactsProbe.java"
+          java -cp "$RUNNER_TEMP/m2-standalone/build/sheet-probe:$RUNNER_TEMP/m2-standalone/build/classes:$RUNNER_TEMP/tools/test-deps/json-20250517.jar:$ANDROID_HOME/platforms/android-35/android.jar"             ru.courier.finance.SheetFactsProbe
+      - name: Preserve SHA-specific build log marker
+        run: printf 'M2 TEST APK compiled for SHA=%s; NOT production signed.\n' "$GITHUB_SHA"
+      - name: Android 35 SQLite migration, restart and idempotency smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          # Action's animation-disabling service calls can fail with ADB broken
+          # pipe before the user test script starts; keep app animations intact.
+          disable-animations: false
+          script: |
+            cp -a . "$RUNNER_TEMP/m2-debug-source"
+            grep -q 'android:allowBackup="true"' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
+            ! grep -q 'android:debuggable=' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
+            sed -i 's/android:allowBackup="true"/android:debuggable="true" android:allowBackup="true"/' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
+            grep -q 'android:debuggable="true"' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
+            python3 "$RUNNER_TEMP/m2-debug-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m2-debug-probe.apk"
+            python3 qa/m2_sqlite_smoke.py --apk "$RUNNER_TEMP/m2-debug-probe.apk"

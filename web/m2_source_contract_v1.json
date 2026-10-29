@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "sha256": "4dc76e74f47cfa7919f954e42c6d44b3518b32754875d238eb3a95f56b9aba3b",
+  "source_rows": {
+    "Смены": 80,
+    "Прогнозы": 996,
+    "Точность": 54,
+    "Настройки": 38,
+    "Дневные итоги": 500,
+    "Календарь": 54,
+    "Заказы RAW": 1248,
+    "Методика": 62,
+    "Решения": 997,
+    "Модели": 3,
+    "Финансовые правила": 17,
+    "Финансовые факты": 72,
+    "Контроль": 199,
+    "Аудит 19.10": 14,
+    "Снимки периода": 3
+  },
+  "typed_rows": {
+    "orders": 1248,
+    "aggregate_order_counts": 55,
+    "historical_forecasts": 114,
+    "financial_ledger": 72,
+    "period_snapshots": 3,
+    "historical_rule_specs": 17,
+    "historical_model_specs": 3
+  },
+  "semantics": "Original XLSX SHA + source row inventory independently reconciled 2026-10-29. This is a first-migration safety gate, not a claim that historical RAW is complete.",
+  "source_date": "2026-10-29"
+}

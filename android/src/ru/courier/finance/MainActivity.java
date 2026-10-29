@@ -29,6 +29,9 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.util.Log;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -47,6 +50,8 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private View launch;
     private SharedPreferences preferences;
+    private CourierDatabase factMirrorDatabase;
+    private final ExecutorService factMirrorExecutor = Executors.newSingleThreadExecutor();
     private File pendingSave;
     private boolean darkTheme = true;
     private Boolean appliedNightMode;
@@ -55,7 +60,12 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         preferences = getSharedPreferences("courier_finance", MODE_PRIVATE);
-        try { darkTheme = !"light".equals(new JSONObject(preferences.getString("state", "{}")).optJSONObject("settings").optString("theme")); }
+        factMirrorDatabase = new CourierDatabase(this);
+        // Existing JSON remains authoritative until the complete XLSX and
+        // legacy JSON have both passed native SQLite parity. No forced cutover.
+        if (!preferences.getBoolean("m2_sqlite_primary",false))
+            mirrorFacts(preferences.getString("state", ""));
+        try { darkTheme = !"light".equals(new JSONObject(storedState().isEmpty()?"{}":storedState()).optJSONObject("settings").optString("theme")); }
         catch (Exception ignored) { darkTheme = true; }
         setTheme(darkTheme ? R.style.AppThemeDark : R.style.AppThemeLight);
         if (saved != null && saved.getString("pendingSave") != null) {
@@ -191,6 +201,42 @@ public final class MainActivity extends Activity {
     private void error(String message) {
         runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
     }
+
+    /** Read the verified primary SQLite state, keeping the old JSON as fallback. */
+    private String storedState() {
+        String backup=preferences.getString("state","");
+        if(factMirrorDatabase==null||!preferences.getBoolean("m2_sqlite_primary",false))
+            return backup;
+        try {
+            String primary=factMirrorDatabase.readVerifiedState();
+            return primary==null?backup:primary;
+        }catch(Exception error){
+            Log.e("CourierSQLite","M2 verified read failed: "+error.getClass().getSimpleName());
+            return backup;
+        }
+    }
+
+    private void mirrorFacts(String serialized) {
+        if (serialized == null || serialized.isEmpty()) return;
+        // During recovery or a legacy JVM probe, the mirror might not yet be
+        // initialized. Saving the existing primary store must never fail here.
+        if (factMirrorExecutor == null || factMirrorDatabase == null) return;
+        try {
+            factMirrorExecutor.execute(() -> {
+                try {
+                    if (!preferences.getBoolean("m2_sqlite_primary",false))
+                        factMirrorDatabase.mirrorLegacy(preferences.getString("state",""));
+                }
+                catch (Exception error) {
+                    // Never log private financial content or reject a valid save.
+                    Log.e("CourierSQLite", "M2 shadow copy failed: " + error.getClass().getSimpleName());
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // Activity is closing. The next launch replays the committed JSON.
+        }
+    }
+
     public final class NativeBridge {
         @JavascriptInterface public double fontScale() { return getResources().getConfiguration().fontScale; }
         @JavascriptInterface public void applyTheme(String mode) {
@@ -209,14 +255,25 @@ public final class MainActivity extends Activity {
                 }
             });
         }
-        @JavascriptInterface public String readState() { return preferences.getString("state", ""); }
+        @JavascriptInterface public String readState() { return storedState(); }
         @JavascriptInterface public boolean writeState(String value) {
             try {
                 if (value == null || value.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) return false;
                 JSONObject parsed = new JSONObject(value);
                 int schemaVersion = parsed.getInt("schemaVersion");
                 if ((schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 && schemaVersion != 6) || parsed.getJSONArray("entries").length() > 10000) return false;
-                return preferences.edit().putString("state", value).commit();
+                if(factMirrorDatabase!=null&&preferences.getBoolean("m2_sqlite_primary",false)){
+                    // SQLite is the authoritative commit. Backup failures must
+                    // not cause the UI to roll back data that SQLite did save.
+                    factMirrorDatabase.mirrorLegacy(value);
+                    if(!factMirrorDatabase.matchesLegacy(value))return false;
+                    if(!preferences.edit().putString("state",value).commit())
+                        Log.w("CourierSQLite","Legacy backup update failed; SQLite commit retained");
+                    return true;
+                }
+                boolean saved = preferences.edit().putString("state", value).commit();
+                if (saved) mirrorFacts(value);
+                return saved;
             } catch (Exception ignored) { return false; }
         }
         @JavascriptInterface public void ready() { runOnUiThread(() -> { if (launch != null) { root.removeView(launch); launch = null; } }); }
@@ -315,8 +372,35 @@ public final class MainActivity extends Activity {
                     byte[] buffer = new byte[8192]; int count;
                     while ((count = in.read(buffer)) != -1) { out.write(buffer, 0, count); if (out.size() > MAX_BYTES) throw new IllegalArgumentException(); }
                     byte[] bytes = out.toByteArray();
-                    String text = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K'
-                        ? WorkbookReader.read(new ByteArrayInputStream(bytes)) : new String(bytes, StandardCharsets.UTF_8);
+                    boolean xlsx = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K';
+                    String text = xlsx ? WorkbookReader.read(new ByteArrayInputStream(bytes))
+                        : new String(bytes, StandardCharsets.UTF_8);
+                    if (xlsx) {
+                        try {
+                            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+                            StringBuilder digest=new StringBuilder(64);
+                            for (byte h : hash) digest.append(String.format(java.util.Locale.ROOT,"%02x",h & 0xff));
+                            String sha=digest.toString();
+                            factMirrorDatabase.mirrorWorkbook(text,sha);
+                            // Promote only after both source history and legacy
+                            // JSON are verified. Preserve the old JSON as backup.
+                            if(factMirrorDatabase.isApprovedPrimarySource(sha)
+                               && !preferences.getBoolean("m2_sqlite_primary",false)){
+                                String backup=preferences.getString("state","");
+                                if(!backup.isEmpty()){
+                                    // Do not race the asynchronous startup mirror.
+                                    // First commit the freshest legacy JSON exactly.
+                                    factMirrorDatabase.mirrorLegacy(backup);
+                                    if(factMirrorDatabase.matchesLegacy(backup))
+                                        preferences.edit().putBoolean("m2_sqlite_primary",true).commit();
+                                }
+                            }
+                        } catch(Exception archiveError) {
+                            // Old, user-visible import must continue. Source-parity
+                            // migration is NOT marked successful on a shadow error.
+                            Log.e("CourierSQLite","M2 workbook archival failed: "+archiveError.getClass().getSimpleName());
+                        }
+                    }
                     String callback = requestCode == IMPORT_FORECAST ? "window.receiveForecastImport" : "window.receiveImport";
                     runOnUiThread(() -> web.evaluateJavascript(callback + "(" + JSONObject.quote(text) + ")", null));
                 } catch (Exception e) { error("Не удалось прочитать файл. Допустимы JSON и XLSX до 8 МБ без пароля."); }
@@ -337,6 +421,7 @@ public final class MainActivity extends Activity {
         if (pendingSave != null) out.putString("pendingSave", "exports/" + pendingSave.getParentFile().getName() + "/" + pendingSave.getName());
     }
     @Override protected void onDestroy() {
+        factMirrorExecutor.shutdown(); // Queued writes finish; next launch also repairs interruption.
         if (web != null) { web.removeJavascriptInterface("CourierNative"); web.destroy(); }
         super.onDestroy();
     }
