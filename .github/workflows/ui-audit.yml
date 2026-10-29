@@ -1,0 +1,115 @@
+name: UI audit
+on:
+  pull_request:
+    branches: [main, qa/native-forecast-cold-start]
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: Android checks to run
+        type: choice
+        default: full
+        options: [full, delta, content]
+permissions:
+  contents: read
+concurrency:
+  group: courier-ui-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ui-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+      - name: Model and finance regressions
+        run: npm test
+      - name: Emulator recovery unit tests
+        run: python3 -m unittest discover -s tests -p 'test_emulator_wait_home.py' -v
+      - name: Empty-state 360/390 native XML contract unit tests
+        run: python3 -m unittest discover -s tests -p 'test_empty_state_contract.py' -v
+      - name: Empty-state native backup contract unit tests
+        run: python3 -m unittest discover -s tests -p 'test_empty_backup_contract.py' -v
+      - name: Large-form geometry independent unit tests
+        run: python3 -m unittest discover -s tests -p 'test_form_large_geometry.py' -v
+      - name: Accessible Android node XML unit tests
+        run: python3 -m unittest discover -s tests -p 'test_a11y_xml_smoke.py' -v
+      - name: Full native accessibility layout contract unit tests
+        run: python3 -m unittest discover -s tests -p 'test_a11y_layout_matrix.py' -v
+      - name: Independent-gate orchestration unit tests
+        run: python3 -m unittest discover -s tests -p 'test_ui_gate_orchestrator.py' -v
+      - name: Set up Android command line tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build isolated test APK, preserve release signing
+        run: |
+          cp -a . "$RUNNER_TEMP/courier-ui-source"
+          python3 "$RUNNER_TEMP/courier-ui-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/courier-ui-test-only.apk"
+          python3 "$RUNNER_TEMP/courier-ui-source/tests/verify_native.py" --sdk "$ANDROID_HOME"
+          python3 - <<'PY'
+          import os, pathlib, zipfile
+          with zipfile.ZipFile(pathlib.Path(os.environ['RUNNER_TEMP'])/'courier-ui-test-only.apk') as apk:
+              for source in pathlib.Path('web').iterdir():
+                  if source.is_file():
+                      assert apk.read('assets/www/'+source.name) == source.read_bytes(), source
+          PY
+      - name: Build isolated transfer package for owner signing
+        run: |
+          cp -a . "$RUNNER_TEMP/courier-transfer-source"
+          python3 tools/prepare_parallel.py "$RUNNER_TEMP/courier-transfer-source"
+          python3 "$RUNNER_TEMP/courier-transfer-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/courier-transfer-test-only.apk"
+          cp "$RUNNER_TEMP/courier-transfer-source/build/aligned.apk" "$RUNNER_TEMP/courier-transfer-unsigned.apk"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$RUNNER_TEMP/apksigner.jar"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='29' versionName='1.7.15'"
+      - name: Preserve fresh unsigned transfer APK for owner signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: courier-transfer-unsigned-ready-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/courier-transfer-unsigned.apk
+            ${{ runner.temp }}/apksigner.jar
+          if-no-files-found: error
+      - name: Build prior transfer version with the same temporary test signer
+        run: |
+          mkdir -p "$RUNNER_TEMP/courier-transfer-prior"
+          git fetch --no-tags --depth=1 origin 4f295c0eefd9d6fb4e2b0652297f93cbee915d08
+          git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08 | tar -x -C "$RUNNER_TEMP/courier-transfer-prior"
+          python3 tools/prepare_parallel.py "$RUNNER_TEMP/courier-transfer-prior"
+          mkdir -p "$RUNNER_TEMP/courier-transfer-prior/signing"
+          cp "$RUNNER_TEMP/courier-transfer-source/signing/"* "$RUNNER_TEMP/courier-transfer-prior/signing/"
+          python3 "$RUNNER_TEMP/courier-transfer-prior/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/courier-transfer-prior-test-only.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-prior-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Native UI checks on Android 35
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            python3 qa/run_ui_gates.py --apk "$RUNNER_TEMP/courier-ui-test-only.apk" --old "$RUNNER_TEMP/courier-transfer-prior-test-only.apk" --new "$RUNNER_TEMP/courier-transfer-test-only.apk" --focus "${{ inputs.focus || 'full' }}"
+      - name: Capture audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-audit-${{ github.sha }}
+          path: qa-results/
+          if-no-files-found: error
+      - name: Deliver unsigned transfer build for persistent signing
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: courier-transfer-unsigned-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/courier-transfer-unsigned.apk
+            ${{ runner.temp }}/apksigner.jar
+          if-no-files-found: error

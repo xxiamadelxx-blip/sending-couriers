@@ -29,9 +29,9 @@ test('custom pace premium compares exact counters and honours zero-percent disab
 test('12-week premium uses each period rate and percentage, with per-period kopeck rounding',()=>{
  let s=updateSettings(emptyState(),{premiumCycleStart:'2026-08-21'});s=add(add(add(s,oldPeriod),current),next);
  s=setPaymentTerms(setPaymentTerms(s,rule()),rule(next,{hourlyRate:400,cycleBonusPercent:2.5}));
- const c=calculatePremiumCycle(s,'2026-11-12');assert.equal(c.hours,30);assert.equal(c.hourlyBase,11800);assert.equal(c.premium,616);assert.equal(c.breakdown.length,3);
+ const c=calculatePremiumCycle(s,'2026-11-12');assert.equal(c.hours,30);assert.equal(c.hourlyBase,11800);assert.equal(c.totalIncome,11980);assert.equal(c.premium,625.3);assert.equal(c.breakdown.length,3);
  let cents=updateSettings(emptyState(),{premiumCycleStart:'2026-08-21'});cents=setPaymentTerms(cents,rule(oldPeriod,{hourlyRate:10,cycleBonusPercent:5}));cents=add(add(cents,oldPeriod,0.01,0),current,0.01,0);
- assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,0.02);
+ assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,6.02); // Both entries use the effective 10 RUB/5% rule; each earns 3.01.
 });
 test('old imports preserve rules/theme; explicit backups restore them and conflicts reject atomically',()=>{
  const s=updateSettings(setPaymentTerms(add(emptyState(),current),rule()),{theme:'light'});
@@ -41,7 +41,7 @@ test('old imports preserve rules/theme; explicit backups restore them and confli
 });
 test('invalid rules and themes fail before mutation',()=>{
  const s=emptyState(),before=JSON.stringify(s);
- for(const x of [{hourlyRate:0},{hourlyRate:-1},{hourlyRate:Infinity},{hourlyRate:'1e3'},{hourlyRate:'2.001'},{basePace:0},{basePace:'1.2345'},{premiumPace:NaN},{paceBonusPercent:-1},{cycleBonusPercent:101},{effectivePeriodStart:'2026-10-17'}])assert.throws(()=>setPaymentTerms(s,rule(current,x)),JSON.stringify(x));
+ for(const x of [{hourlyRate:0},{hourlyRate:-1},{hourlyRate:Infinity},{hourlyRate:'1e3'},{hourlyRate:'2.001'},{basePace:0},{basePace:'1.2345'},{premiumPace:NaN},{paceBonusPercent:-1},{cycleBonusPercent:101},{effectivePeriodStart:'2026-10-32'}])assert.throws(()=>setPaymentTerms(s,rule(current,x)),JSON.stringify(x));
  assert.throws(()=>updateSettings(s,{theme:'blue'}));assert.throws(()=>updateSettings(s,{paymentRules:[rule(),rule()]}));assert.equal(JSON.stringify(s),before);
 });
 test('backdated slots and moves resolve the destination period terms without changing paid amounts',()=>{
@@ -54,3 +54,19 @@ test('ChatGPT report carries actual terms and cycle contributions',()=>{
  const text=markdownReport(s,current,'2026-10-22');for(const expected of ['420','2,10','3,25','7,5','8%','Условия оплаты','Вклад периодов'])assert.ok(text.includes(expected),expected);
  assert.doesNotMatch(text,/Ставка: 360/);
 });
+test('midperiod change preserves earlier hours, splits same-day slots, backup, and cycle premium',()=>{
+ let s=updateSettings(emptyState(),{premiumCycleStart:'2026-10-16'});
+ s=add(s,'2026-10-22',5,15);s=add(s,'2026-10-23',3,10);s=add(s,'2026-10-23',2,6);
+ const actual=s.entries.map(e=>[e.id,e.reward,e.tips,e.tax,e.parkCommission]);
+ s=setPaymentTerms(s,rule('2026-10-23',{hourlyRate:500,cycleBonusPercent:10}));
+ assert.equal(paymentTermsFor(s,'2026-10-22').hourlyRate,360);
+ assert.equal(paymentTermsFor(s,'2026-10-23').hourlyRate,500);
+ const result=calculate(s,'2026-10-16','2026-10-24');
+ assert.equal(result.hours,10);assert.equal(result.hourlyBase,4300);assert.equal(result.estimatedYandexOwed,1300);
+ assert.equal(result.grossUserIncome,4480);assert.deepEqual(s.entries.map(e=>[e.id,e.reward,e.tips,e.tax,e.parkCommission]),actual);
+ const cycle=calculatePremiumCycle(s,'2026-10-24');
+ assert.equal(cycle.hourlyBase,4300);assert.equal(cycle.totalIncome,4480);assert.equal(cycle.premium,355);assert.equal(cycle.breakdown.length,2);
+ assert.equal(calculateDayFor(s,'2026-10-22'),1800);assert.equal(calculateDayFor(s,'2026-10-23'),2500);
+ assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(s))).settings.paymentRules,s.settings.paymentRules);
+});
+function calculateDayFor(state,date){return calculate({...state,entries:state.entries.filter(e=>e.date===date)},periodFor(date).id,date).hourlyBase;}

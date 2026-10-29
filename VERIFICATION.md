@@ -1,3 +1,9 @@
+# Подписанная сборка переноса 1.7.15 · 25.10.2026
+
+**KEY PASS / SIGNED APK PASS:** приватный архив с постоянным JKS найден в личной библиотеке, подписи APK v2/v3 проверены. SHA-256 сертификата `eed086d5bdb63dd425494f3a585e90243224c0305eda4ff40845d7744f7a5ef1` совпадает с установленными 1.7.13/1.7.14; итоговый подписанный 1.7.15/code29 APK SHA-256 `ff490b0167799c7d7d07634631869aecafeb71a51a83ee401fa4ba47ae6711ae`. Исходный код сборки: `c3c50eadc7006fe1e6a7e86f29e1bef952cd55bd`; [полный Android35 CI #40219845972](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40219845972) SUCCESS, 81 снимок, XLSX импорт дважды PASS, same-temporary-signer обновление 1.7.14→1.7.15 с сохранением данных PASS. Файл в личной библиотеке `/Курьерское приложение/Courier-Finance-Transfer-1.7.15.apk`. **Не распространять архив с ключом.** Тест установки именно подписанной постоянным ключом новой версии поверх прежней на облачном эмуляторе NOT RUN; не называть весь MVP RELEASE PASS без финального TalkBack и независимого аудита всех состояний. Полная матрица [здесь](docs/acceptance/UI_MVP_RELEASE_2026-10-25.md).
+
+---
+
 # Проверка 1.7.3 — ползунки прогноза, 23.10.2026
 
 111/111 unit PASS; slider workflows4/4 и layout4/4 на360/390 в обеих темах. Раздельные14/9, 63/98/35 за неделю, жесты и точный шаг15мин, сохранение дат, NULL/0, отказ записи, неизменность фактов/MORNING/финансов проверены. Независимый итог PASS, открытых P1/P2 нет; собственный UI критика4/4. Доказательства — verification/1.7.3/independent-review.md.
@@ -45,3 +51,7 @@ Android runtime и установка обновления на устройст
 Новые модельные проверки сначала воспроизвели отсутствие условий в1.6.0 (payout-before.txt:5 FAIL), затем прошли. Первый UI-прогон сравнивал ненормализованный тестовый fixture без времени/полей по умолчанию с нормализованными данными; fixture дополнен, production для этого не менялся. Финальные UI результаты — свежие успешные прогоны.
 
 Премии и почасовой доход остаются оценками, пока условия выплаты не подтверждены; actual reward, удержания, чаевые и отдельные бонусы не выводятся из заказов и не перезаписываются. Двухнедельный календарь, правила оплаты1.6.0, место настройки12недель и автоматические отступы сохранены. Скриншоты только для внутреннего просмотра, в архив исходников не включаются.
+
+## UI-012 200% Android form acceptance · 26.10.2026
+
+PASS on source SHA `417f8780a360238785d3e1555183184aa7a82c72`, [CI #40237133128](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40237133128), artifact `ui-audit-330c8ab63cd58acf88a91c851296ea924725896c`. Independent native result: 7 fields on 360dp dark/390dp light at font 200%; numeric keyboard + Save visible; new synthetic slot 1h/2 orders/300 ₽ becomes 10h/20 orders/3500 ₽; persisted after force-stop; XLSX 2 imports with 2 distinct orders and no duplicates; temporary test signer upgrade PASS. The owner signing key IS RECOVERED; real owner-signed 1.7.14→1.7.15 Android update and TalkBack are NOT RUN. UI-M2 as a whole remains OPEN.

@@ -180,6 +180,7 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
 .payment-settings .pager-panel .field input,.payment-settings .pager-panel .period-select{min-height:52px;width:100%}
 .payment-settings #savePaymentTerms{min-height:48px;margin-top:17px}
 .payment-settings #paymentHistory{margin-top:4px}
+.payment-effective-date{margin:16px 0 0;padding:10px 12px;border-radius:12px;background:var(--surface);color:var(--ink);font-size:14px;line-height:1.4}
 .slot-working{margin-top:24px}
 
 /* Compact numbers and controls stay readable on narrow Android screens. */
@@ -195,6 +196,44 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
 .payment-settings .pager-tabs::-webkit-scrollbar-thumb{background:var(--teal);border-radius:4px}
 .payment-settings .pager-tabs button{font-size:14px;min-width:84px}
 
+/* Primary controls use Android's recommended 48 dp touch target. */
+.overview-top .period-button{min-height:48px}
+.calculation>summary,.balance-card .calculation>summary{min-height:48px;display:flex;align-items:center}
+.export-icon,.theme-toggle,.back,.period-arrow{min-width:48px;width:48px;min-height:48px;height:48px}
+.period-navigation{grid-template-columns:48px minmax(0,1fr) 48px}
+.header-weather{min-height:48px;min-width:48px}
+.duration-track{grid-template-columns:48px minmax(0,1fr) 48px}
+.duration-track button{width:48px;height:48px;min-height:48px}
+.forecast-page .duration-control .duration-slider{height:48px;min-height:48px}
+.forecast-page .duration-control .duration-value input{height:48px;min-height:48px}
+.nav-item{font-size:12px}
+.forecast-simple-hero .forecast-number.is-unknown{font-size:36px;font-weight:500;letter-spacing:0;line-height:1.3;color:var(--muted)}
+.button,.forecast-page .button,.button.export-action,.period-actions .export-action,.payment-settings .pager-tabs button,.cycle-config>summary,.additional>summary{min-height:48px}
+.period-select{height:48px;min-height:48px}
+
+/* Native font scaling changes layout, while keeping the requested text size. */
+main{padding-bottom:calc(var(--navigation-space,104px) + var(--safe-bottom))}
+.nav-item span{max-width:100%;overflow-wrap:anywhere;line-height:1.15}
+:root[data-text-scale="large"] .overview .pace-hero{grid-template-columns:minmax(0,1fr);gap:20px}
+:root[data-text-scale="large"] .gauge,:root[data-text-scale="large"] .gauge canvas{width:160px;height:160px}
+:root[data-text-scale="large"] .gauge{justify-self:center}
+:root[data-text-scale="large"] .gauge-label strong{font-size:26px}
+:root[data-text-scale="large"] .overview .meters{grid-template-columns:minmax(0,1fr);gap:16px}
+:root[data-text-scale="large"] .meter+.meter{padding-left:0;border-left:0;border-top:1px solid var(--line);padding-top:16px}
+:root[data-text-scale="large"] .norm-row{flex-wrap:wrap;gap:12px}
+:root[data-text-scale="large"] .page-heading{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;gap:14px}
+:root[data-text-scale="large"] .page-heading h1{grid-column:1/-1;grid-row:2;overflow-wrap:anywhere}
+:root[data-text-scale="large"] .page-heading .theme-toggle{grid-column:3;grid-row:1}
+:root[data-text-scale="large"] .duration-heading{flex-wrap:wrap;align-items:flex-start}
+:root[data-text-scale="large"] .forecast-page .duration-control .duration-heading label{flex-basis:100%}
+:root[data-text-scale="large"] .duration-value{margin-left:auto;max-width:100%}
+:root[data-text-scale="large"] .forecast-page .duration-control .duration-value input{height:auto;min-height:60px;width:190px;padding:8px}
+:root[data-text-scale="large"] .duration-track{grid-template-columns:56px minmax(0,1fr) 56px;gap:8px}
+:root[data-text-scale="large"] .duration-track button{width:56px;height:64px;min-height:64px;line-height:1}
+:root[data-text-scale="large"] .forecast-page .duration-control .duration-slider{height:64px;min-height:64px}
+:root[data-text-scale="large"] .form-grid{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] .field input,:root[data-text-scale="large"] .field select{height:auto;min-height:64px}
+
 /* Keep both duration controls and the report import above Android's bottom nav. */
 @media (max-width:400px) and (max-height:800px){
   .forecast-simple-hero{padding:14px 18px;margin:4px 0 8px}
@@ -204,3 +243,1589 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
   .forecast-simple-plan .duration-control{margin:8px 0!important}
   .forecast-import-button{margin:4px 0 10px}
 }
+
+/* 1.7.14: one readable dashboard, restrained surfaces, direct tariff editing. */
+:root{--line:#263229;--muted:#a4b1a8;--surface:#080e0a;--field:#101713;--teal:#a8e6bf;--primary-bg:#a8e6bf;--primary-ink:#10281b;--gauge-track:#28352b}
+:root[data-theme="light"]{--bg:#f4f6f1;--ink:#18251d;--muted:#56665b;--line:#d5ded4;--surface:#fff;--field:#f7faf6;--teal:#176642;--primary-bg:#176642;--primary-ink:#fff;--gauge-track:#d5e1d8}
+main{padding-left:calc(16px + var(--safe-left));padding-right:calc(16px + var(--safe-right))}
+h1,.page-heading h1{font-size:27px;line-height:1.2;letter-spacing:-.6px}
+.page-heading{margin-bottom:18px}.page-heading h1{font-weight:720}
+.overview-top{margin-bottom:16px}
+.overview-toolbar{min-height:44px;margin-bottom:12px}
+.overview-top h1{font-size:24px;margin:0 0 4px}
+.overview-top .period-button{margin:0;min-height:44px;border:0;border-radius:0;padding:0;color:var(--muted);font-size:13px;font-weight:550}
+.overview-top .period-button svg{width:16px;height:16px}
+.export-icon{border:0;background:var(--surface);border-radius:12px;width:44px;height:44px}
+.header-weather{font-size:13px}
+.home-stack{display:flex;flex-direction:column;gap:12px}
+#homeDeck .rhythm,#homeDeck .income-hero,#homeDeck .home-premiums{margin:0;border:1px solid var(--line);border-radius:16px;background:var(--surface);padding:18px}
+#homeDeck .rhythm{order:0}
+#homeDeck .income-hero{order:1}
+#homeDeck .payment-status{order:2;margin:0}
+#homeDeck .home-premiums{order:3}
+#homeDeck>.calculation{order:4;margin:0 4px}
+#homeDeck .pace-hero{grid-template-columns:minmax(0,1fr) 100px;gap:8px}
+#homeDeck .pace-hero h2{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 6px}
+#homeDeck .hero-pace{font-size:13px;color:var(--muted);white-space:normal;letter-spacing:0}
+#homeDeck .hero-pace strong{font-size:46px;line-height:1;letter-spacing:-1.5px;margin:0 0 5px;font-weight:740}
+#homeDeck .hero-pace strong.compact{font-size:37px}
+#homeDeck .hero-pace strong.wide{font-size:29px}
+#homeDeck .gauge,#homeDeck .gauge canvas{width:100px;height:100px}
+#homeDeck .gauge-label strong{font-size:22px}
+#homeDeck .gauge-label span{font-size:9px;margin-top:1px}
+#homeDeck .meters{margin:14px 0 0;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);gap:0}
+#homeDeck .meter{gap:5px;align-items:center}
+#homeDeck .meter>svg{width:19px;height:19px;margin:0}
+#homeDeck .meter+.meter{padding-left:12px}
+#homeDeck .meter-value{font-size:22px;letter-spacing:-.5px}
+#homeDeck .meter-value .unit{font-size:17px}
+#homeDeck .orders-unit{font-size:11px}
+#homeDeck .meter-label{font-size:11px;margin:2px 0 0}
+#homeDeck .pace-block{margin:0}
+#homeDeck .norm-row{min-height:38px;gap:7px;border:0;font-weight:500;font-size:13px}
+#homeDeck .norm-row svg{width:18px;height:18px}
+#homeDeck .norm-row>div{min-width:0;text-align:right}
+#homeDeck .norm-row strong{font-size:14px}
+#homeDeck .reserve-line{font-size:12px;padding:0;color:var(--muted)}
+#homeDeck .income-hero h2{font-size:13px;font-weight:600;color:var(--muted)}
+#homeDeck .major-amount{display:block;font-size:clamp(36px,10vw,44px);line-height:1.14;letter-spacing:-1.4px;margin:5px 0 14px;color:var(--ink)}
+#homeDeck .income-parts{margin:0;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);gap:8px}
+#homeDeck .income-parts span{font-size:11px;color:var(--muted)}
+#homeDeck .income-parts strong{font-size:13px;line-height:1.3;font-weight:650}
+#homeDeck .payouts{margin:0;padding:12px 0 0;border:0;gap:10px}
+#homeDeck .payouts h2{font-size:11px}
+#homeDeck .payouts .amount{font-size:19px;font-weight:700}
+#homeDeck .payouts>div+div{padding-left:12px}
+#homeDeck .payment-status{padding:12px 14px;background:var(--surface);border-radius:14px}
+#homeDeck .payment-status strong{font-size:13px}
+#homeDeck .home-premiums .premiums-card{padding:0;border:0;background:transparent}
+#homeDeck .home-premiums .card-heading{font-size:15px}
+#homeDeck .premium-teasers{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+#homeDeck .premium-teasers>span{padding:0;border:0;font-size:11px;gap:5px}
+#homeDeck .premium-teasers svg{width:18px;height:18px}
+#homeDeck .premium-teasers strong{font-size:19px;color:var(--ink)}
+.detail-card,.day-card,.day-group,.forecast-simple-hero{border-radius:16px;padding:18px;background:var(--surface)}
+.detail-card h2{font-size:18px;line-height:1.3}
+.period-overview,.cycle-settings{margin-top:12px}
+.period-facts dd{font-size:23px}
+.period-actions{align-items:stretch}
+.period-actions #periodHistory{justify-content:space-between;padding:0 14px;border:1px solid var(--line);background:var(--surface);border-radius:12px}
+.period-actions .export-action{align-self:flex-start}
+.forecast-page .page-heading h1{font-size:27px}
+.forecast-simple-hero{padding:20px 18px;margin:12px 0}
+.forecast-simple-hero h2{font-size:17px}
+.forecast-simple-hero .forecast-number.is-unknown{font-size:32px}
+.forecast-page .detail-card{border-radius:16px;padding:18px}
+.forecast-simple-plan .duration-control{margin:14px 0!important}
+.payment-settings{margin-top:0}
+.payment-settings h2{font-size:20px;margin:0 0 18px}
+.payment-settings .payment-period{margin:0 0 18px}
+.payment-settings .payment-period .hint{margin:7px 0 0;font-size:12px}
+.payment-settings>.field,.payment-settings form>.field{margin:0 0 12px}
+.payment-settings .field label{font-size:14px;font-weight:600;color:var(--muted)}
+.payment-settings .field input{border-radius:10px;min-height:50px}
+.payment-more{border-top:1px solid var(--line);margin-top:12px}
+.payment-more summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;list-style:none;cursor:pointer;font-size:14px;font-weight:650;color:var(--teal)}
+.payment-more summary::-webkit-details-marker{display:none}
+.payment-more summary svg{width:18px;height:18px}
+.payment-more[open] summary svg{transform:rotate(180deg)}
+.payment-more .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px 10px;padding:12px 0 8px}
+.payment-more .field:nth-child(-n+5){grid-column:1/-1}
+.payment-more .field:not(.full)>label{min-height:0}
+.payment-effective-date{background:transparent;border-top:1px solid var(--line);border-radius:0;padding:12px 0 0;margin:8px 0 0;color:var(--muted);font-size:12px}
+.payment-settings #savePaymentTerms{margin:14px 0 0;border-radius:12px;font-size:15px}
+.appearance-card{padding:16px 18px}.appearance-card .theme-field{margin-top:10px}
+.bottom-nav{background:var(--bg);padding-top:6px;padding-bottom:calc(7px + var(--safe-bottom));gap:0}
+.nav-item{min-height:55px;border-radius:10px;font-size:10px;line-height:1.1;color:var(--muted);font-weight:500}
+.nav-item.active{background:transparent;color:var(--teal);font-weight:700}
+.nav-item svg{width:21px;height:21px}
+.nav-item span{overflow-wrap:normal;word-break:normal;line-height:1.15}
+.nav-add{width:54px;height:54px;min-height:54px;transform:translateY(-12px);box-shadow:none;border-width:2px}
+.nav-add svg{width:26px;height:26px}
+:root[data-text-scale="large"] .nav-item{font-size:8px}
+:root[data-text-scale="large"] .nav-item span{font-size:0;white-space:nowrap;overflow:hidden}
+:root[data-text-scale="large"] .nav-item span::before{content:attr(data-short);font-size:8px}
+:root[data-text-scale="large"] #homeDeck .pace-hero{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] #homeDeck .gauge{justify-self:start}
+:root[data-text-scale="large"] #homeDeck .meters{grid-template-columns:minmax(0,1fr)}
+@media(max-width:374px){#homeDeck .income-parts{gap:4px}#homeDeck .income-parts strong{font-size:12px}#homeDeck .premium-teasers{gap:7px}}
+
+/* Design iteration 2026-10-25: restrained operational dashboard. */
+:root{--home-accent:#a8e6bf;--home-quiet:#0c1510;--home-shadow:none}
+:root[data-theme="light"]{--home-accent:#176642;--home-quiet:#eff7ef;--home-shadow:0 10px 30px #22442b11}
+.overview-top{padding:4px 2px 0;margin-bottom:19px}
+.overview-top h1{font-size:27px;letter-spacing:-.85px;line-height:1.15;font-weight:790}
+.overview-top .period-button{display:inline-flex;max-width:100%;min-height:48px;padding:0 13px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font-size:13px;white-space:normal;text-align:left}
+.overview-top .period-button svg:last-child{margin-left:auto}
+.overview-toolbar{gap:10px;margin-bottom:16px}
+.header-tools{gap:9px}
+.home-stack{gap:14px}
+#homeDeck .home-focus{position:relative;display:flex;flex-direction:column;isolation:isolate;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:var(--surface);box-shadow:var(--home-shadow)}
+#homeDeck .home-focus::before{content:"";height:3px;background:linear-gradient(90deg,var(--home-accent),transparent 85%);position:absolute;inset:0 0 auto;pointer-events:none}
+#homeDeck .home-focus .rhythm{order:0;border:0;border-radius:0;background:transparent;margin:0;padding:22px 19px 16px}
+#homeDeck .home-focus .pace-hero{grid-template-columns:minmax(0,1fr) 106px;gap:10px}
+#homeDeck .home-focus .pace-hero h2{font-size:13px;font-weight:650;letter-spacing:.1px}
+#homeDeck .home-focus .hero-pace strong{font-size:50px;letter-spacing:-1.8px;line-height:1.08;font-variant-numeric:tabular-nums}
+#homeDeck .home-focus .hero-pace strong.compact{font-size:39px}
+#homeDeck .home-focus .hero-pace strong.wide{font-size:28px}
+#homeDeck .home-focus .gauge,#homeDeck .home-focus .gauge canvas{width:106px;height:106px}
+#homeDeck .home-focus .meters{margin-top:18px;padding:16px 0;gap:12px}
+#homeDeck .home-focus .meter-value{font-size:24px;letter-spacing:-.65px;font-variant-numeric:tabular-nums}
+#homeDeck .home-focus .meter-label{font-size:12px}
+#homeDeck .home-focus .norm-row{padding:10px 0 5px;min-height:48px;font-size:13px}
+#homeDeck .home-focus .reserve-line{padding:5px 0 0;font-size:12px}
+#homeDeck .home-focus .payment-status{order:1;border:0;border-top:1px solid var(--line);border-radius:0;background:var(--home-quiet);padding:14px 18px;margin:0;gap:10px}
+#homeDeck .home-focus .payment-status svg{flex-shrink:0}
+#homeDeck .home-focus .payment-status p{font-size:12px;line-height:1.45}
+#homeDeck .income-hero{position:relative;border-radius:22px;padding:22px 19px;border-color:var(--line);box-shadow:var(--home-shadow)}
+#homeDeck .income-hero h2{font-size:13px}
+#homeDeck .major-amount{font-size:clamp(37px,10vw,49px);font-variant-numeric:tabular-nums;line-height:1.13;margin:8px 0 18px}
+#homeDeck .income-parts{gap:6px;padding:16px 0}
+#homeDeck .income-parts strong{font-size:13px;overflow-wrap:anywhere}
+#homeDeck .payouts{padding-top:17px}
+#homeDeck .payouts .amount{font-size:clamp(18px,5vw,24px);font-variant-numeric:tabular-nums}
+#homeDeck .home-premiums{padding:20px 19px;border-radius:22px;box-shadow:var(--home-shadow)}
+#homeDeck .home-premiums .card-heading{font-size:16px;font-weight:750}
+#homeDeck .premium-teasers{gap:10px;margin-top:16px}
+#homeDeck .premium-teasers>span{min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+#homeDeck .premium-teasers svg{height:20px;width:20px}
+#homeDeck .premium-teasers strong{margin-top:5px;font-size:clamp(19px,5.4vw,25px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.home-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:28px 23px 24px;border:1px solid var(--line);border-radius:22px;background:var(--surface);box-shadow:var(--home-shadow)}
+.home-empty-symbol{display:grid;place-items:center;width:58px;height:58px;border-radius:18px;background:var(--home-quiet);color:var(--home-accent)}
+.home-empty-symbol svg{width:29px;height:29px}
+.home-eyebrow{font-size:11px;font-weight:750;letter-spacing:1.3px;color:var(--home-accent)}
+.home-empty h2{font-size:27px;letter-spacing:-.8px;line-height:1.15}
+.home-empty-copy{font-size:14px;line-height:1.55;color:var(--muted)}
+.home-empty .button{margin-top:9px;min-height:54px;width:100%;border-radius:15px}
+.home-empty .button svg{width:20px;height:20px}
+.forecast-simple-hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:var(--surface)}
+.forecast-simple-hero::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--home-accent),transparent 85%);pointer-events:none}
+.forecast-page .forecast-simple-plan{border:1px solid var(--line);border-radius:22px;background:var(--surface)}
+.forecast-page .forecast-simple-plan .duration-control+.duration-control{border-top:1px solid var(--line);padding-top:13px}
+.forecast-page .forecast-simple-hero .forecast-number{font-variant-numeric:tabular-nums}
+.bottom-nav{border-top:1px solid var(--line);box-shadow:0 -9px 28px #0001}
+.nav-item.active{background:var(--home-quiet);border-radius:13px;color:var(--teal)}
+:root[data-theme="light"] .nav-item.active{color:var(--teal);background:#e5f2e8}
+button:focus-visible,summary:focus-visible{outline:2px solid var(--home-accent);outline-offset:3px}
+@media(max-width:374px){
+ #homeDeck .home-focus .rhythm{padding:19px 13px 12px}
+ #homeDeck .home-focus .pace-hero{grid-template-columns:minmax(0,1fr) 96px}
+ #homeDeck .home-focus .gauge,#homeDeck .home-focus .gauge canvas{width:96px;height:96px}
+ #homeDeck .premium-teasers{gap:7px}
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .pace-hero{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] #homeDeck .home-focus .meters{grid-template-columns:minmax(0,1fr);gap:14px}
+:root[data-text-scale="large"] #homeDeck .premium-teasers{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] #homeDeck .premium-teasers>span+span{padding-top:14px;border-top:1px solid var(--line)}
+@media(prefers-reduced-motion:reduce){.home-empty,.home-focus,.income-hero{animation:none!important;transition:none!important}}
+
+/* Large Android font: text-first pace status, decorative ring removed.
+   Android 35, font_scale=2.0: previous 152px canvas pushed 111% below
+   the bottom-navigation top at y=2202 (percent bottom y=2247).
+   Keep the percentage and goal above the fold without shrinking type. */
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge{
+  display:block;
+  justify-self:stretch;
+  width:100%;
+  height:auto;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge canvas{
+  display:none;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label{
+  position:static;
+  inset:auto;
+  display:flex;
+  flex-direction:row;
+  flex-wrap:wrap;
+  align-items:baseline;
+  justify-content:flex-start;
+  text-align:left;
+  gap:6px 14px;
+  min-width:0;
+  width:100%;
+  padding:0;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label strong{
+  font-size:clamp(22px,7vw,29px);
+  line-height:1.12;
+  max-width:100%;
+  overflow-wrap:anywhere;
+}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label span{
+  font-size:12px;
+  line-height:1.25;
+  margin:0;
+}
+
+/* Android 35 history edit targets were 45 dp high at 360/390 widths.
+   Reserve 48 dp for the action even when the visual caption is smaller. */
+.day-head .edit-day{min-height:48px;min-width:48px}
+
+
+/* VISUAL V2 / SHIFT CONTROL
+   Product-specific courier earnings console; NOT a conversational card theme.
+   Inspiration: Better Design / Sonic Punchy + Instrument; offline fonts only.
+   All finance numbers and actions continue to come from their original DOM. */
+:root {
+  color-scheme:dark;
+  --bg:#10151a;--ink:#f4f1e9;--muted:#b1bac0;--line:#46515a;
+  --surface:#1b242b;--field:#232e36;--teal:#ff7952;--error:#ff8994;
+  --warning:#ffc365;--primary-bg:#ff7952;--primary-ink:#161c20;
+  --gauge-track:#43515b;--gauge-good:#ffc365;--gauge-pending:#ff7952;
+  --home-accent:#ff7952;--home-quiet:#1e2930;--home-shadow:none;
+  --console-hero:#202b32;--console-hero-ink:#f5f1e8;
+  --console-label:#c6cdd0;--signal-panel:#ffbd57;--nav-surface:#0a1014;
+  --nav-idle:#acb6bc;--nav-selected:#2f3d46;--console-grid:#ffffff07;
+  font-family:system-ui,"Roboto","Segoe UI",sans-serif;
+}
+:root[data-theme="light"] {
+  color-scheme:light;
+  --bg:#eae7de;--ink:#1c252c;--muted:#4b5961;--line:#b3b9b8;
+  --surface:#f7f5ee;--field:#fffdf8;--teal:#a93718;--error:#af2b3f;
+  --warning:#905508;--primary-bg:#c74a24;--primary-ink:#fffaf1;
+  --gauge-track:#9babb2;--gauge-good:#f8b44b;--gauge-pending:#e15a31;
+  --home-accent:#c74a24;--home-quiet:#e1e4e0;--home-shadow:none;
+  --console-hero:#242d34;--console-hero-ink:#fff6e6;
+  --console-label:#cfd5d7;--signal-panel:#ffbf57;--nav-surface:#222a30;
+  --nav-idle:#e1e4e0;--nav-selected:#4d5c64;--console-grid:#101b2309;
+}
+html,body{background-color:var(--bg);color:var(--ink)}
+body{background-image:repeating-linear-gradient(0deg,transparent 0,transparent 39px,var(--console-grid) 40px);background-attachment:fixed}
+main{padding-top:23px}
+h1,.page-heading h1,.overview-top h1{font-weight:900;letter-spacing:-.065em;line-height:1.05}
+.overview-top{padding:4px 0 0;margin-bottom:18px}
+.overview-top h1{font-size:clamp(30px,9.2vw,39px);text-transform:uppercase}
+.overview-toolbar{align-items:center}
+.overview-top .period-button{border:0!important;border-bottom:1px solid var(--line)!important;background:transparent!important;padding:0 0 5px!important;border-radius:0!important;font-size:13px;min-height:46px;letter-spacing:.02em;color:var(--muted)}
+.page-heading{padding-bottom:10px;border-bottom:2px solid var(--ink);margin-bottom:23px}
+.page-heading h1{font-size:30px;text-transform:uppercase;letter-spacing:-.045em}
+.snapshot,.page-heading .hint{letter-spacing:.02em}
+.overview .overview-top::after{content:none}
+.export-icon,.theme-toggle,.back,.period-arrow,.header-weather{border-radius:3px!important;box-shadow:none!important}
+.button,.button.primary,.button.outline,.button.quiet,button.primary{border-radius:4px!important;box-shadow:none!important;min-height:48px}
+.button.primary,.primary{background:var(--primary-bg);color:var(--primary-ink);border-color:var(--primary-bg);font-weight:850}
+.button.outline{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.button.quiet{color:var(--ink)}
+input,select,textarea,.field input,.forecast-page .field input{border-radius:4px!important;background:var(--field);color:var(--ink);border-color:var(--line)}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+#homeDeck{gap:8px}
+#homeDeck .home-focus{background:var(--console-hero);color:var(--console-hero-ink);border:0;border-radius:3px;box-shadow:none;clip-path:polygon(0 0,calc(100% - 17px) 0,100% 17px,100% 100%,0 100%)}
+#homeDeck .home-focus::before{height:6px;background:var(--home-accent);inset:0 17px auto 0}
+#homeDeck .home-focus .rhythm{padding:28px 19px 16px}
+#homeDeck .home-focus .pace-hero{gap:8px}
+#homeDeck .home-focus .pace-hero h2{font-size:11px;letter-spacing:.15em;font-weight:800;text-transform:uppercase;color:var(--console-label)}
+#homeDeck .home-focus .hero-pace{color:var(--console-label);font-weight:600}
+#homeDeck .home-focus .hero-pace strong{font-family:ui-monospace,"Roboto Mono",monospace;font-size:clamp(43px,13vw,59px);color:var(--console-hero-ink);font-weight:900;letter-spacing:-.095em}
+#homeDeck .home-focus .hero-pace strong.compact{font-size:clamp(37px,10vw,46px)}
+#homeDeck .home-focus .hero-pace strong.wide{font-size:clamp(29px,7.8vw,36px)}
+#homeDeck .home-focus .gauge-label strong{color:var(--signal-panel);font-family:ui-monospace,monospace;font-weight:850}
+#homeDeck .home-focus .gauge-label span{color:var(--console-label)}
+#homeDeck .home-focus .gauge-label[data-state="below"] strong{color:#ff9683}
+#homeDeck .home-focus .meters{border-top:1px solid #62707a;border-bottom:1px solid #62707a;gap:10px}
+#homeDeck .home-focus .meter-value{font-size:clamp(25px,7vw,32px);color:var(--console-hero-ink);font-family:ui-monospace,monospace;font-weight:850;letter-spacing:-.06em}
+#homeDeck .home-focus .meter-value .unit{color:var(--console-label);font-size:.6em}
+#homeDeck .home-focus .meter-label{color:var(--console-label);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+#homeDeck .home-focus .norm-row{color:var(--console-hero-ink)}
+#homeDeck .home-focus .reserve-line{color:var(--console-label)}
+#homeDeck .home-focus .payment-status{border-color:#46545f;color:var(--console-hero-ink);background:#11191f;padding:15px 19px}
+#homeDeck .home-focus .payment-status strong{color:var(--console-hero-ink)}
+#homeDeck .home-focus .payment-status p{color:var(--console-label)}
+#homeDeck .home-focus .payment-status.met svg{color:var(--signal-panel)}
+#homeDeck .home-focus .payment-status.risk strong{color:#ff9683}
+#homeDeck .income-hero{background:var(--signal-panel);color:#1b2226;border:0;border-radius:3px;box-shadow:none;clip-path:polygon(0 0,100% 0,100% calc(100% - 17px),calc(100% - 17px) 100%,0 100%);padding:22px 20px 28px}
+#homeDeck .income-hero h2{color:#343a3e;font-size:11px;font-weight:900;letter-spacing:.15em;text-transform:uppercase}
+#homeDeck .income-hero .major-amount{font-family:ui-monospace,"Roboto Mono",monospace;font-weight:900;font-size:clamp(37px,11.2vw,57px);letter-spacing:-.075em;color:#151b1e;line-height:1.05;margin:15px 0 17px}
+#homeDeck .income-hero .income-parts{border-color:#49403260}
+#homeDeck .income-hero .income-parts *,#homeDeck .income-hero .payouts *,#homeDeck .income-hero .payouts{color:#252a2c}
+#homeDeck .income-hero .income-parts strong,#homeDeck .income-hero .payouts strong{font-weight:900}
+#homeDeck .home-premiums{border:0;border-top:2px solid var(--ink);border-bottom:1px solid var(--line);background:transparent;padding:21px 4px 16px;border-radius:0;box-shadow:none}
+#homeDeck .home-premiums .card-heading{font-size:17px;font-weight:900;letter-spacing:-.025em;text-transform:uppercase}
+#homeDeck .home-premiums .premium-teasers{margin-top:15px;gap:8px}
+#homeDeck .home-premiums .premium-teasers>span{border-left:0!important;border-top:1px solid var(--line);padding-top:13px}
+#homeDeck .home-premiums .premium-teasers strong{font-family:ui-monospace,monospace;font-size:24px;font-weight:900;letter-spacing:-.055em}
+#homeDeck .calculation,#homeDeck .home-premiums .calculation{background:transparent}
+.home-empty{border:0;border-top:6px solid var(--home-accent);border-radius:3px;box-shadow:none;background:var(--console-hero);color:var(--console-hero-ink);padding:33px 22px 25px}
+.home-empty h2{color:var(--console-hero-ink);font-size:28px;font-weight:900;line-height:1.1;letter-spacing:-.04em}
+.home-empty .home-eyebrow{color:var(--signal-panel);letter-spacing:.2em;font-weight:900}
+.home-empty-copy{color:var(--console-label)}
+.home-empty-symbol{background:var(--signal-panel);color:#171c1f;border-radius:2px;width:58px;height:58px}
+.home-empty .button{border-radius:4px}
+.detail-card,.day-card,.day-group,.period-overview,.balance-card,.cycle-settings,.appearance-card{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:none}
+.day-card{padding:18px 16px;border-left:5px solid var(--teal)}
+.day-head{padding-bottom:8px;border-bottom:1px solid var(--line)}
+.day-head h2{font-size:17px;font-weight:850}
+.day-meters,.period-facts dd{font-family:ui-monospace,monospace;font-weight:800;letter-spacing:-.035em}
+.day-row{border-bottom:1px dashed var(--line);padding:8px 0}
+.day-row:last-child{border-bottom:0}
+.edit-day{min-height:48px;min-width:48px;background:var(--field);border:1px solid var(--line);border-radius:3px;color:var(--teal);font-weight:800}
+.period-arrow{background:var(--surface);border:1px solid var(--line)}
+.period-navigation{margin-bottom:12px}
+.period-select{font-weight:800}
+.forecast-page .forecast-simple-hero{background:var(--console-hero);color:var(--console-hero-ink);border:0;border-radius:3px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%);padding:27px 20px}
+.forecast-page .forecast-simple-hero::before{height:6px;background:var(--home-accent)}
+.forecast-page .forecast-simple-hero h2{color:var(--console-label);text-transform:uppercase;font-size:12px;font-weight:850;letter-spacing:.13em}
+.forecast-page .forecast-simple-hero .forecast-number{color:var(--signal-panel);font-family:ui-monospace,monospace;letter-spacing:-.075em;font-weight:900;font-variant-numeric:tabular-nums}
+.forecast-page .forecast-simple-hero p,.forecast-page .forecast-simple-hero small,.forecast-page .forecast-simple-hero .hint{color:var(--console-label)}
+.forecast-page .forecast-simple-plan{border:1px solid var(--line);border-radius:3px;background:var(--surface);padding:21px 16px}
+.forecast-page .forecast-simple-plan .duration-control+.duration-control{border-top:2px solid var(--line);padding-top:18px}
+.forecast-page .duration-control .duration-value{font-family:ui-monospace,monospace;font-weight:800;letter-spacing:-.04em}
+.duration-track button{border-radius:3px!important;background:var(--field)}
+.duration-slider{accent-color:var(--teal)}
+.forecast-teaser{border:1px solid var(--line);border-radius:3px;background:var(--surface)}
+.forecast-teaser strong{font-family:ui-monospace,monospace}
+.payment-settings .pager-tabs button{border-radius:3px;background:var(--field);color:var(--ink);border-color:var(--line);font-weight:800}
+.payment-settings .pager-tabs button.active,.payment-settings .pager-tabs button[aria-selected="true"]{background:var(--primary-bg);color:var(--primary-ink);border-color:var(--primary-bg)}
+.settings-page .detail-card{border-radius:3px}
+.payment-settings #savePaymentTerms{border-radius:3px}
+dialog{background:var(--surface);color:var(--ink);border:2px solid var(--line);border-radius:3px}
+.splash{background:var(--bg)}
+.splash h1{font-size:32px;line-height:1.04;text-transform:uppercase;letter-spacing:-.07em;font-weight:950}
+.receipt{color:var(--teal)}
+.bottom-nav{background:var(--nav-surface)!important;color:#e9edea;border-top:3px solid var(--teal);box-shadow:none!important;padding-top:8px;gap:3px}
+.nav-item{background:transparent;color:var(--nav-idle);border:0;border-radius:2px;min-height:55px;font-size:10px;font-weight:700;letter-spacing:.01em}
+.nav-item svg{color:inherit}
+.nav-item.active,:root[data-theme="light"] .nav-item.active{background:var(--nav-selected);color:#fff8ef;border-radius:2px}
+.nav-add{background:var(--signal-panel);color:#14191c;border:2px solid var(--nav-surface);border-radius:3px;width:55px;height:55px;min-width:55px;transform:translateY(-9px);box-shadow:none}
+.nav-add svg{color:#14191c}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label{color:var(--console-hero-ink)}
+:root[data-text-scale="large"] #homeDeck .home-focus .gauge-label strong{color:var(--signal-panel)}
+@media(max-width:374px){#homeDeck .home-focus .rhythm{padding:27px 15px 14px}#homeDeck .income-hero{padding:20px 16px 27px}#homeDeck .home-focus .pace-hero{gap:7px}}
+@media(prefers-reduced-motion:reduce){.home-focus,.income-hero,.home-empty,.nav-add{animation:none!important;transition:none!important}}
+/* END VISUAL V2 / SHIFT CONTROL */
+
+
+/* UI-MVP / full-surface information hierarchy, 2026-10-25.
+   No JS data edits, new network requests, or hidden required inputs. */
+#app:not(.form-page)>.page-heading{padding:8px 0 14px}
+.period-overview{position:relative;background:var(--console-hero);color:var(--console-hero-ink);border:0;border-radius:3px;padding:23px 18px 18px;overflow:hidden}
+.period-overview::before{content:"";position:absolute;inset:0 0 auto 0;height:5px;background:var(--signal-panel)}
+.period-overview h2{color:var(--console-label);font-size:12px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}
+.period-overview .period-facts{margin-top:14px;gap:12px}
+.period-overview .period-facts>div+div{border-color:#4c5a64}
+.period-overview .period-facts dt{color:var(--console-label);font-size:12px}
+.period-overview .period-facts dd{color:var(--console-hero-ink);font-family:ui-monospace,monospace;font-weight:900;font-size:clamp(28px,8.2vw,38px);line-height:1.13;letter-spacing:-.06em}
+.cycle-settings{padding:16px 18px;border:1px solid var(--line);background:transparent}
+.cycle-settings .cycle-header h2{font-weight:900}
+.cycle-settings progress{height:12px;accent-color:var(--teal)}
+.cycle-settings #configureCycle{min-height:48px;display:flex;align-items:center;gap:8px}
+.period-actions #periodHistory{background:var(--primary-bg);color:var(--primary-ink);border:0;border-radius:3px;font-weight:850;min-height:54px}
+.period-actions .export-action{border:1px solid var(--line);border-radius:3px;min-height:48px;padding:11px 15px}
+.history-list{gap:9px}
+.day-group{background:transparent;border:0;border-radius:0;padding:0}
+.day-group>h2{font-size:22px;font-weight:900;letter-spacing:-.04em;margin:12px 0 5px}
+.day-group .day-total{margin:0 0 14px;font-size:13px;line-height:1.5;border-bottom:2px solid var(--line);padding-bottom:12px;color:var(--muted)}
+.slot-list{display:flex;flex-direction:column;gap:10px}
+.day-card{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--teal);border-radius:3px;padding:14px 14px 15px}
+.day-head{align-items:center;gap:8px;margin-bottom:13px}
+.day-head h2{font-size:19px}
+.day-meters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:4px 0 13px;font-size:clamp(17px,5.2vw,23px);font-weight:900;font-variant-numeric:tabular-nums}
+.day-meters span{min-width:0;overflow-wrap:anywhere}
+.day-meters span+span{border-left:1px solid var(--line);padding-left:12px}
+.day-money{background:var(--field);padding:3px 12px;border-top:2px solid var(--line)}
+.day-money .day-row{padding:9px 0;gap:8px}
+.day-money .day-row span:last-child{font-family:ui-monospace,monospace;font-size:14px;font-weight:750;white-space:nowrap}
+.day-money .day-row:last-child{border-bottom:0}
+.empty-history{border:1px dashed var(--line);border-radius:3px;background:var(--surface)}
+.history-footer{display:grid;gap:8px}
+.history-footer .button{margin:0;min-height:50px}
+.form-page .page-heading{padding:0 0 12px;border-bottom:2px solid var(--ink)}
+.form-page #dayForm{gap:0}
+.form-page .form-grid{row-gap:12px}
+.form-section-heading{grid-column:1/-1;margin:10px 0 1px;padding:10px 0 7px;border-bottom:2px solid var(--line);color:var(--ink);font-size:14px;line-height:1.3;letter-spacing:.05em;font-weight:900}
+.form-section-heading:first-of-type{margin-top:4px}
+.form-page .field label{font-size:13px;line-height:1.3;font-weight:750;color:var(--ink);min-height:auto}
+.form-page .field input,.form-page .field select{background:var(--field);min-height:48px}
+.form-page .field.full:has(#reward) input{font-family:ui-monospace,monospace;font-size:23px;font-weight:800}
+.form-page .field:has(#dailyHours) input,.form-page .field:has(#dailyOrders) input{font-family:ui-monospace,monospace;font-weight:800;font-size:20px}
+.form-page .form-period{font-size:12px;color:var(--muted)}
+.form-page .save-area{border-top:2px solid var(--line);background:var(--bg);padding:11px 0 calc(4px + var(--safe-bottom))}
+.form-page .save-area .button.primary{min-height:55px;letter-spacing:.01em;font-size:16px}
+.form-page #deleteDay{min-height:48px;border:1px solid var(--error);border-radius:3px}
+.form-page .slot-working{border:1px solid var(--line);background:var(--surface);border-radius:3px;padding:0 12px;margin:14px 0}
+.form-page .slot-working summary{min-height:52px;display:flex;align-items:center;justify-content:space-between}
+.forecast-page .forecast-simple-plan{padding:22px 16px}
+.forecast-page .forecast-simple-plan h2{font-size:19px;letter-spacing:-.035em;margin-bottom:11px}
+.forecast-page .duration-control{padding:12px 0 14px}
+.forecast-page .duration-control+.duration-control{margin-top:13px}
+.forecast-page .duration-control .duration-track{margin-top:5px}
+.forecast-page .forecast-import-button{background:transparent;border:2px solid var(--teal);color:var(--teal);min-height:54px;font-weight:800}
+.payment-settings{padding:22px 17px}
+.payment-settings h2{font-size:21px;font-weight:900;letter-spacing:-.04em}
+.payment-settings .payment-period{border-bottom:1px solid var(--line);padding-bottom:15px;margin-bottom:17px}
+.payment-settings #hourlyRate{font-family:ui-monospace,monospace;font-size:23px;font-weight:850}
+.payment-settings .payment-more{border-top:2px solid var(--line);border-bottom:1px solid var(--line);padding:0 2px}
+.payment-settings .payment-more summary{min-height:54px}
+.payment-settings .payment-effective-date{font-size:13px}
+.appearance-card{border-top:4px solid var(--teal)}
+.appearance-card h2{font-size:20px;font-weight:900}
+dialog{max-width:min(94vw,480px);padding:20px 18px;box-shadow:0 12px 48px #0008}
+dialog::backdrop{background:#05090cbc}
+dialog h2{font-size:23px;font-weight:900;margin:0 0 12px}
+dialog .button{margin:8px 0 0}
+#exportDialog{width:calc(100% - 32px);max-width:360px;max-height:calc(100dvh - 32px);overflow-y:auto;padding:22px 19px 17px;border:2px solid var(--line)}
+#exportDialog .export-dialog-eyebrow{color:var(--teal);font-size:10px;font-weight:850;letter-spacing:.15em;line-height:1.35;text-transform:uppercase;margin-bottom:9px}
+#exportDialog h2{font-size:24px;line-height:1.13;letter-spacing:-.03em;margin:0}
+#exportDialog #shareReport,#exportDialog #saveReport{min-height:51px;margin:0;font-size:15px;font-weight:800}
+#exportDialog #shareReport{margin-top:18px}
+#exportDialog #saveReport{margin-top:9px;background:var(--field);border:1px solid var(--line);color:var(--ink)}
+#exportDialog .export-dialog-backup{border-top:1px solid var(--line);margin-top:20px;padding-top:15px}
+#exportDialog .export-backup-button{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;background:transparent;color:var(--ink);border:0;border-left:3px solid var(--teal);padding:5px 2px 5px 12px;margin:0;min-height:52px}
+#exportDialog .export-backup-button strong{display:block;font-size:14px;line-height:1.2}
+#exportDialog .export-backup-button small{display:block;color:var(--muted);font-size:12px;font-weight:400;line-height:1.35;margin-top:3px}
+#exportDialog .export-backup-button::after{content:'›';color:var(--teal);font-size:24px;font-weight:400;line-height:1;padding-right:2px}
+#exportDialog #closeExport{min-height:48px;margin:15px 0 0;font-size:13px;font-weight:400;color:var(--muted)}
+#importDialog{width:calc(100% - 32px);max-width:360px;max-height:calc(100dvh - 32px);overflow-y:auto;padding:22px 19px 18px;border:2px solid var(--line)}
+#importDialog h2{font-size:24px;line-height:1.13;letter-spacing:-.03em;margin:0 0 18px}
+#importDialog .import-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+#importDialog .import-stats>div{background:var(--field);border:1px solid var(--line);min-height:76px;padding:9px 7px}
+#importDialog .import-stats strong{display:block;font-size:25px;line-height:1;font-weight:900}
+#importDialog .import-stats small{display:block;color:var(--muted);font-size:9px;letter-spacing:.08em;font-weight:800;margin-top:8px}
+#importDialog .import-merge{color:var(--ink);font-size:14px;line-height:1.4;margin:19px 0}
+#importDialog .import-cycle{border-left:3px solid var(--teal);background:var(--field);padding:10px 12px;margin-bottom:20px}
+#importDialog .import-cycle strong{display:block;color:var(--teal);font-size:10px;letter-spacing:.1em;margin-bottom:5px}
+#importDialog .import-cycle span{display:block;color:var(--muted);font-size:12px;line-height:1.4}
+#importDialog .button{min-height:51px;margin:0;font-size:15px;font-weight:800}
+#importDialog #cancelImport{margin-top:9px;background:var(--field);border:1px solid var(--line);color:var(--ink)}
+#toast{background:var(--console-hero);color:var(--console-hero-ink);border:1px solid var(--teal);border-radius:3px;box-shadow:none}
+@media(max-width:374px){
+ .form-page .page-heading h1{font-size:clamp(22px,7.7vw,28px)}
+ .day-card{padding:12px 11px}
+ .form-page .form-grid{column-gap:8px}
+ .form-page .field label{font-size:12px}
+}
+:root[data-text-scale="large"] .form-section-heading{font-size:16px}
+:root[data-text-scale="large"] .day-meters{grid-template-columns:minmax(0,1fr)}
+:root[data-text-scale="large"] .day-meters span+span{border-left:0;border-top:1px solid var(--line);padding:8px 0 0}
+:root[data-text-scale="large"] .form-page .field.full:has(#reward) input{font-size:22px}
+
+
+/* UI-MVP glyph P1: Android 35 monospace cannot render the ₽ sign in
+   saved rewards / home income / calculated premiums. Keep tabular figures
+   but let the native system font draw currency symbols and Cyrillic. */
+#homeDeck .income-hero .major-amount,
+#homeDeck .home-premiums .premium-teasers strong,
+.day-money .day-row span:last-child{
+  font-family:system-ui,"Roboto","Segoe UI",sans-serif;
+  font-variant-numeric:tabular-nums;
+}
+
+/* GAUNTLET P2 / UI-007: real Android bounds were 141px = 47dp on 360/390. */
+.overview-top .period-button{min-height:48px}
+
+/* UI-013: when 200% text and Android IME are active, implicit WebView
+   focus scroll clipped the upper 48-57 physical px of input field labels.
+   Add target scroll margin, preserving full font scale and the fixed Save CTA. */
+:root[data-text-scale="large"] .form-page .form-grid .field input{
+  scroll-margin-block-start:42px;
+}
+
+
+/* Owner-approved visual implementation 2026-10-26:
+   tariff/settings concept, slot editor concept, bottom Add-slot optical alignment.
+   Scope is deliberately limited: never change Home rhythm/gauge/forecast. */
+.settings-page .page-heading{margin-bottom:16px;padding:5px 0 12px}
+.settings-page .page-heading h1{font-size:clamp(24px,7vw,29px)}
+.settings-eyebrow{
+  margin:5px 1px 9px;
+  font-size:11px;
+  line-height:1.4;
+  letter-spacing:.105em;
+  text-transform:uppercase;
+  font-weight:850;
+  color:var(--teal);
+}
+.settings-page .payment-settings{
+  margin-top:0;
+  padding:19px 17px 18px;
+  border-radius:6px;
+}
+.settings-page .payment-settings h2{
+  margin:0 0 17px;
+  font-size:22px;
+  letter-spacing:-.035em;
+}
+.settings-page .payment-period{
+  padding:0 0 15px;
+  margin:0 0 16px;
+  border-bottom:1px solid var(--line);
+}
+.settings-page .payment-period label,
+.settings-page .tariff-rate label{
+  font-size:13px;
+  line-height:1.4;
+  font-weight:650;
+  color:var(--muted);
+}
+.settings-page .settings-date-box{
+  border-radius:6px;
+  margin-top:6px;
+  min-height:50px;
+  font-size:16px;
+  padding:10px 12px;
+}
+.settings-page .settings-date-box svg{height:20px;width:20px;flex-shrink:0}
+.settings-page .settings-date-box input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.settings-page .payment-period .hint{margin-top:8px;font-size:11px;line-height:1.45}
+.settings-page .tariff-rate{
+  display:flex;
+  align-items:flex-end;
+  gap:4px;
+  min-width:0;
+  padding:0 0 13px;
+  border-bottom:1px solid var(--line);
+}
+.settings-page .tariff-rate .field{min-width:0;flex:1;gap:4px}
+.settings-page .tariff-rate .field-box{display:flex;align-items:baseline;gap:7px;min-width:0}
+.settings-page .tariff-rate #hourlyRate{
+  display:block;
+  min-width:0;
+  width:100%;
+  max-width:170px;
+  min-height:49px;
+  padding:3px 0 0;
+  background:transparent;
+  color:var(--ink);
+  border:0;
+  border-bottom:2px solid transparent;
+  border-radius:0!important;
+  outline:none;
+  box-shadow:none;
+  font-family:system-ui,"Roboto",sans-serif;
+  font-weight:850;
+  font-size:clamp(31px,9vw,37px);
+  line-height:1.12;
+  font-variant-numeric:tabular-nums;
+}
+.settings-page .tariff-rate #hourlyRate:focus{border-bottom-color:var(--teal)}
+.settings-page .tariff-rate .field-unit{
+  position:static;
+  transform:none;
+  flex-shrink:0;
+  margin:0;
+  font-size:16px;
+  color:var(--muted);
+}
+.settings-page .tariff-rate-unit{
+  padding:0 0 10px;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:13px;
+}
+.settings-page .payment-more{
+  padding:0;
+  border:0;
+  border-bottom:1px solid var(--line);
+  margin:0 0 8px;
+}
+.settings-page .payment-more summary{
+  min-height:51px;
+  color:var(--ink);
+  font-size:15px;
+  font-weight:650;
+}
+.settings-page .payment-more summary svg{color:var(--teal)}
+.settings-page #savePaymentTerms{
+  margin-top:12px;
+  min-height:52px;
+  border-radius:6px!important;
+}
+.settings-page .payment-effective-date{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:0;
+  border:0;
+  overflow:hidden;
+  clip-path:inset(50%);
+  white-space:nowrap;
+}
+.settings-page .appearance-card{
+  margin-top:13px;
+  padding:16px 17px;
+  border:1px solid var(--line);
+  border-radius:6px;
+}
+.settings-page .appearance-card .settings-eyebrow{margin:0 0 5px}
+.settings-page .appearance-card h2{font-size:17px;letter-spacing:-.02em}
+.settings-page .appearance-card .theme-field{margin-top:9px}
+.settings-page .appearance-card .period-select{border-radius:6px!important}
+
+/* The approved slot concept groups fields without hiding money or changing
+   the unknown-vs-zero model. Advanced working time stays available below. */
+.form-page .page-heading{margin-bottom:16px}
+.form-page .form-grid{row-gap:13px}
+.form-page .form-date-field{gap:6px}
+.form-page .form-date-field>label{
+  color:var(--teal);
+  text-transform:uppercase;
+  letter-spacing:.095em;
+  font-size:11px;
+  font-weight:850;
+}
+.form-page .form-date-field .date-box{
+  min-height:52px;
+  border-radius:6px!important;
+  font-size:17px;
+}
+.form-page .form-date-field .date-box svg{color:var(--teal)}
+.form-page .form-date-field .form-period{margin-top:1px;color:var(--muted)}
+.form-page .form-section-heading{
+  font-size:16px;
+  letter-spacing:.025em;
+  line-height:1.25;
+  font-weight:900;
+  text-transform:uppercase;
+  margin:17px 0 1px;
+  padding:13px 0 2px;
+  border-top:1px solid var(--line);
+  border-bottom:0;
+}
+.form-page .form-section-heading:first-of-type{margin-top:10px}
+.form-page .field:not(.form-date-field) label{
+  min-height:0;
+  font-size:13px;
+  font-weight:600;
+  color:var(--muted);
+}
+.form-page .field input{
+  border-radius:6px!important;
+  min-height:51px;
+}
+.form-page .field input::placeholder{color:var(--muted)}
+.form-page .field.full:has(#reward) input{min-height:55px;font-size:21px}
+.form-page .field:has(#dailyHours) input,
+.form-page .field:has(#dailyOrders) input{font-size:20px}
+.form-page .save-area .button.primary{border-radius:6px!important}
+
+/* Five actual nav actions in the original order, with the approved central
+   square visually seated in the same grid as the remaining four tabs. */
+.bottom-nav{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 62px minmax(0,1fr) minmax(0,1fr);
+  align-items:center;
+  column-gap:3px;
+}
+.nav-add{
+  width:54px;
+  min-width:54px;
+  height:54px;
+  min-height:54px;
+  margin:0;
+  padding:0;
+  justify-self:center;
+  align-self:center;
+  transform:translateY(-2px);
+  border:2px solid var(--nav-surface);
+  border-radius:4px;
+  box-shadow:0 0 0 2px var(--nav-surface);
+}
+.nav-add svg{display:block;width:26px;height:26px;margin:0}
+
+
+/* Owner-approved Settings precision pass: the ₽ and "/ час" belong to the
+   editable rate, not separate ends of a full-width row. Visually checked
+   against Android35 settings-main-390-dark.png from run 40324455836. */
+.settings-page .tariff-rate{
+  justify-content:flex-start;
+  gap:9px;
+}
+.settings-page .tariff-rate .field{
+  flex:0 1 auto;
+  max-width:calc(100% - 75px);
+}
+.settings-page .tariff-rate .field-box{
+  display:inline-flex;
+  justify-content:flex-start;
+  align-items:baseline;
+  gap:5px;
+  max-width:100%;
+}
+.settings-page .tariff-rate #hourlyRate{
+  flex:0 1 auto;
+  min-width:3ch;
+  max-width:min(48vw, 10ch);
+}
+.settings-page .tariff-rate .field-unit{font-size:18px;line-height:1.2}
+.settings-page .tariff-rate-unit{
+  align-self:flex-end;
+  padding-bottom:12px;
+  font-size:13px;
+  white-space:nowrap;
+}
+
+
+/* Approved SHIFT CONTROL screen design: Period + History.
+   No Home, forecast, gauge, navbar or data/calculation changes.
+   Final appearance requires native Android screenshot review by owner. */
+.period-overview .period-reward{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:16px;
+  padding-top:15px;
+  border-top:1px solid #4c5a64;
+}
+.period-overview .period-reward>span{
+  font-size:13px;
+  color:var(--console-label);
+  font-weight:500;
+}
+.period-overview .period-reward>strong{
+  color:var(--console-hero-ink);
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:clamp(20px,6.2vw,25px);
+  line-height:1.24;
+  font-weight:850;
+  font-variant-numeric:tabular-nums;
+  text-align:right;
+  white-space:nowrap;
+}
+.day-group .day-summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:7px 0 13px;
+  margin:0 0 13px;
+  border-bottom:1px solid var(--line);
+}
+.day-group .day-summary-counters{
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.4;
+  white-space:nowrap;
+}
+.day-group .day-summary-reward{
+  flex:0 0 auto;
+  color:var(--ink);
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:clamp(20px,6vw,26px);
+  line-height:1.2;
+  font-weight:850;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.day-group .day-card{padding:14px 13px 15px}
+.day-card .day-head{margin-bottom:8px}
+.day-card .day-meters{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0;
+  padding:6px 0 13px;
+}
+.day-card .day-meter{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:3px;
+}
+.day-card .day-meter+.day-meter{
+  padding-left:14px;
+  border-left:1px solid var(--line);
+}
+.day-card .day-meter>strong{
+  display:block;
+  max-width:100%;
+  color:var(--ink);
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-weight:850;
+  font-size:clamp(22px,6vw,28px);
+  line-height:1.15;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.04em;
+  overflow-wrap:anywhere;
+}
+.day-card .day-meter>strong>span{
+  color:var(--muted);
+  font-size:13px;
+  font-weight:650;
+  letter-spacing:0;
+}
+.day-card .day-meter>small{
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:12px;
+  font-weight:500;
+  line-height:1.3;
+  color:var(--muted);
+}
+.day-card .day-money{
+  background:transparent;
+  padding:0;
+  border-top:1px solid var(--line);
+}
+.day-card .day-money .day-row{
+  border-bottom:0;
+  padding:7px 0;
+  align-items:baseline;
+}
+.day-card .day-money .day-row:first-child{
+  border-bottom:1px solid var(--line);
+  padding:12px 0 13px;
+  margin-bottom:3px;
+}
+.day-card .day-money .day-row span:last-child{
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:13px;
+  font-weight:750;
+  font-variant-numeric:tabular-nums;
+}
+.day-card .day-money .day-row:first-child span:last-child{
+  color:var(--ink);
+  font-size:clamp(19px,5.6vw,24px);
+  font-weight:850;
+}
+@media(max-width:374px){
+  .day-group .day-summary{gap:6px}
+  .day-group .day-summary-counters{font-size:12px}
+  .day-group .day-summary-reward{font-size:20px}
+}
+
+
+/* Period-only visual correction from real Android35 review (first screenshot
+   after adding reward cut off the existing Export button behind the nav).
+   Keep prominent 9h/18 orders/recorded reward; adjust vertical slack only. */
+.period-page .page-heading{
+  padding-top:3px!important;
+  padding-bottom:9px!important;
+  margin-bottom:13px;
+}
+.period-page .period-navigation{margin-bottom:7px}
+.period-page .period-overview{
+  margin-top:2px;
+  padding:18px 18px 14px;
+}
+.period-page .period-overview .period-reward{
+  margin-top:10px;
+  padding-top:11px;
+}
+.period-page .cycle-settings{
+  margin-top:7px;
+  padding-top:13px;
+  padding-bottom:12px;
+}
+.period-page .period-actions{margin-top:8px}
+.period-page .period-actions #periodHistory{min-height:50px}
+
+
+/* VISUAL FIDELITY REPAIR / owner's actual approved mockups / 27 Oct 2026.
+   NOT a new direction. Native screenshot inspection found that the previous
+   implementation missed the approved orange History rails, robust Period
+   numerals, squared filled risk/cycle panels, and cut-corner summary. These
+   rules override high-specificity legacy day-group and monospace styles.
+   Do not interpret earlier XML/unit PASS as owner acceptance of aesthetics. */
+
+/* H1: each same-date slot has a bright LEFT rail in the approved right-hand
+   image. Legacy ".day-group .day-card" had reset the earlier .day-card rail. */
+.history-list .day-group .day-card{
+  border-left:4px solid var(--teal);
+  border-radius:3px;
+  background:var(--surface);
+  box-shadow:none;
+}
+.history-list .day-group .day-head h2{
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-style:italic;
+  font-weight:800;
+  letter-spacing:-.025em;
+}
+.history-list .day-group .day-summary{
+  padding-top:11px;
+  padding-bottom:13px;
+  margin-bottom:13px;
+}
+.history-list .day-group .day-card .day-head{
+  border-bottom:1px solid var(--line);
+  padding-bottom:11px;
+}
+.history-list .day-group .day-card .day-meters{
+  padding-top:10px;
+  padding-bottom:13px;
+}
+.history-list .day-group .day-card .day-money{
+  border-top:1px solid var(--line);
+  background:transparent;
+}
+.history-list .day-group .day-card .day-money .day-row:first-child{
+  padding:13px 0;
+  border-bottom:1px solid var(--line);
+}
+.history-list .day-group .day-card .day-money .day-row{
+  padding:8px 0;
+}
+
+/* P1: approved design uses bold, readable hours/orders without the thin
+   monospace appearance seen in the first Android35 implementation. */
+.period-page .period-overview{
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%);
+}
+.period-page .period-overview .period-facts dd{
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:clamp(30px,8.6vw,38px);
+  font-weight:850;
+  letter-spacing:-.055em;
+  line-height:1.1;
+}
+.period-page .period-overview .period-reward>strong{
+  font-weight:850;
+  letter-spacing:-.04em;
+}
+.period-page .payment-status{
+  background:var(--console-hero);
+  border-radius:3px;
+  padding:13px 14px;
+}
+.period-page .payment-status strong{
+  font-weight:800;
+  font-size:14px;
+}
+.period-page .cycle-settings{
+  background:var(--console-hero);
+  border-color:var(--line);
+  border-radius:3px;
+}
+.period-page .cycle-settings .cycle-header h2{
+  font-size:18px;
+  font-weight:850;
+}
+
+
+/* VISUAL FIX / 27 Oct 2026: actual Android35 360-light screenshot revealed
+   nearly invisible "12 недель" and risk details on slate panels. The light
+   theme needs explicitly light lettering on those intentionally dark cards.
+   No component size/position or finance/data behavior changes. */
+:root[data-theme="light"] .period-page .payment-status,
+:root[data-theme="light"] .period-page .cycle-settings{
+  color:var(--console-hero-ink);
+}
+:root[data-theme="light"] .period-page .payment-status p,
+:root[data-theme="light"] .period-page .cycle-settings .cycle-dates,
+:root[data-theme="light"] .period-page .cycle-settings .hint{
+  color:var(--console-label);
+}
+:root[data-theme="light"] .period-page .cycle-settings h2,
+:root[data-theme="light"] .period-page .cycle-settings .cycle-header h2,
+:root[data-theme="light"] .period-page .cycle-settings .cycle-header span{
+  color:var(--console-hero-ink);
+}
+:root[data-theme="light"] .period-page .payment-status.risk{
+  border-color:#ff8b9a;
+}
+:root[data-theme="light"] .period-page .payment-status.risk>svg,
+:root[data-theme="light"] .period-page .payment-status.risk strong{
+  color:#ff8b9a;
+}
+:root[data-theme="light"] .period-page .cycle-settings #configureCycle{
+  color:#ff9770;
+}
+:root[data-theme="light"] .period-page .cycle-settings #configureCycle svg{
+  color:inherit;
+}
+
+
+/* Owner-approved Forecast SIMPLE presentation / 27 Oct 2026.
+   IMPORTANT: no changes to bottom-nav icons, button positioning, Home pace
+   gauge, any model inputs, persistence or 15-minute slider semantics.
+   This reproduces the approved content area, not the mockup's fake nav. */
+.forecast-page .forecast-simple-hero{
+  padding:16px 17px 17px;
+  margin:8px 0 13px;
+}
+.forecast-page .forecast-simple-hero .forecast-eyebrow{
+  margin:0 0 5px;
+  font-size:12px;
+  line-height:1.4;
+}
+.forecast-page .forecast-simple-hero h2{
+  margin:0 0 10px;
+  padding-bottom:11px;
+  border-bottom:1px solid #45515b;
+  font-size:12px;
+  line-height:1.3;
+  font-weight:850;
+}
+.forecast-page .forecast-simple-hero .forecast-number{
+  margin:0;
+  line-height:1.15;
+}
+.forecast-page .forecast-simple-hero .forecast-number[hidden]{display:none!important}
+.forecast-page .forecast-simple-hero .forecast-band.forecast-insufficient{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin:0;
+  min-height:39px;
+  font-size:13px;
+  line-height:1.35;
+}
+.forecast-page .forecast-insufficient-mark{
+  flex:0 0 auto;
+  display:block;
+  width:7px;
+  height:7px;
+  margin-top:5px;
+  background:var(--signal-panel);
+}
+.forecast-page .forecast-insufficient-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+.forecast-page .forecast-insufficient-copy strong{
+  color:var(--console-hero-ink);
+  font-size:14px;
+  line-height:1.25;
+  font-weight:750;
+}
+.forecast-page .forecast-insufficient-copy small{
+  color:var(--console-label);
+  font-size:12px;
+  line-height:1.35;
+}
+.forecast-page .forecast-simple-plan{
+  padding:17px 15px 15px;
+  margin:0 0 12px;
+}
+.forecast-page .forecast-simple-plan h2{
+  font-size:21px;
+  font-weight:850;
+  margin:0 0 6px;
+}
+.forecast-page .forecast-simple-plan .duration-control{
+  margin:6px 0!important;
+  padding:10px 0 12px;
+}
+.forecast-page .forecast-simple-plan .duration-control+.duration-control{
+  margin:10px 0 0!important;
+  padding-top:14px;
+  border-top:1px solid var(--line);
+}
+.forecast-page .forecast-simple-plan .duration-heading{gap:8px}
+.forecast-page .forecast-simple-plan .duration-heading label{
+  color:var(--ink);
+  margin:0;
+  font-size:15px;
+  line-height:1.3;
+  font-weight:700;
+}
+.forecast-page .forecast-simple-plan .duration-value{
+  gap:5px;
+  align-items:baseline;
+}
+.forecast-page .forecast-simple-plan .duration-value input{
+  width:65px;
+  max-width:25vw;
+  min-height:46px;
+  height:46px;
+  padding:5px 2px;
+  border:0!important;
+  border-bottom:2px solid transparent!important;
+  border-radius:0!important;
+  background:transparent!important;
+  text-align:right;
+  color:var(--ink);
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:27px;
+  line-height:1.15;
+  font-weight:850;
+  font-variant-numeric:tabular-nums;
+  box-shadow:none;
+}
+.forecast-page .forecast-simple-plan .duration-value input:focus{
+  border-bottom-color:var(--teal)!important;
+  outline:none;
+}
+.forecast-page .forecast-simple-plan .duration-value>span{
+  font-size:14px;
+  font-weight:600;
+}
+.forecast-page .forecast-simple-plan .duration-track{
+  margin-top:3px;
+  gap:11px;
+}
+.forecast-page .forecast-simple-plan .duration-track button{
+  border-radius:3px!important;
+  font-size:26px;
+  font-weight:650;
+}
+.forecast-page .forecast-simple-plan .duration-slider::-webkit-slider-runnable-track{
+  height:6px;
+  border-radius:4px;
+  background:linear-gradient(to right,
+    var(--teal) 0%,
+    var(--teal) var(--duration-fill,0%),
+    var(--line) var(--duration-fill,0%),
+    var(--line) 100%);
+}
+.forecast-page .forecast-simple-plan .duration-slider::-webkit-slider-thumb{
+  width:28px;
+  height:28px;
+  margin-top:-11px;
+  border:0;
+  border-radius:50%;
+  background:var(--teal);
+  box-shadow:none;
+}
+.forecast-page .forecast-import-button{
+  margin-top:8px;
+}
+@media(max-width:374px){
+  .forecast-page .forecast-simple-plan{padding:16px 13px 14px}
+  .forecast-page .forecast-simple-plan .duration-heading label{font-size:14px}
+  .forecast-page .forecast-simple-plan .duration-track{gap:7px}
+}
+
+
+/* Approved Forecast footnote: explicitly distinguish slot idle time from
+   active work, as on the selected mockup. No change to duration controls. */
+.forecast-page .forecast-simple-plan .forecast-work-note{
+  margin:3px 0 0;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.4;
+}
+
+/* Owner-approved empty History proposal, 27 Oct 2026. Keep the period
+   controls and bottom navigation; only the empty content uses these cards. */
+.history-empty .period-navigation{position:relative}
+.history-empty .period-select{
+  appearance:none;
+  -webkit-appearance:none;
+  padding-right:36px;
+}
+.history-empty .period-navigation::after{
+  content:"";
+  position:absolute;
+  right:70px;
+  top:18px;
+  width:8px;
+  height:8px;
+  border-right:1.5px solid var(--ink);
+  border-bottom:1.5px solid var(--ink);
+  transform:rotate(45deg);
+  pointer-events:none;
+}
+.history-empty .empty-history{
+  margin-top:6px;
+  padding:20px 20px 19px;
+  text-align:left;
+  border:1px solid var(--line);
+  border-left:5px solid var(--teal);
+  border-radius:3px;
+  background:var(--console-hero);
+  color:var(--console-hero-ink);
+}
+.history-empty .empty-history h2{
+  margin:0 0 9px;
+  font-size:22px;
+  line-height:1.2;
+  font-weight:850;
+  letter-spacing:-.03em;
+}
+.history-empty .empty-history p{
+  color:var(--console-label);
+  font-size:14px;
+  line-height:1.45;
+}
+.history-empty .history-empty-footer{
+  display:grid;
+  gap:8px;
+  margin-top:19px;
+}
+.history-empty .history-section-label{
+  margin:0 0 1px;
+  padding-left:26px;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.4;
+  font-weight:800;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+}
+.history-empty .history-period-label{margin-top:14px}
+.history-empty .history-empty-footer .history-action{
+  display:grid;
+  grid-template-columns:32px minmax(0,1fr) 32px;
+  align-items:center;
+  width:100%;
+  min-height:61px;
+  margin:0;
+  padding:11px 15px;
+  border:1px solid var(--line);
+  border-radius:3px;
+  background:var(--console-hero);
+  color:var(--console-hero-ink);
+}
+.history-empty .history-action-icon,
+.history-empty .history-action-chevron{display:flex;align-items:center;color:var(--teal)}
+.history-empty .history-action-icon svg{width:23px;height:23px}
+.history-empty .history-import-icon svg{transform:scaleX(-1)}
+.history-empty .history-action-chevron{justify-content:flex-end}
+.history-empty .history-action-chevron svg{width:20px;height:20px}
+.history-empty .history-action-copy{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  min-width:0;
+  text-align:center;
+}
+.history-empty .history-action-copy strong{font-size:16px;line-height:1.25;font-weight:800}
+.history-empty .history-action-copy small{margin-top:3px;color:var(--console-label);font-size:12px;line-height:1.25;font-weight:400}
+.history-empty .history-empty-footer .history-period-action{
+  min-height:54px;
+  background:transparent;
+  color:var(--ink);
+}
+:root[data-theme="light"] .history-empty .history-period-action .history-action-copy strong{color:var(--ink)}
+
+/* Approved period closure form: keep its fields and save behavior scoped here. */
+.closure-page .page-heading{margin-bottom:18px}
+.closure-page .closure-info{border:1px solid var(--line);border-left:4px solid var(--teal);background:var(--field);padding:12px 16px;margin:0 0 12px;font-size:17px;font-weight:760;line-height:1.35}
+.closure-page .closure-explainer{color:var(--muted);font-size:14px;line-height:1.45;margin:0 0 22px}
+.closure-page #closureForm>.field{background:var(--field);border:1px solid var(--line);padding:18px 16px 16px}
+.closure-page #closureForm>.field label{font-size:17px;font-weight:800;margin-bottom:3px}
+.closure-page #closureForm>.field input{min-height:58px;font-size:22px;font-weight:750;border-radius:3px;background:var(--bg)}
+.closure-page #closureForm>.field .field-note{font-size:12px;line-height:1.4;margin-top:3px}
+.closure-page #closureForm .additional{margin:12px 0 0;border:1px solid var(--line);background:var(--field);padding:16px}
+.closure-page #closureForm .additional label{font-size:16px;font-weight:750}
+.closure-page #closureForm .additional textarea{min-height:84px;border-radius:3px;background:var(--bg);font-size:16px}
+.closure-page #closureForm .save-area{margin-top:18px;padding:0;background:transparent;border:0}
+.closure-page #closureForm .save-area .button{min-height:55px;font-size:16px}
+
+/* Keep the date label visible above the keyboard on the 360dp slot form. */
+@media(max-width:374px) and (max-height:520px){
+  :root[data-text-scale="standard"] .form-page:has(#dailyHours:focus, #dailyOrders:focus) .form-scroll{
+    padding-top:10px;
+  }
+  :root[data-text-scale="standard"] .form-page:has(#dailyHours:focus, #dailyOrders:focus) .form-section-heading:first-of-type{
+    margin-top:-3px;
+    padding-top:0;
+  }
+}
+
+/* Approved premium-card contrast: match its dark amounts to the existing
+   dark text on the yellow income panel in the night theme. */
+:root[data-theme="dark"] #homeDeck .income-hero .premiums-card,
+:root[data-theme="dark"] #homeDeck .income-hero .premiums-card .card-heading,
+:root[data-theme="dark"] #homeDeck .income-hero .premiums-card .premium-teasers strong{
+  color:#252a2c;
+}
+
+/* Match the short browser startup state to the native launch mark. */
+.splash-mark{width:108px;height:108px;flex:none}
+.splash h1{font-size:28px;line-height:1.04;text-transform:uppercase;letter-spacing:-.055em;font-weight:900}
+
+
+/* Owner-directed Period redesign · 29 Oct 2026.
+   A period is an editable chronological ledger, not another Home dashboard.
+   Source values come from calculateDay and the original entry records.
+   Main Home, bottom navigation, gauge and financial model are untouched. */
+.period-page .period-notice{margin:18px 0 9px}
+.period-page .period-notice .payment-status{
+  position:static;
+  display:flex;
+  align-items:flex-start;
+  width:100%;
+  margin:0;
+  border-radius:5px;
+  padding:11px 12px;
+  background:var(--surface);
+  box-shadow:none;
+}
+.period-page .period-notice .payment-status strong{font-size:13px;line-height:1.3}
+.period-page .period-notice .payment-status p{font-size:12px;line-height:1.4;margin-top:3px}
+.period-page .period-cycle-compact{
+  margin:8px 0 0;
+  padding:12px 14px 9px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:4px;
+  color:var(--ink);
+}
+.period-page .period-cycle-compact .cycle-header{
+  display:flex;
+  flex-direction:row;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:8px;
+}
+.period-page .period-cycle-compact .cycle-header h2{
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.3;
+  font-weight:800;
+}
+.period-page .period-cycle-compact .cycle-header span{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.3;
+  text-align:right;
+}
+.period-page .period-cycle-compact progress{
+  display:block;
+  width:100%;
+  height:5px;
+  margin:9px 0 2px;
+  accent-color:var(--teal);
+}
+.period-page .period-cycle-compact .cycle-config{
+  margin:3px 0 0;
+  padding:0;
+  border:0;
+}
+.period-page .period-cycle-compact #configureCycle{
+  display:flex;
+  min-height:37px;
+  align-items:center;
+  justify-content:space-between;
+  padding:5px 0;
+  color:var(--teal);
+  font-size:12px;
+  line-height:1.3;
+  border:0;
+  font-weight:650;
+}
+.period-page .period-cycle-compact #configureCycle svg{width:18px;height:18px;flex-shrink:0}
+.period-page .period-cycle-compact .cycle-config form{padding:10px 0 5px}
+.period-page .period-days{margin:19px 0 0}
+.period-page .period-days-heading{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:10px;
+  margin:0 0 11px;
+}
+.period-page .period-days-heading h2{
+  color:var(--ink);
+  font-size:22px;
+  line-height:1.2;
+  font-weight:850;
+  letter-spacing:-.025em;
+}
+.period-page .period-days-list{display:flex;flex-direction:column;gap:10px}
+.period-page .period-day{
+  margin:0;
+  border:1px solid var(--line);
+  background:var(--console-hero);
+  border-radius:4px;
+  color:var(--console-hero-ink);
+  overflow:hidden;
+}
+.period-page .period-day summary{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.04fr) 22px;
+  gap:10px;
+  min-height:83px;
+  padding:12px 12px 13px;
+  align-items:center;
+  cursor:pointer;
+  list-style:none;
+}
+.period-page .period-day summary::-webkit-details-marker{display:none}
+.period-page .period-day-title,
+.period-page .period-day-figures{min-width:0;display:flex;flex-direction:column;gap:6px}
+.period-page .period-day-title{
+  color:var(--console-hero-ink);
+  font-size:16px;
+  font-weight:800;
+  line-height:1.3;
+}
+.period-page .period-day-title small,
+.period-page .period-day-figures small{
+  color:var(--console-label);
+  font-size:11px;
+  font-weight:500;
+  line-height:1.3;
+}
+.period-page .period-day-figures{text-align:right}
+.period-page .period-day-figures strong{
+  color:var(--console-hero-ink);
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:clamp(17px,5.5vw,24px);
+  font-weight:850;
+  line-height:1.2;
+  font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere;
+}
+.period-page .period-day-chevron{color:var(--teal);display:flex;align-items:center;justify-content:center}
+.period-page .period-day-chevron svg{width:19px;height:19px;transition:transform .15s}
+.period-page .period-day[open] .period-day-chevron svg{transform:rotate(180deg)}
+.period-page .period-day-slots{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:11px 11px 13px;
+  border-top:1px solid var(--line);
+}
+.period-page .period-day-slot{
+  min-width:0;
+  border:1px solid var(--line);
+  background:var(--surface);
+  border-radius:4px;
+  padding:12px 12px 10px;
+}
+.period-page .period-slot-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:10px;
+}
+.period-page .period-slot-header strong{font-size:15px;line-height:1.3;color:var(--ink)}
+.period-page .period-slot-edit{
+  display:flex;
+  gap:3px;
+  align-items:center;
+  min-height:41px;
+  padding:7px 3px 7px 10px;
+  border:0;
+  background:none;
+  color:var(--teal);
+  font-size:13px;
+  font-weight:700;
+  line-height:1.3;
+  white-space:nowrap;
+}
+.period-page .period-slot-edit svg{width:16px;height:16px}
+.period-page .period-slot-facts{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:11px 12px;
+  margin:0;
+  padding-top:10px;
+  border-top:1px solid var(--line);
+}
+.period-page .period-slot-facts>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.period-page .period-slot-facts dt{color:var(--muted);font-size:11px;line-height:1.4}
+.period-page .period-slot-facts dd{
+  margin:0;
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.3;
+  font-weight:750;
+  font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere;
+}
+.period-page .period-slot-note{
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px solid var(--line);
+  font-size:12px;
+  color:var(--muted);
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.period-page .period-no-days{
+  padding:22px 16px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  background:var(--surface);
+}
+.period-page .period-no-days h2{font-size:18px;font-weight:750}
+.period-page .period-no-days p{margin-top:8px;color:var(--muted);font-size:13px}
+.period-page .period-actions{margin:15px 0 0;gap:7px}
+.period-page .period-actions #periodHistory{
+  background:transparent;
+  color:var(--teal);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:8px 12px;
+  min-height:44px;
+  font-weight:650;
+  font-size:13px;
+}
+.period-page .period-actions .export-action{color:var(--teal)}
+:root[data-theme="light"] .period-page .period-cycle-compact{
+  color:var(--ink);
+  background:var(--surface);
+}
+:root[data-theme="light"] .period-page .period-cycle-compact .cycle-header h2{color:var(--ink)}
+:root[data-theme="light"] .period-page .period-cycle-compact .cycle-header span{color:var(--muted)}
+@media(max-width:374px){
+  .period-page .period-day summary{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 19px;gap:6px;padding:10px}
+  .period-page .period-day-title{font-size:15px}
+  .period-page .period-day-figures strong{font-size:17px}
+}
+
+/* Period 12-week bonus tracker: amounts stay secondary to editable day records. */
+.period-page .period-cycle-compact .cycle-bonus-dates{margin:6px 0 0;font-size:12px;color:var(--muted)}
+.period-page .period-cycle-compact .cycle-bonus-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0 6px;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.period-page .period-cycle-compact .cycle-bonus-metrics>div{min-width:0}
+.period-page .period-cycle-compact .cycle-bonus-metrics>div+div{padding-left:12px;border-left:1px solid var(--line)}
+.period-page .period-cycle-compact .cycle-bonus-metrics span{display:block;color:var(--muted);font-size:11px;line-height:1.4}
+.period-page .period-cycle-compact .cycle-bonus-metrics strong{display:block;font-size:clamp(17px,5vw,23px);font-weight:850;font-variant-numeric:tabular-nums;line-height:1.28;letter-spacing:-.025em;overflow-wrap:anywhere;margin-top:4px}
+.period-page .period-cycle-compact #cyclePremium{color:var(--teal)}
+.period-page .period-cycle-compact .cycle-bonus-note{font-size:11px;line-height:1.4;color:var(--muted);margin:7px 0 2px;overflow-wrap:anywhere}
+
+/* 12-week opening gross income, scoped to the already approved Period card. */
+.period-page .cycle-opening-fields{border-top:1px solid var(--line);margin:10px 0 4px;padding-top:11px;display:flex;flex-direction:column;gap:7px}
+.period-page .cycle-opening-fields label{font-size:12px;font-weight:750;color:var(--ink)}
+.period-page .cycle-opening-fields input{min-height:48px;width:100%;font-variant-numeric:tabular-nums}
+.period-page .cycle-opening-fields .hint{font-size:11px;line-height:1.4;margin:3px 0 5px}
+.period-page .cycle-import-button{min-height:48px;width:100%;text-align:center;white-space:normal}
+
+/* Add Slot geometry repair: photo 29 Oct 2026. Scope strictly to form, preserve money math. */
+.form-page .form-grid{align-items:start;column-gap:12px;row-gap:18px}
+.form-page .form-grid>.field{min-width:0;align-self:start;gap:8px}
+.form-page .form-grid>.field:not(.form-date-field)>label{display:flex;align-items:flex-end;min-height:19px;line-height:1.35}
+.form-page .field-box{position:relative;min-height:54px;display:flex;align-items:stretch;width:100%}
+.form-page .form-grid .field-box input[type="text"]{
+  width:100%;min-height:54px;height:54px;margin:0;
+  padding:12px 45px 12px 15px!important;
+  line-height:1.25;font-family:system-ui,-apple-system,Roboto,sans-serif!important;
+  font-size:19px!important;font-weight:650!important;font-variant-numeric:tabular-nums;
+  text-align:left;letter-spacing:0;box-sizing:border-box
+}
+.form-page .form-grid .field-box .orders-input{padding-right:79px!important}
+.form-page .form-grid .field-box input::placeholder{font-size:14px;font-weight:400;letter-spacing:0;color:var(--muted);opacity:.76}
+.form-page .form-grid .field-box .field-unit{
+  display:flex;align-items:center;justify-content:flex-end;position:absolute;right:15px;top:0;
+  height:54px;transform:none;color:var(--muted);font-size:14px;line-height:1;font-weight:500
+}
+.form-page .form-grid .field-box .field-unit.orders{font-size:12px}
+.form-page .form-grid .field-note{line-height:1.35;min-height:18px;font-size:11px}
+.form-page .form-section-heading{margin-top:18px;padding-top:14px}
+.form-page .form-date-field .date-box{width:100%;min-height:54px;padding:12px 15px}
+.form-page .form-date-field .form-period{min-height:18px}
+.form-page .slot-working #slotWorkingEditor>.slot-mode-label{display:block;margin:6px 0 9px;font-size:13px;font-weight:650;color:var(--muted)}
+.form-page .slot-mode-button{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;min-height:54px;padding:10px 15px;border:1px solid var(--line);
+  border-radius:6px;background:var(--field);color:var(--ink);text-align:left;
+  font-size:15px;font-weight:650
+}
+.form-page .slot-mode-button[aria-expanded="true"]{border-color:var(--teal);outline:2px solid var(--teal);outline-offset:1px}
+.form-page .slot-mode-button svg{width:19px;height:19px;flex-shrink:0;color:var(--teal)}
+.form-page .slot-mode-options{
+  border:1px solid var(--line);border-radius:6px;background:var(--surface);
+  overflow:hidden;display:flex;flex-direction:column;margin:7px 0 13px
+}
+.form-page .slot-mode-options[hidden]{display:none!important}
+.form-page .slot-mode-options [role="radio"]{
+  width:100%;min-height:54px;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:12px 16px;border:0;border-bottom:1px solid var(--line);
+  background:transparent;color:var(--ink);font-size:15px;text-align:left
+}
+.form-page .slot-mode-options [role="radio"]:last-child{border-bottom:0}
+.form-page .slot-mode-options [role="radio"].selected{color:var(--teal);font-weight:750}
+.form-page .slot-mode-indicator{width:21px;height:21px;border:2px solid var(--muted);border-radius:50%;flex-shrink:0}
+.form-page .slot-mode-options [role="radio"].selected .slot-mode-indicator{border:6px solid var(--teal)}
+@media(max-width:374px){.form-page .form-grid{column-gap:9px}.form-page .form-grid .field-box input[type="text"]{padding-left:11px!important;font-size:17px!important}.form-page .form-grid .field-box .field-unit{right:10px}}
+:root[data-text-scale="large"] .form-page .form-grid{grid-template-columns:minmax(0,1fr)}
+
+/* Splash brand: reference's floating composition, ORIGINAL SHIFT CONTROL sign and pigments.
+   Initial loading surface only: saved light/dark content theme is untouched. */
+.splash{min-height:100dvh;margin:-30px -22px;display:grid;place-items:center;position:relative;isolation:isolate;overflow:hidden;background:#10151a}
+.splash::before{content:"";position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);width:clamp(270px,85vw,410px);height:clamp(270px,85vw,410px);border-radius:50%;background:radial-gradient(circle,rgba(255,121,82,.13) 0%,rgba(255,189,87,.04) 45%,transparent 72%);pointer-events:none}
+.splash-mark{position:relative;z-index:1;display:block;width:clamp(142px,43vw,186px);height:auto;aspect-ratio:1;filter:drop-shadow(0 0 9px rgba(255,121,82,.15))}
+@media(min-width:390px){.splash{margin-left:-24px;margin-right:-24px}}
+@media(prefers-reduced-motion:reduce){.splash-mark{animation:none}}
+
+/* Approved 29 October pearlescent layered-mark splash artwork. Startup only; preserve saved app themes. */
+.splash .splash-art{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;max-width:none}
+.splash:has(.splash-art){background:#10151a;overflow:hidden;isolation:isolate;min-height:100dvh}

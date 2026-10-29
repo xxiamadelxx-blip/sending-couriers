@@ -79,14 +79,29 @@ def wait_node(name, seconds=20):
 
 
 def wait_home(seconds=20):
+    """Wait for an actual loaded home; tolerate transient UiAutomator dump failure.
+
+    A failed accessibility snapshot is not evidence of app failure. Keep the
+    bounded wait and still require visible Home + absence of the slot form.
+    """
     end = time.monotonic() + seconds
+    last_snapshot_error = None
     while time.monotonic() < end:
-        root = dump("home-current")
+        try:
+            root = dump("home-current")
+        except (RuntimeError, ET.ParseError) as error:
+            last_snapshot_error = error
+            time.sleep(1)
+            continue
         if dismiss_launcher_anr(root):
             continue
         if find_node(root, "Главная") is not None and find_node(root, "Сохранить слот") is None:
             return root
         time.sleep(1)
+    if last_snapshot_error is not None:
+        raise AssertionError(
+            f"Home was not observed within {seconds}s; latest Android XML dump failed: {last_snapshot_error}"
+        ) from last_snapshot_error
     raise AssertionError("Slot form did not return to home")
 
 

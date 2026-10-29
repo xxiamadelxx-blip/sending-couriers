@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Абстрактный знак запуска · визуальные варианты</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e1e4e2;color:#1c252c;font:16px/1.35 Arial,sans-serif}
+  .board{width:1200px;min-height:760px;margin:auto;padding:32px 34px}
+  h1{font-size:27px;margin:0 0 7px;letter-spacing:-.04em}
+  .sub{font-size:15px;color:#526068;margin:0 0 25px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .label{font-size:13px;font-weight:800;letter-spacing:.08em;margin-bottom:11px}
+  .phone{height:560px;border:9px solid #14191d;border-radius:29px;overflow:hidden;position:relative;box-shadow:0 13px 28px #1c252c22}
+  .phone:before{content:"";position:absolute;top:0;left:0;right:0;height:32px;background:#000}
+  .phone:after{content:"";position:absolute;bottom:6px;left:calc(50% - 40px);width:80px;height:4px;border-radius:4px;background:currentColor;opacity:.4}
+  .content{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 18px}
+  .dark{background:#10151a;color:#f4f1e9}
+  .light{background:#eae7de;color:#1c252c}
+  .appmark{width:108px;height:108px;display:grid;place-items:center;margin-bottom:29px;background:#202b32;clip-path:polygon(0 0,100% 0,100% 88%,88% 100%,0 100%);position:relative}
+  .appmark:before{content:"";position:absolute;top:0;left:0;width:100%;height:8px;background:#ff7952}
+  .appmark svg{width:74px;height:74px}
+  .cream{fill:#f4f1e9}.gold{fill:#ffbd57}
+  .brand{font-size:27px;font-weight:900;line-height:1.04;text-align:center;letter-spacing:-.055em;text-transform:uppercase}
+  .note{font-size:12px;color:#526068;margin:14px 0 0}
+</style>
+<div class="board">
+  <h1>Запуск без поясняющих подписей</h1>
+  <p class="sub">Два абстрактных знака. Палитра SHIFT CONTROL сохранена; внутри экранов только название приложения.</p>
+  <div class="grid">
+    <div><div class="label">А · НОЧНАЯ</div><div class="phone dark"><div class="content">
+      <div class="appmark"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="cream" d="M20 21H73V34H20Z M12 43H65V56H12Z M35 65H88V78H35Z"/><path class="gold" d="M12 43H65V56H12Z"/></svg></div>
+      <div class="brand">Доход<br>курьера</div>
+    </div></div></div>
+    <div><div class="label">А · ДНЕВНАЯ</div><div class="phone light"><div class="content">
+      <div class="appmark"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="cream" d="M20 21H73V34H20Z M12 43H65V56H12Z M35 65H88V78H35Z"/><path class="gold" d="M12 43H65V56H12Z"/></svg></div>
+      <div class="brand">Доход<br>курьера</div>
+    </div></div></div>
+    <div><div class="label">Б · НОЧНАЯ</div><div class="phone dark"><div class="content">
+      <div class="appmark"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="cream" d="M16 18H78V31H29V77H16Z"/><path class="gold" d="M42 43H84V82H71V56H42Z"/></svg></div>
+      <div class="brand">Доход<br>курьера</div>
+    </div></div></div>
+    <div><div class="label">Б · ДНЕВНАЯ</div><div class="phone light"><div class="content">
+      <div class="appmark"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="cream" d="M16 18H78V31H29V77H16Z"/><path class="gold" d="M42 43H84V82H71V56H42Z"/></svg></div>
+      <div class="brand">Доход<br>курьера</div>
+    </div></div></div>
+  </div>
+  <p class="note">В системной заставке Android виден только знак. На следующем коротком экране загрузки — знак и название. Других строк нет.</p>
+</div>
+</html>

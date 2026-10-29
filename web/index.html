@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#10151a">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Доход курьера</title>
   <link rel="stylesheet" href="style.css">
@@ -12,25 +12,30 @@
 <body>
   <main id="app">
     <div class="splash" aria-label="Доход курьера">
-      <h1>Доход курьера</h1>
+      <img class="splash-art" src="brand_splash.jpg" alt="" aria-hidden="true">
     </div>
   </main>
   <nav id="bottomNav" class="bottom-nav" aria-label="Основная навигация" hidden></nav>
   <div id="toast" role="status" class="toast" hidden></div>
   <dialog id="exportDialog" aria-labelledby="exportTitle">
+    <div id="exportPeriodLabel" class="export-dialog-eyebrow"></div>
     <h2 id="exportTitle">Экспорт для ChatGPT</h2>
-    <button id="shareReport" class="button primary" type="button">Поделиться файлом</button>
-    <button id="saveReport" class="button outline" type="button">Сохранить файл</button>
-    <button id="backupReport" class="button quiet" type="button">Резервная копия JSON</button>
+    <button id="shareReport" class="button primary" type="button">Поделиться отчётом</button>
+    <button id="saveReport" class="button outline" type="button">Сохранить отчёт</button>
+    <div class="export-dialog-backup">
+      <button id="backupReport" class="button export-backup-button" type="button" aria-label="Резервная копия JSON"><span><strong>Резервная копия JSON</strong><small>Все записи для восстановления</small></span></button>
+    </div>
     <button id="closeExport" class="button quiet" type="button">Закрыть</button>
   </dialog>
   <dialog id="importDialog" aria-labelledby="importTitle">
     <h2 id="importTitle">Импорт данных</h2>
-    <p id="importDescription"></p>
-    <p class="hint">Совпадающие идентификаторы записей будут заменены. Другие слоты сохранятся. Другая дата начала 12 недель потребует сначала выбрать нужную дату во вкладке «Период».</p>
+    <p id="importDescription" class="sr-only"></p>
+    <div class="import-stats" aria-hidden="true"><div><strong id="importEntriesCount">—</strong><small>ЗАПИСЕЙ</small></div><div><strong id="importDaysCount">—</strong><small>ДНЕЙ</small></div><div><strong id="importClosuresCount">—</strong><small>ЗАКРЫТЫХ<br>ПЕРИОДОВ</small></div></div>
+    <p class="import-merge">Совпадающие записи заменятся. Остальные слоты сохранятся.</p>
+    <div class="import-cycle"><strong>НАЧАЛО 12 НЕДЕЛЬ</strong><span>Если дата в файле отличается, выберите нужную дату во вкладке «Период».</span></div>
     <div id="importError" class="error" role="alert" hidden></div>
     <button id="confirmImport" class="button primary" type="button">Импортировать</button>
-    <button id="cancelImport" class="button quiet" type="button">Отмена</button>
+    <button id="cancelImport" class="button outline" type="button">Отмена</button>
   </dialog>
 </body>
 </html>
