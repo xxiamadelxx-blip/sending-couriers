@@ -1,0 +1,33 @@
+name: M2 SQLite parity
+on:
+  push:
+    branches: [m2/sqlite-shadow-migration-20261029]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: courier-m2-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-and-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: SQL integrity + migration contracts
+        run: python3 -m unittest discover -s tests -p 'test_m2_sqlite_schema.py' -v
+      - name: Existing finance + model regression
+        run: npm test
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Android platform 35
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Compile Android sources + prepare test-only APK
+        run: |
+          cp -a . "$RUNNER_TEMP/m2-standalone"
+          python3 "$RUNNER_TEMP/m2-standalone/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m2-test-only.apk"
+          python3 "$RUNNER_TEMP/m2-standalone/tests/verify_native.py" --sdk "$ANDROID_HOME"
+      - name: Preserve SHA-specific build log marker
+        run: printf 'M2 TEST APK compiled for SHA=%s; NOT production signed.\n' "$GITHUB_SHA"
