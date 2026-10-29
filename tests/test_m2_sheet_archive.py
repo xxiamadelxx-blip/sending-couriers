@@ -16,6 +16,7 @@ class M2SheetArchiveTest(unittest.TestCase):
         self.db=sqlite3.connect(":memory:")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.executescript((ROOT/"web/m2_schema_v1.sql").read_text())
+        self.db.executescript((ROOT/"web/m2_views_v2.sql").read_text())
 
     def tearDown(self):
         self.db.close()
