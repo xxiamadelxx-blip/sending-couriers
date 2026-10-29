@@ -246,6 +246,10 @@ function periodDetails() {
   const daily=periodDayMarkup(s.entries,date=>calculateDay(state,date),
     date=>formatDate(date,true),hoursText,money,esc);
   app.innerHTML = `${heading('Период')}${navigation()}
+    <section class="period-days" aria-labelledby="periodDaysHeading">
+      <div class="period-days-heading"><h2 id="periodDaysHeading">Записи по дням</h2></div>
+      <div class="period-days-list">${daily}</div>
+    </section>
     <div class="period-notice">${paymentStatus(s)}</div>
     <section class="detail-card cycle-settings period-cycle-compact" aria-label="Цикл премии">
       <div class="cycle-header"><h2>12 недель</h2>${cycle.start ? `<span>Цикл ${cycle.cycleNumber} · День ${cycle.elapsedDays} из 84</span>` : ''}</div>
@@ -258,10 +262,6 @@ function periodDetails() {
           <button class="button primary" id="saveSettings" type="submit">Сохранить дату</button>
         </form>
       </details>
-    </section>
-    <section class="period-days" aria-labelledby="periodDaysHeading">
-      <div class="period-days-heading"><h2 id="periodDaysHeading">Записи по дням</h2></div>
-      <div class="period-days-list">${daily}</div>
     </section>
     <div class="actions period-actions">
       <button class="button quiet" id="periodHistory" type="button">Записи периода${icons.chevron}</button>
