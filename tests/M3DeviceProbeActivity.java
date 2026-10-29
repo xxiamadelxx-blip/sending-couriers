@@ -70,6 +70,9 @@ public final class M3DeviceProbeActivity extends Activity {
         check(beforeFuture.trainingCutoff.equals(first.plusDays(83).toString()), "wrong training cutoff");
         check(beforeFuture.comparableN == 11 && beforeFuture.central >= 0,
                 "count without WORK exposure was included or zero-order WORK was lost");
+        check(beforeFuture.validationN >= 6 && beforeFuture.mae != null
+                && beforeFuture.bias != null && beforeFuture.wape != null
+                && beforeFuture.baselineMae != null, "matched walk-forward metrics missing");
 
         // Same-day and later facts are deliberately extreme; neither may leak into a forecast.
         addDay(db, target, 900);
@@ -104,6 +107,10 @@ public final class M3DeviceProbeActivity extends Activity {
         }
         check(published.optBoolean("offline") && ZONE.equals(published.optString("zone")),
                 "forecast provenance missing");
+        check(published.has("validationN") && published.has("mae")
+                && published.has("bias") && published.has("wape")
+                && !published.isNull("mae") && !published.isNull("bias")
+                && !published.isNull("wape"), "walk-forward metrics were not persisted");
         final SQLiteDatabase beforeMigration = db;
         assertBlocked(() -> beforeMigration.execSQL("UPDATE forecast_snapshots SET center_orders=999 WHERE id='" + forecastId + "'"),
                 "published forecast update was allowed");
