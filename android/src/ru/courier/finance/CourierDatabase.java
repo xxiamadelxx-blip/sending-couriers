@@ -259,7 +259,18 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                     checked.put("id",sourceId+":"+name+":"+row);
                     checked.put("source_id",sourceId);
                     checked.put("created_at",when);
-                    if("aggregate_order_counts".equals(table)){
+                    if("orders".equals(table)){
+                        checked.put("source_kind","xlsx");
+                        checked.put("updated_at",when);
+                        checked.put("date",normalized.getString("date"));
+                        checked.put("confidence",normalized.getString("confidence"));
+                        checked.put("precision",normalized.getString("precision"));
+                        for(String timestampField : new String[]{"accepted_at","completed_at"})
+                            if(normalized.has(timestampField))
+                                checked.put(timestampField,normalized.getString(timestampField));
+                        if(normalized.has("reward_kopecks"))
+                            checked.put("reward_kopecks",normalized.getLong("reward_kopecks"));
+                    }else if("aggregate_order_counts".equals(table)){
                         checked.put("source_kind","xlsx");checked.put("updated_at",when);
                         checked.put("date",normalized.getString("date"));
                         checked.put("order_count",normalized.getInt("order_count"));
