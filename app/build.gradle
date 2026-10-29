@@ -4,6 +4,7 @@ plugins {
 
 def generatedAssets = layout.buildDirectory.dir('generated/m4/assets')
 def generatedManifest = layout.buildDirectory.file('generated/m4/AndroidManifest.xml')
+def m4QaBuildId = (System.getenv('GITHUB_SHA') ?: 'local').take(8)
 
 tasks.register('stageCourierAssets') {
     inputs.dir(rootProject.file('web'))
@@ -62,7 +63,7 @@ android {
         release { minifyEnabled false }
         m4Qa {
             initWith release
-            applicationIdSuffix '.m4qa3c8959b'
+            applicationIdSuffix ".m4qa${m4QaBuildId}"
             signingConfig signingConfigs.debug
             matchingFallbacks = ['release']
         }
