@@ -42,6 +42,28 @@ public final class YandexScreenParserTest {
         assertEquals("10000",field(find(result,"ORDER_LIST_ROW"),"amount_kopecks"));
     }
 
+    @Test public void mergesPartialSlotObservationsBySlotId() {
+        YandexScreenParser.Result summary=YandexScreenParser.parse(
+            "Слот: 900,00 ₽\n339533360\n17:59 — 22:00\n9 заказов · 12,33 км");
+        YandexScreenParser.Result details=YandexScreenParser.parse(
+            "Слот: 900,00 ₽\n339533360\nТип слота Плановый\nСтатус Завершён\n"
+                +"Начало 2026.10.13 17:59\nЗавершение 2026.10.13 22:04");
+        java.util.List<VideoImportProcessor.Observation> observations=java.util.Arrays.asList(
+            new VideoImportProcessor.Observation(0,0,"frame1","",0f,summary,null),
+            new VideoImportProcessor.Observation(1,1500,"frame2","",0f,details,null));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,1500,observations,2);
+        java.util.List<YandexScreenParser.Candidate> unique=video.uniqueCandidates();
+        assertEquals(1,unique.size());
+        YandexScreenParser.Candidate merged=unique.get(0);
+        assertEquals("339533360",field(merged,"slot_id"));
+        assertEquals("9",field(merged,"slot_order_count"));
+        assertEquals("12.33",field(merged,"distance_km"));
+        assertEquals("PLANNED",field(merged,"slot_type"));
+        assertEquals("COMPLETED",field(merged,"status"));
+        assertEquals("2026-10-13T17:59",field(merged,"started_at"));
+        assertEquals("2026-10-13T22:04",field(merged,"completed_at"));
+    }
+
     @Test public void parsesInlineTimeAndMoneyButIgnoresSlotTimeRangeAsAnOrder() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "Слот: 900,00 ₽\nЗаказы\n12:34 100,00 ₽ коэф 1.0\n"

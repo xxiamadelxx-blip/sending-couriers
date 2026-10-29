@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -56,6 +57,25 @@ public final class YandexScreenParser {
 
         /** Stable, local deduplication key for repeated frames from one recording. */
         public String stableKey() { return candidateType+"\n"+toJson(); }
+
+        /** Stable identity for combining partial observations of the same order or slot. */
+        String mergeKey() {
+            String identityField="SLOT_DETAIL".equals(candidateType)?"slot_id":
+                ("ORDER_DETAIL".equals(candidateType)?"order_number":null);
+            if(identityField==null) return stableKey();
+            for(Field field:fields) if(identityField.equals(field.name)&&!field.value.isEmpty())
+                return candidateType+"\n"+identityField+"\n"+field.value;
+            return stableKey();
+        }
+
+        /** Combines non-conflicting fields while per-frame evidence remains stored separately. */
+        Candidate mergeMissingFields(Candidate other) {
+            if(other==null||!candidateType.equals(other.candidateType)) return this;
+            LinkedHashMap<String,Field> merged=new LinkedHashMap<>();
+            for(Field field:fields) merged.put(field.name,field);
+            for(Field field:other.fields) if(!merged.containsKey(field.name)) merged.put(field.name,field);
+            return new Candidate(candidateType,Math.max(ruleScore,other.ruleScore),new ArrayList<>(merged.values()));
+        }
     }
 
     public static final class Result {
@@ -98,7 +118,8 @@ public final class YandexScreenParser {
 
         ScreenType screen;
         String reason;
-        if((orders&&(yandex||containsAny(text,"на линии","заказы сегодня")||slot||orderDetails))||(slot&&demandCoefficient)) {
+        if((orders&&(yandex||containsAny(text,"на линии","заказы сегодня")||slot||orderDetails))
+            ||(slot&&(demandCoefficient||containsAny(text,"информация по слоту","тип слота")))) {
             screen=ScreenType.ORDERS; reason="order_screen_signature";
         } else if(income&&(yandex||incomeBreakdown)) {
             screen=ScreenType.INCOME; reason="income_screen_signature";

@@ -163,6 +163,8 @@ public final class M4VideoImportActivity extends Activity {
             appendField(line,candidate,"demand_coefficient","коэффициент",false);
         } else if("SLOT_DETAIL".equals(candidate.candidateType)) {
             line.append("Слот"); appendField(line,candidate,"slot_total_kopecks","сумма",true);
+            appendField(line,candidate,"slot_order_count","заказов",false);
+            appendField(line,candidate,"distance_km","км",false);
             appendField(line,candidate,"slot_type","тип",false);
             appendField(line,candidate,"started_at","начало",false);
             appendField(line,candidate,"completed_at","завершение",false);

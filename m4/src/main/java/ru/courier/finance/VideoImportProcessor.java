@@ -71,8 +71,11 @@ public final class VideoImportProcessor {
         /** Deduplicates repeated OCR detections while retaining each frame's raw evidence rows. */
         public List<YandexScreenParser.Candidate> uniqueCandidates() {
             LinkedHashMap<String,YandexScreenParser.Candidate> unique=new LinkedHashMap<>();
-            for(Observation observation:observations) for(YandexScreenParser.Candidate candidate:observation.candidates)
-                unique.put(candidate.stableKey(),candidate);
+            for(Observation observation:observations) for(YandexScreenParser.Candidate candidate:observation.candidates) {
+                String key=candidate.mergeKey();
+                YandexScreenParser.Candidate previous=unique.get(key);
+                unique.put(key,previous==null?candidate:previous.mergeMissingFields(candidate));
+            }
             return Collections.unmodifiableList(new ArrayList<>(unique.values()));
         }
         public int uniqueCandidateCount() { return uniqueCandidates().size(); }
