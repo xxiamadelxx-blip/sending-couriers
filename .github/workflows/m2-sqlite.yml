@@ -56,15 +56,9 @@ jobs:
           disable-animations: false
           script: |
             cp -a . "$RUNNER_TEMP/m2-debug-source"
-            python3 - <<'PY'
-            import os
-            from pathlib import Path
-            manifest = Path(os.environ['RUNNER_TEMP'])/'m2-debug-source/android/AndroidManifest.xml'
-            original = manifest.read_text()
-            assert 'android:debuggable=' not in original
-            assert original.count('android:allowBackup="true"') == 1
-            manifest.write_text(original.replace('android:allowBackup="true"',
-                'android:debuggable="true" android:allowBackup="true"'))
-            PY
+            grep -q 'android:allowBackup="true"' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
+            ! grep -q 'android:debuggable=' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
+            sed -i 's/android:allowBackup="true"/android:debuggable="true" android:allowBackup="true"/' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
+            grep -q 'android:debuggable="true"' "$RUNNER_TEMP/m2-debug-source/android/AndroidManifest.xml"
             python3 "$RUNNER_TEMP/m2-debug-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m2-debug-probe.apk"
             python3 qa/m2_sqlite_smoke.py --apk "$RUNNER_TEMP/m2-debug-probe.apk"
