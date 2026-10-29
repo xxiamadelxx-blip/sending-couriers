@@ -191,3 +191,20 @@ test('Period cycle settings offer saved gross opening amount and ChatGPT JSON im
  for(const token of ['cycleOpeningGross','cycleOpeningThrough','importCycleReport','Сохранить накопленный доход','cycleOpeningInput()'])assert.ok(p.includes(token),token);
  assert.ok(p.indexOf('class="period-days"') < p.indexOf('cycle-opening-fields'));
 });
+
+test('Add Slot form uses accessible in-app work-mode choice rather than Android system select',()=>{
+ const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
+ assert.doesNotMatch(page,/<select id="slotWorkMode"/,'native Android selector must not open a system popup');
+ for(const s of ['id="slotWorkModeButton"','id="slotModeOptions"','role="radiogroup"','data-slot-mode="intervals"','data-slot-mode="rest"'])
+   assert.ok(page.includes(s),s);
+ assert.ok(page.includes("$('#slotWorkMode').value=mode"),'real mode state is retained for save');
+ assert.ok(page.includes('workingDirty=true'),'mode changes must be tracked as user edits');
+});
+test('Add Slot form has aligned responsive money fields and no dash placeholders',()=>{
+ const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
+ assert.doesNotMatch(page,/input\.placeholder = '—'/,'empty numeric inputs must remain empty without visual dashes');
+ assert.match(page,/input\.placeholder = 'Введите'/);
+ assert.match(css,/\.form-page \.field-box\{[^}]*min-height:54px/);
+ assert.match(css,/\.form-page \.form-grid\{[^}]*align-items:start/);
+ assert.match(css,/\.form-page \.slot-mode-options \[role="radio"\]/);
+});
