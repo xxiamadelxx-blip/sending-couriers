@@ -34,6 +34,31 @@ public final class SheetFactsProbe {
         check(SheetFactNormalizer.normalize("Финансовые факты",
             row("A","2026-10-15","B","Вознаграждение","C","2,34,5"))==null,"no guess for malformed amount");
         check(SheetFactNormalizer.normalize("Заказы RAW",row("A","2026-10-18","C","18:57","E","100"))==null,"never fabricate individual orders");
+        JSONObject oldForecast=SheetFactNormalizer.normalize("Прогнозы",
+            row("A","2026-09-12","C","10:00–15:00","D",21,"E",16,"F",26,"J","CF_BASELINE_DOW_HOUR"));
+        check("historical_forecasts".equals(oldForecast.getString("table")) &&
+            oldForecast.getInt("center_orders")==21 &&
+            "unverified_historical".equals(oldForecast.getString("source_status")),
+            "historical forecast without publication evidence must not become published");
+        check(!oldForecast.has("claimed_publication"),"missing publication time must stay NULL");
+        JSONObject reconstructed=SheetFactNormalizer.normalize("Прогнозы",
+            row("A","2026-10-19","C","день","D",33,
+                "Q","2026-10-19 06:04:15 МСК (первичная публикация; восстановлено позже)",
+                "R","CF_BASELINE_DOW_HOUR v1.0","T","Исходный прогноз восстановлен"));
+        check("reconstructed_publication".equals(reconstructed.getString("source_status")),
+            "a reconstructed timestamp is evidence of an archive, not prospective publication");
+        JSONObject archivedRule=SheetFactNormalizer.normalize("Финансовые правила",
+            row("A","Строка 900 ₽","B","НЕ ДОХОД","D","Жёсткое правило"));
+        check("historical_rule_specs".equals(archivedRule.getString("table")) &&
+            "Строка 900 ₽".equals(archivedRule.getString("rule_label")),
+            "archived rule should not automatically affect financial calculations");
+        JSONObject archivedModel=SheetFactNormalizer.normalize("Модели",
+            row("A","CF_BASELINE_DOW_HOUR","B","АКТИВНАЯ","M","v1.0"));
+        check("historical_model_specs".equals(archivedModel.getString("table")) &&
+            "v1.0".equals(archivedModel.getString("declared_version")),
+            "archive model description separately from trained model registry");
+        check(SheetFactNormalizer.normalize("Прогнозы",
+            row("A","2026-10-19","D","33.5"))==null,"fractional order counts cannot be rounded");
         System.out.println("PASS: M2 actual conservative Java normalization 14/15/19 Oct, unknowns, no invented RAW");
     }
 }
