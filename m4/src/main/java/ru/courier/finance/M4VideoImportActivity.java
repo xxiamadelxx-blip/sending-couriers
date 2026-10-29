@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -100,7 +101,9 @@ public final class M4VideoImportActivity extends Activity {
                 response.put("extractedCandidateCount",analysis.uniqueCandidateCount());
                 response.put("extractionsTruncated",uniqueCandidates.size()>MAX_RETURNED_CANDIDATES);
                 response.put("extractions",extractions);
-                String message=saved.duplicate?"Это видео уже обработано.":extractionSummary(analysis);
+                String message=saved.duplicate
+                    ?"Видео уже импортировалось. Ниже показан повторный анализ новой версии парсера; ранее сохранённые результаты не перезаписаны.\n\n"+extractionSummary(analysis,false)
+                    :extractionSummary(analysis,true);
                 finishWith(response.toString(),message);
             } catch(Exception error) {
                 String message=error.getMessage()==null?"Проверьте файл и повторите импорт.":error.getMessage();
@@ -134,30 +137,57 @@ public final class M4VideoImportActivity extends Activity {
         return uri.getLastPathSegment()==null?"video.mp4":uri.getLastPathSegment();
     }
 
-    private String extractionSummary(VideoImportProcessor.Result result) {
+    private String extractionSummary(VideoImportProcessor.Result result,boolean candidatesSaved) {
+        String slotOrderCount=slotOrderCount(result);
         StringBuilder summary=new StringBuilder("Видео разобрано локально.\nКадров обработано: ")
             .append(result.observations.size())
             .append(" (это кадры видео, не количество заказов).\nНеизвестных кадров: ")
             .append(result.unknownScreenCount())
-            .append(".\nКандидаты: карточек заказа — ").append(result.uniqueCandidateCount("ORDER_DETAIL"))
-            .append(", строк списка заказов — ").append(result.uniqueCandidateCount("ORDER_LIST_ROW"))
-            .append(", слотов — ").append(result.uniqueCandidateCount("SLOT_DETAIL"))
+            .append(".");
+        if(!slotOrderCount.isEmpty()) summary.append("\nНа карточке слота указано заказов: ").append(slotOrderCount)
+            .append(" (общий счётчик слота, не извлечённые записи).");
+        summary.append("\nРаспознано отдельно: карточек заказов — ").append(result.uniqueCandidateCount("ORDER_DETAIL"))
+            .append(", строк списка — ").append(result.uniqueCandidateCount("ORDER_LIST_ROW"))
+            .append(". Одна доставка может присутствовать и в карточке, и в списке.")
+            .append("\nДополнительно: сводок слотов — ").append(result.uniqueCandidateCount("SLOT_DETAIL"))
             .append(", сводок дохода — ").append(result.uniqueCandidateCount("INCOME_SUMMARY"))
             .append(", строк начислений — ").append(result.uniqueCandidateCount("INCOME_LINE"))
             .append(".\n\nИзвлечено:");
-        List<YandexScreenParser.Candidate> candidates=result.uniqueCandidates();
+        List<YandexScreenParser.Candidate> candidates=orderedCandidates(result);
         int shown=Math.min(8,candidates.size());
         for(int i=0;i<shown;i++) summary.append("\n• ").append(formatCandidate(candidates.get(i)));
         if(candidates.isEmpty()) summary.append("\nПоля не распознаны; кадры доступны для локальной проверки.");
         else if(candidates.size()>shown) summary.append("\n… ещё ").append(candidates.size()-shown).append(" кандидатов сохранено.");
-        summary.append("\n\nКандидаты сохранены локально для проверки; факты в историю заказов и доходов не записаны.");
+        if(candidatesSaved)
+            summary.append("\n\nКандидаты сохранены локально для проверки; факты в историю заказов и доходов не записаны.");
+        else summary.append("\n\nКандидаты повторного анализа показаны только здесь; ранее сохранённые результаты не перезаписаны.");
         return summary.toString();
+    }
+
+    private String slotOrderCount(VideoImportProcessor.Result result) {
+        for(YandexScreenParser.Candidate candidate:result.uniqueCandidates()) {
+            if(!"SLOT_DETAIL".equals(candidate.candidateType)) continue;
+            for(YandexScreenParser.Field field:candidate.fields)
+                if("slot_order_count".equals(field.name)) return field.value;
+        }
+        return "";
+    }
+
+    private List<YandexScreenParser.Candidate> orderedCandidates(VideoImportProcessor.Result result) {
+        List<YandexScreenParser.Candidate> all=result.uniqueCandidates();
+        List<YandexScreenParser.Candidate> ordered=new ArrayList<>(all.size());
+        String[] priority={"ORDER_DETAIL","ORDER_LIST_ROW","INCOME_SUMMARY","INCOME_LINE","SLOT_DETAIL"};
+        for(String type:priority) for(YandexScreenParser.Candidate candidate:all)
+            if(type.equals(candidate.candidateType)) ordered.add(candidate);
+        for(YandexScreenParser.Candidate candidate:all) if(!ordered.contains(candidate)) ordered.add(candidate);
+        return ordered;
     }
 
     private String formatCandidate(YandexScreenParser.Candidate candidate) {
         StringBuilder line=new StringBuilder();
         if("ORDER_DETAIL".equals(candidate.candidateType)) {
-            line.append("Заказ"); appendField(line,candidate,"total_kopecks","сумма",true);
+            line.append("Карточка заказа"); appendField(line,candidate,"order_number","номер",false);
+            appendField(line,candidate,"total_kopecks","сумма",true);
             appendField(line,candidate,"status","статус",false);
             appendField(line,candidate,"started_at","начало",false);
             appendField(line,candidate,"completed_at","завершение",false);
@@ -166,8 +196,8 @@ public final class M4VideoImportActivity extends Activity {
             appendField(line,candidate,"amount_kopecks","сумма",true);
             appendField(line,candidate,"demand_coefficient","коэффициент",false);
         } else if("SLOT_DETAIL".equals(candidate.candidateType)) {
-            line.append("Слот"); appendField(line,candidate,"slot_total_kopecks","сумма",true);
-            appendField(line,candidate,"slot_order_count","заказов",false);
+            line.append("Сводка слота"); appendField(line,candidate,"slot_total_kopecks","сумма слота",true);
+            appendField(line,candidate,"slot_order_count","заказов указано в слоте",false);
             appendField(line,candidate,"distance_km","км",false);
             appendField(line,candidate,"slot_type","тип",false);
             appendField(line,candidate,"started_at","начало",false);
