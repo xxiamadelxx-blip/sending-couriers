@@ -1,6 +1,23 @@
+# SUPERSEDING OWNER DECISION · 29 October 2026
+
+**STATUS: A / B / C REJECTED. STOP THE PROPOSED HOME REDESIGN.**
+
+On 29 October 2026 the owner supplied an actual Android screenshot of the previous **«РАБОЧИЙ РИТМ»** Home page and explicitly stated that this previous design was ideal and the three new proposals were inferior. **The screenshot attached to that conversation, not any of the Figma A/B/C frames below, is the authoritative visual reference for Home.** It depicts:
+- the existing orange weather/service icons, strong title **«РАБОЧИЙ РИТМ»**, compact date selector, graphite dashboard, and peach/orange typography/highlights;
+- the existing full-width charcoal **«ТЕМП ПЕРИОДА»** card, correctly centered numeric tempo and **circular gold/orange percentage gauge** (digits *inside* the ring, never touching its border), hours/orders row, threshold and status messages;
+- the prominent orange/yellow **«ОБЩИЙ ДОХОД»** card, including hourly earnings, tips, bonuses, payouts and amount remaining; crisp sectional dividers and the lower premium sub-section;
+- the independent **«РАСЧЁТНЫЕ ПРЕМИИ»** section and existing action **«Расчёт дохода»**;
+- all five original Tabler-backed bottom navigation controls in the existing positions, including the central yellow/orange **+**, without a duplicate Add Slot action.
+
+**DESIGN CHANGE GATE:** Preserve the existing Home visual composition, orange lettering, proportions, spacing rhythm, gauge structure and navigation, as demonstrated in the owner-supplied screenshot. Do NOT implement any of the Figma concepts A/B/C, do NOT replace the real Home with the simplified finance dashboard, and do NOT create a new visual identity, icon pack or splash screen on the basis of those concepts. Future work must be a **specific defect correction scoped to the owner's approved actual Android design**, and major changes require prior owner approval.
+
+**Evidence scope:** user-supplied screenshot in conversation of 2026-10-29; its personal financial figures must not be published into this public repository. The Figma file below is an **archived rejected exploration**, not an implementation specification. Repository code was not altered when recording this decision, so no APK build/visual PASS is implied.
+
+---
+
 # SHIFT CONTROL · Design Quality Protocol reboot · 2026-10-29
 
-**Status: DISCOVERY COMPLETE, THREE EDITABLE VISUAL CONCEPTS PREPARED, OWNER DIRECTION PENDING. No production UI implementation authorized by this document.**
+**Historical record only. REJECTED by owner on 2026-10-29; not an active implementation plan.**
 
 ## Immutable owner constraints
 - **Retain the orange typographic highlights** and graphite/orange SHIFT CONTROL palette. Preserve existing five-item bottom navigation, exactly the already-used offline **Tabler Icons** paths, and the central Add Slot (+); do not introduce a second Add Slot button in empty states.
@@ -38,4 +55,4 @@ All frames were authored as **editable Figma text, shapes and SVG layers** (not 
 - Design PASS requires clean vertical baselines, consistent padding, button label centering, readable contrast, nothing clipped, scrollable actions, stable nav/icons, and direct owner visual sign-off. Unit tests/coverage cannot grant a visual PASS. Preserve engineering tests and repeat them when code changes.
 - Up to three loops on one defect before documenting BLOCKED and moving to an independent issue. No owner-signed release until verified upgrade does not lose data.
 
-**Open decision:** direction A / B / C; no visual acceptance of any of the three yet.
+**Final owner decision:** A, B and C all REJECTED; the previously implemented «РАБОЧИЙ РИТМ» Home screenshot is canonical.
