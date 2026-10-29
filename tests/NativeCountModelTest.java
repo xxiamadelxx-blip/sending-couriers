@@ -25,6 +25,9 @@ public final class NativeCountModelTest {
         check(ordinary.comparableN == 12, "same-weekday comparison sample");
         check(ordinary.central >= 0 && ordinary.lower <= ordinary.central
                 && ordinary.upper >= ordinary.central, "valid count interval");
+        check(ordinary.validationN >= 6 && ordinary.mae != null && ordinary.bias != null
+                && ordinary.wape != null && ordinary.baselineMae != null,
+                "walk-forward metrics missing");
         List<NativeCountModel.Observation> withoutZeroOrders = new ArrayList<>();
         for (NativeCountModel.Observation fact : facts) if (fact.orders > 0) withoutZeroOrders.add(fact);
         NativeCountModel.Prediction zeroRemoved =
@@ -52,6 +55,17 @@ public final class NativeCountModelTest {
                 NativeCountModel.predict(facts, target, 780, "Europe/Moscow");
         check(longDay.available && longDay.central >= ordinary.central,
                 "doubling confirmed WORK exposure must not reduce the baseline forecast");
+
+        List<NativeCountModel.Observation> zeroFacts = new ArrayList<>();
+        for (int i = 0; i < 20; i++)
+            zeroFacts.add(new NativeCountModel.Observation(
+                    LocalDate.parse("2026-01-01").plusDays(i).toString(),
+                    "Europe/Moscow", 0, 390));
+        NativeCountModel.Prediction allZero =
+                NativeCountModel.predict(zeroFacts, "2026-01-21", 390, "Europe/Moscow");
+        check(allZero.available && allZero.mae != null && allZero.mae == 0
+                && allZero.bias == 0 && allZero.wape == null,
+                "zero-denominator metrics must preserve zero facts and leave WAPE undefined");
         System.out.println("M3 NativeCountModel PASS; n=" + ordinary.comparableN
                 + " model=" + ordinary.selectedModel + " MAE=" + ordinary.mae);
     }
