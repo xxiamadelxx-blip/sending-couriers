@@ -37,3 +37,19 @@ test('web fallback remains a centered floating SHIFT CONTROL glyph without text 
  assert.match(css,/\.splash-mark\{[^}]*width:clamp/);
  assert.doesNotMatch(css.slice(css.lastIndexOf('/* Splash brand')),/#(?:ff00ff|00ffff|ac36ff)/i);
 });
+
+test('all four original Android vector paths use an actual multi-stop smooth SHIFT CONTROL gradient', async()=>{
+ const mark=await text('android/res/drawable/ic_brand_mark.xml');
+ for(const src of [icon,mark]) {
+  assert.match(src,/xmlns:aapt="http:\/\/schemas.android.com\/aapt"/);
+  assert.equal((src.match(/<aapt:attr name="android:fillColor">/g)||[]).length,4,'every arm has a gradient, not a flat fill');
+  assert.equal((src.match(/<gradient android:type="linear"/g)||[]).length,4,'four native gradients, no flat color arms');
+  for(const stop of ['#ff7952','#ffbd57','#f4f1e9']) {
+   assert.ok(src.includes('android:color="'+stop+'"'),stop);
+  }
+  assert.equal((src.match(/android:pathData="M17,42 H28 C40,42 42,31 42,17 H54 V28 C54,45 45,54 28,54 H17 Z"/g)||[]).length,4);
+ }
+ assert.match(splash,/<linearGradient id="shiftBrand"/);
+ assert.match(splash,/gradientUnits="userSpaceOnUse"/);
+ assert.equal((splash.match(/fill="url\(#shiftBrand\)"/g)||[]).length,4);
+});
