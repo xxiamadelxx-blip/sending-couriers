@@ -31,3 +31,24 @@ jobs:
           python3 "$RUNNER_TEMP/m2-standalone/tests/verify_native.py" --sdk "$ANDROID_HOME"
       - name: Preserve SHA-specific build log marker
         run: printf 'M2 TEST APK compiled for SHA=%s; NOT production signed.\n' "$GITHUB_SHA"
+      - name: Android 35 SQLite migration, restart and idempotency smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            cp -a . "$RUNNER_TEMP/m2-debug-source"
+            python3 - <<'PY'
+            import os
+            from pathlib import Path
+            manifest = Path(os.environ['RUNNER_TEMP'])/'m2-debug-source/android/AndroidManifest.xml'
+            original = manifest.read_text()
+            assert 'android:debuggable=' not in original
+            assert original.count('android:allowBackup="true"') == 1
+            manifest.write_text(original.replace('android:allowBackup="true"',
+                'android:debuggable="true" android:allowBackup="true"'))
+            PY
+            python3 "$RUNNER_TEMP/m2-debug-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m2-debug-probe.apk"
+            python3 qa/m2_sqlite_smoke.py --apk "$RUNNER_TEMP/m2-debug-probe.apk"
