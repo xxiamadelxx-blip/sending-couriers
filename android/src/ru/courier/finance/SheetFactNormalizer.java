@@ -91,6 +91,56 @@ public final class SheetFactNormalizer {
                 .put("confidence","reported_sheet");
             // No automatic addition to the Home total; confirmed closure wins later.
         }
+        if("Прогнозы".equals(sheet)) {
+            String target=iso(cell(row,"A"));
+            if(target==null)return null;
+            String[] columns={"D","E","F"};
+            Integer[] counts=new Integer[columns.length];
+            for(int i=0;i<columns.length;i++) {
+                String original=cell(row,columns[i]);
+                counts[i]=whole(original);
+                // An invalid count remains only in the raw source archive.
+                if(original!=null && counts[i]==null)return null;
+            }
+            if(counts[0]==null)return null;
+            if(counts[1]!=null && counts[1]>counts[0])return null;
+            if(counts[2]!=null && counts[2]<counts[0])return null;
+            String publication=cell(row,"Q");
+            String note=cell(row,"T");
+            boolean reconstructed=(publication!=null && publication.toLowerCase(Locale.ROOT).contains("восстанов"))
+                || (note!=null && note.toLowerCase(Locale.ROOT).contains("восстанов"));
+            JSONObject result=new JSONObject().put("table","historical_forecasts")
+                .put("target_date",target).put("center_orders",counts[0])
+                .put("source_status",reconstructed?"reconstructed_publication":"unverified_historical");
+            String label=cell(row,"C"); if(label!=null)result.put("window_label",label);
+            if(counts[1]!=null)result.put("lower_orders",counts[1]);
+            if(counts[2]!=null)result.put("upper_orders",counts[2]);
+            if(publication!=null)result.put("claimed_publication",publication);
+            String model=cell(row,"R");
+            if(model==null)model=cell(row,"J");
+            if(model!=null)result.put("claimed_model",model);
+            // Claimed time is NOT a reliable training cutoff or proof of
+            // prospective publication. Do not populate forecast_snapshots here.
+            return result;
+        }
+        if("Финансовые правила".equals(sheet)) {
+            String name=cell(row,"A");
+            if(name==null)return null;
+            JSONObject result=new JSONObject().put("table","historical_rule_specs")
+                .put("rule_label",name).put("source_status","declared_archive");
+            String rule=cell(row,"B");if(rule!=null)result.put("rule_text",rule);
+            return result;
+        }
+        if("Модели".equals(sheet)) {
+            String model=cell(row,"A");
+            if(model==null)return null;
+            JSONObject result=new JSONObject().put("table","historical_model_specs")
+                .put("model_label",model).put("source_status","declared_archive");
+            String state=cell(row,"B"),version=cell(row,"M");
+            if(state!=null)result.put("model_state",state);
+            if(version!=null)result.put("declared_version",version);
+            return result;
+        }
         if("Снимки периода".equals(sheet)) {
             String seen=iso(cell(row,"A")),range=cell(row,"B");
             if(seen==null||range==null)return null;
