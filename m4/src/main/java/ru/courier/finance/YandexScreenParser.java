@@ -5,7 +5,7 @@ import java.util.Locale;
 
 /** Conservative, text-only screen classifier. It never converts OCR into facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-screen-v1";
+    public static final String VERSION = "yandex-pro-screen-v2";
 
     public enum ScreenType {
         ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN
@@ -31,12 +31,20 @@ public final class YandexScreenParser {
 
         boolean yandex = containsAny(text, "яндекс про", "yandex pro", "таксометр", "заказы сегодня");
         boolean orders = containsAny(text, "заказ", "orders", "активные заказы");
-        boolean income = containsAny(text, "доход", "заработано", "выплата", "income", "earnings");
+        boolean slot = containsAny(text, "слот", "тип слота", "информация по слоту");
+        boolean orderDetails = containsAny(text, "номер заказа", "коэффициент спроса");
+        boolean demandCoefficient = containsAny(text, "коэффициент спроса", "коэф");
+        boolean income = containsAny(text, "доход", "заработано", "выплата", "income", "earnings", "вознаграждение");
+        boolean incomeBreakdown = containsAny(text, "вознаграждение") && containsAny(text, "комиссия партнера");
         boolean activity = containsAny(text, "на линии", "активность", "смена", "online", "activity");
 
-        if (orders && (yandex || containsAny(text, "на линии", "заказы сегодня")))
+        // Recorded Yandex Pro pages often omit the product name. A slot plus its
+        // order/coefficient fields, or an order number/details page, is a safer
+        // signature than requiring a visible brand label.
+        if ((orders && (yandex || containsAny(text, "на линии", "заказы сегодня") || slot || orderDetails))
+            || (slot && demandCoefficient))
             return new Result(ScreenType.ORDERS, false, "order_screen_signature");
-        if (income && yandex)
+        if (income && (yandex || incomeBreakdown))
             return new Result(ScreenType.INCOME, false, "income_screen_signature");
         if (activity && yandex)
             return new Result(ScreenType.ACTIVITY, false, "activity_screen_signature");
