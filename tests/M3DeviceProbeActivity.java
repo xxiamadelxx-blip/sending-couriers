@@ -63,7 +63,7 @@ public final class M3DeviceProbeActivity extends Activity {
             int count = i % 9 == 0 ? 0 : 5 + date.getDayOfWeek().getValue() % 4;
             addDay(db, date, count, i != 20); // confirmed count but no confirmed WORK exposure
         }
-        LocalDate target = first.plusDays(84);
+        LocalDate target = LocalDate.parse("2026-11-01");
         NativeCountModel.Prediction beforeFuture =
                 AutonomousForecastStore.predict(db, target.toString(), 390, ZONE);
         check(beforeFuture.available, "offline SQLite forecast unavailable");
