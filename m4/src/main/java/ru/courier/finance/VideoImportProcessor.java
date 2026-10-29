@@ -21,7 +21,9 @@ public final class VideoImportProcessor {
     public static final long MAX_VIDEO_BYTES = 2L * 1024L * 1024L * 1024L;
     public static final long MAX_DURATION_MS = 30L * 60L * 1000L;
     public static final int MAX_FRAMES = 300;
-    private static final int MAX_BITMAP_SIDE = 960;
+    // Keep a 720x1608 phone recording at native resolution; shrinking it to 430x960
+    // makes the small order-list text too difficult for the bundled OCR to read.
+    private static final int MAX_BITMAP_SIDE = 1608;
     private static final long MIN_SAMPLE_SPACING_MS = 1500L;
 
     public interface Ocr {
