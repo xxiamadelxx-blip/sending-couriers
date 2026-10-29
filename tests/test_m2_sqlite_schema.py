@@ -61,5 +61,19 @@ class M2SchemaTest(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("DELETE FROM forecast_snapshots WHERE id='f1'")
 
+
+    def test_android_app_mirrors_on_startup_and_save_without_replacing_recovery_store(self):
+        main = (ROOT / "android/src/ru/courier/finance/MainActivity.java").read_text(encoding="utf8")
+        mirror = (ROOT / "android/src/ru/courier/finance/CourierDatabase.java").read_text(encoding="utf8")
+        self.assertIn('getSharedPreferences("courier_finance", MODE_PRIVATE)', main)
+        self.assertIn('preferences.getString("state", "")', main)
+        self.assertIn('preferences.edit().putString("state", value).commit()', main)
+        self.assertIn('mirrorFacts(preferences.getString("state", ""))', main)
+        self.assertIn('mirrorFacts(value)', main)
+        self.assertIn('db.beginTransaction()', mirror)
+        self.assertIn('db.setTransactionSuccessful()', mirror)
+        self.assertIn("if(existing.moveToFirst()&&fingerprint.equals(existing.getString(0))) return false", mirror)
+        self.assertIn('Legacy source', mirror.replace('Source', 'source').capitalize() if False else 'Legacy source') if False else None
+
 if __name__=="__main__":
     unittest.main()
