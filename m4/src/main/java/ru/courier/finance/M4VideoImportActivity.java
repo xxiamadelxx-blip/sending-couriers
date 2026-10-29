@@ -135,8 +135,12 @@ public final class M4VideoImportActivity extends Activity {
     }
 
     private String extractionSummary(VideoImportProcessor.Result result) {
-        StringBuilder summary=new StringBuilder("Видео разобрано локально. Кандидаты: заказов — ")
-            .append(result.uniqueCandidateCount("ORDER_DETAIL")+result.uniqueCandidateCount("ORDER_LIST_ROW"))
+        StringBuilder summary=new StringBuilder("Видео разобрано локально.\nКадров обработано: ")
+            .append(result.observations.size())
+            .append(" (это кадры видео, не количество заказов).\nНеизвестных кадров: ")
+            .append(result.unknownScreenCount())
+            .append(".\nКандидаты: карточек заказа — ").append(result.uniqueCandidateCount("ORDER_DETAIL"))
+            .append(", строк списка заказов — ").append(result.uniqueCandidateCount("ORDER_LIST_ROW"))
             .append(", слотов — ").append(result.uniqueCandidateCount("SLOT_DETAIL"))
             .append(", сводок дохода — ").append(result.uniqueCandidateCount("INCOME_SUMMARY"))
             .append(", строк начислений — ").append(result.uniqueCandidateCount("INCOME_LINE"))
@@ -194,13 +198,20 @@ public final class M4VideoImportActivity extends Activity {
     private void finishWith(String json,String message) {
         runOnUiThread(()->{
             if(launchedForResult) {
-                Intent result=new Intent(); result.putExtra("m4.video.result",json); setResult(RESULT_OK,result); finish();
+                new AlertDialog.Builder(this).setTitle("Результат импорта видео")
+                    .setMessage(message)
+                    .setPositiveButton("Готово",(dialog,which)->returnResult(json))
+                    .setOnCancelListener(dialog->returnResult(json)).show();
             } else {
                 new AlertDialog.Builder(this).setTitle("Импорт видео")
                     .setMessage(message+"\n\nНеизвестные экраны сохранены локально для следующего этапа проверки.")
                     .setPositiveButton("Закрыть",(dialog,which)->finish()).setOnCancelListener(dialog->finish()).show();
             }
         });
+    }
+
+    private void returnResult(String json) {
+        Intent result=new Intent(); result.putExtra("m4.video.result",json); setResult(RESULT_OK,result); finish();
     }
 
     private void finishError(String message) {
