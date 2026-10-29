@@ -1,0 +1,49 @@
+name: M2 Limrun probe APK
+on:
+  push:
+    branches: [m2/sqlite-shadow-migration-20261029]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build-emulator-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build a disposable debug APK from exact commit
+        run: |
+          cp -a . "$RUNNER_TEMP/m2-probe"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['RUNNER_TEMP'])/'m2-probe/android/AndroidManifest.xml'
+          s=p.read_text()
+          assert 'android:debuggable=' not in s
+          assert 'android:allowBackup="true"' in s
+          p.write_text(s.replace('android:allowBackup="true"', 'android:debuggable="true" android:allowBackup="true"'))
+          PY
+          python3 "$RUNNER_TEMP/m2-probe/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m2-limrun-debug.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/m2-limrun-debug.apk" | grep "package: name='ru.courier.finance'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$RUNNER_TEMP/m2-limrun-debug.apk" AndroidManifest.xml | grep -i debuggable
+          sha256sum "$RUNNER_TEMP/m2-limrun-debug.apk"
+      - name: Publish temporary APK to isolated public QA branch
+        env:
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          git fetch origin ci/m2-limrun-probe-temp
+          git checkout -B ci/m2-limrun-probe-temp origin/ci/m2-limrun-probe-temp
+          mkdir -p qa
+          cp "$RUNNER_TEMP/m2-limrun-debug.apk" qa/m2-limrun-debug.apk
+          printf '%s\n' "${{ github.sha }}" > qa/m2-limrun-source-sha.txt
+          sha256sum qa/m2-limrun-debug.apk > qa/m2-limrun-apk-sha256.txt
+          git add qa/m2-limrun-debug.apk qa/m2-limrun-source-sha.txt qa/m2-limrun-apk-sha256.txt
+          git commit -m "ci: temporary Android emulator probe for ${{ github.sha }}"
+          git push origin HEAD:ci/m2-limrun-probe-temp
