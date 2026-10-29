@@ -31,7 +31,7 @@ test('12-week premium uses each period rate and percentage, with per-period kope
  s=setPaymentTerms(setPaymentTerms(s,rule()),rule(next,{hourlyRate:400,cycleBonusPercent:2.5}));
  const c=calculatePremiumCycle(s,'2026-11-12');assert.equal(c.hours,30);assert.equal(c.hourlyBase,11800);assert.equal(c.totalIncome,11980);assert.equal(c.premium,625.3);assert.equal(c.breakdown.length,3);
  let cents=updateSettings(emptyState(),{premiumCycleStart:'2026-08-21'});cents=setPaymentTerms(cents,rule(oldPeriod,{hourlyRate:10,cycleBonusPercent:5}));cents=add(add(cents,oldPeriod,0.01,0),current,0.01,0);
- assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,8.15);
+ assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,6.02); // Both entries use the effective 10 RUB/5% rule; each earns 3.01.
 });
 test('old imports preserve rules/theme; explicit backups restore them and conflicts reject atomically',()=>{
  const s=updateSettings(setPaymentTerms(add(emptyState(),current),rule()),{theme:'light'});
