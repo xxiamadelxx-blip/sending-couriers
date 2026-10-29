@@ -12,10 +12,13 @@ test('UI M1: slot edit form groups hours and money without discarding any existi
  assert.match(css,/\.form-section-heading\{grid-column:1\/-1/);
  assert.match(css,/\.form-page \.save-area \.button\.primary\{min-height:55px/);
 });
-test('UI M1: period states facts before payment warnings and 12-week controls',()=>{
- const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function previewCycle('));
- assert.ok(section.indexOf('class="detail-card period-overview"')<section.indexOf('paymentStatus(s)'));
- assert.ok(section.indexOf('paymentStatus(s)')<section.indexOf('class="detail-card cycle-settings"'));
+test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
+ const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
+ assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));
+ assert.ok(section.indexOf('paymentStatus(s)') < section.indexOf('class="detail-card cycle-settings period-cycle-compact"'));
+ assert.ok(section.indexOf('class="detail-card cycle-settings period-cycle-compact"') < section.indexOf('class="period-days"'));
+ assert.ok(section.includes('data-entry') || section.includes("querySelectorAll('.period-slot-edit')"));
+ assert.doesNotMatch(section,/class="detail-card period-overview"/);
 });
 test('UI M1: slot history keeps editable ID and complete monetary rows',()=>{
  const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
@@ -156,16 +159,14 @@ test('UI-014: all input templates provide escaped explicit Android-accessible fi
  assert.ok(forecast.includes('type="${type}" aria-label="${esc(label)}" value='), 'forecast history input missing label');
 });
 
-test('approved Period: show the existing recorded reward sum, never forecast income or paid-out estimate',()=>{
+test('Period day totals use independent calculateDay facts, not forecast or Home gross earnings',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
- assert.match(section,/class="period-reward"/);
- assert.match(section,/id="periodReward"/);
- assert.match(section,/money\(s\.paidReward\)/);
+ assert.match(section,/periodDayMarkup\(s\.entries,date=>calculateDay\(state,date\)/);
  assert.doesNotMatch(section,/money\(s\.grossUserIncome\)/);
- assert.ok(section.indexOf('id="periodReward"') < section.indexOf('paymentStatus(s)'),
-   'recorded reward should be inside Period totals above the payment risk');
+ assert.doesNotMatch(section,/id="periodReward"/);
+ assert.match(section,/querySelectorAll\('\.period-slot-edit'\)/);
+ assert.match(section,/form\(button\.dataset\.entry,'period'\)/);
 });
-
 test('approved History: day reward plus full per-slot fields and separate edit by stable id',()=>{
  const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
  assert.match(section,/class="day-summary"/);
