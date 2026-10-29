@@ -42,6 +42,34 @@ public final class YandexScreenParserTest {
         assertEquals("10000",field(find(result,"ORDER_LIST_ROW"),"amount_kopecks"));
     }
 
+    @Test public void excludesAndroidStatusBarClocksFromOrderRows() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "00:35 @ © 00:47 LTE 11%\n< Слот: 3300,00 ₽\n341681811\n"
+                +"18:57 100,00 ₽ >\nМагнит коэф 1.0");
+        assertEquals(1,count(result,"ORDER_LIST_ROW"));
+        assertEquals("18:57",field(find(result,"ORDER_LIST_ROW"),"order_time"));
+    }
+
+    @Test public void preservesTwoRealRowsWithIdenticalTimeAndAmountAcrossFrames() {
+        String screen="Слот: 200,00 ₽\n339533360\n2 заказа\n"
+            +"18:57 100,00 ₽ >\nМагазин A коэф 1.0\n"
+            +"18:57 100,00 ₽ >\nМагазин B коэф 1.0";
+        YandexScreenParser.Result parsed=YandexScreenParser.parse(screen);
+        assertEquals(2,count(parsed,"ORDER_LIST_ROW"));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,3000,
+            java.util.Arrays.asList(
+                new VideoImportProcessor.Observation(0,0,"frame1",screen,1f,parsed,null),
+                new VideoImportProcessor.Observation(1,1500,"frame2",screen,1f,parsed,null)),2);
+        assertEquals(2,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        int occurrences=0;
+        for(YandexScreenParser.Candidate row:video.uniqueCandidates()) if("ORDER_LIST_ROW".equals(row.candidateType)) {
+            String ordinal=field(row,"occurrence");
+            assertTrue("1".equals(ordinal)||"2".equals(ordinal));
+            occurrences+=Integer.parseInt(ordinal);
+        }
+        assertEquals(3,occurrences);
+    }
+
     @Test public void mergesPartialSlotObservationsBySlotId() {
         YandexScreenParser.Result summary=YandexScreenParser.parse(
             "Слот: 900,00 ₽\n339533360\n17:59 — 22:00\n9 заказов · 12,33 км");

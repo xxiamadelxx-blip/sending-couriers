@@ -214,5 +214,5 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     run(()=>{const parsed=parseForecastFile(text,name);const merged=applyHistory(data(),parsed);write(merged);simpleView();notify(`История загружена: ${parsed.days.length} дней`);});
   }
   function render(next=screen){if(!flushPlan())return;flushPlan=()=>true;updateModel=()=>{};screen=next;({today:simpleView,day:dayView,week:weekView,accuracy:accuracyView,data:dataView}[screen]??simpleView)();}
-  render();return {receiveImport,flush:()=>flushPlan(),modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(!flushPlan())return true;if(screen!=='today'){render('today');return true;}return false;}};
+  render();return {receiveImport,refresh:()=>render(screen),flush:()=>flushPlan(),modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(!flushPlan())return true;if(screen!=='today'){render('today');return true;}return false;}};
 }

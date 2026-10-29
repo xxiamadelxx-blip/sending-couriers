@@ -21,7 +21,7 @@ import java.util.TimeZone;
 /** Private local database for OCR evidence; it never writes finance or order facts. */
 public final class VideoImportDatabase extends SQLiteOpenHelper {
     public static final String FILE_NAME="courier_video_imports_v1.db";
-    public static final int VERSION=2;
+    public static final int VERSION=3;
     private final Context app;
 
     public VideoImportDatabase(Context context) {
@@ -35,7 +35,7 @@ public final class VideoImportDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onCreate(SQLiteDatabase db) {
-        try(InputStream input=app.getAssets().open("www/m4_schema_v2.sql");ByteArrayOutputStream output=new ByteArrayOutputStream()) {
+        try(InputStream input=app.getAssets().open("www/m4_schema_v3.sql");ByteArrayOutputStream output=new ByteArrayOutputStream()) {
             byte[] buffer=new byte[4096];int count;
             while((count=input.read(buffer))!=-1) {output.write(buffer,0,count);if(output.size()>64_000)throw new SQLiteException("M4 schema too large");}
             String script=new String(output.toByteArray(),StandardCharsets.UTF_8).replaceAll("(?m)^\\s*--[^\\r\\n]*","");
@@ -44,11 +44,9 @@ public final class VideoImportDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onUpgrade(SQLiteDatabase db,int from,int to) {
-        if(from==1&&to==2) {
-            executeAssetScript(db,"www/m4_migration_v1_to_v2.sql");
-            return;
-        }
-        throw new SQLiteException("Unreviewed video evidence migration from "+from+" to "+to);
+        if(from<1||to!=3||from>3) throw new SQLiteException("Unreviewed video evidence migration from "+from+" to "+to);
+        if(from==1) { executeAssetScript(db,"www/m4_migration_v1_to_v2.sql"); from=2; }
+        if(from==2) executeAssetScript(db,"www/m4_migration_v2_to_v3.sql");
     }
 
     private void executeAssetScript(SQLiteDatabase db,String asset) {
@@ -83,6 +81,7 @@ public final class VideoImportDatabase extends SQLiteOpenHelper {
                     ContentValues observation=new ContentValues();
                     observation.put("id",observationId); observation.put("import_id",importId); observation.put("frame_index",row.frameIndex);
                     observation.put("timestamp_ms",row.timestampMs); observation.put("timestamp_basis",row.timestampBasis);
+                    observation.put("frame_selection_method",row.frameSelectionMethod);
                     observation.put("frame_sha256",row.frameSha256);
                     observation.put("screen_type",row.screenType.name()); observation.put("parse_reason",row.parseReason);
                     observation.put("ocr_text",row.ocrText); observation.put("ocr_confidence",row.ocrConfidence);

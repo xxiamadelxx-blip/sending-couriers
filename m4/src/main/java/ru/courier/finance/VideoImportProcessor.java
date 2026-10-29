@@ -20,11 +20,13 @@ import java.util.Map;
 public final class VideoImportProcessor {
     public static final long MAX_VIDEO_BYTES = 2L * 1024L * 1024L * 1024L;
     public static final long MAX_DURATION_MS = 30L * 60L * 1000L;
-    public static final int MAX_FRAMES = 300;
+    public static final int MAX_FRAMES = 320;
     // Keep a 720x1608 phone recording at native resolution; shrinking it to 430x960
     // makes the small order-list text too difficult for the bundled OCR to read.
     private static final int MAX_BITMAP_SIDE = 1608;
-    private static final long MIN_SAMPLE_SPACING_MS = 1500L;
+    // Dense sampling is required for a screen recording where the user scrolls
+    // through a long order list. Identical decoded frames are OCR'd only once.
+    private static final long MIN_SAMPLE_SPACING_MS = 500L;
 
     public interface Ocr {
         TesseractOcrEngine.Recognition recognize(Bitmap bitmap) throws Exception;
@@ -37,6 +39,7 @@ public final class VideoImportProcessor {
         public final int frameIndex;
         public final long timestampMs;
         public final String timestampBasis;
+        public final String frameSelectionMethod;
         public final String frameSha256;
         public final String ocrText;
         public final float ocrConfidence;
@@ -49,7 +52,8 @@ public final class VideoImportProcessor {
         Observation(int frameIndex, long timestampMs, String frameSha256, String ocrText,
                     float ocrConfidence, YandexScreenParser.Result parsed, String reviewImagePath) {
             this.frameIndex=frameIndex; this.timestampMs=timestampMs; this.frameSha256=frameSha256;
-            this.timestampBasis="requested_nearest_sync";
+            this.timestampBasis="requested_nearest_sync"; // retained for v1/v2 database compatibility
+            this.frameSelectionMethod="closest_frame";
             this.ocrText=ocrText; this.ocrConfidence=ocrConfidence; this.screenType=parsed.screenType;
             this.parseReason=parsed.reason; this.reviewRequired=parsed.reviewRequired;
             this.reviewImagePath=reviewImagePath; this.candidates=parsed.candidates;
@@ -120,7 +124,7 @@ public final class VideoImportProcessor {
             int estimated=(int)Math.min(MAX_FRAMES,(duration+spacing-1)/spacing);
             int index=0;
             for(long timestamp=0;timestamp<duration && index<MAX_FRAMES;timestamp+=spacing,index++) {
-                Bitmap original=retriever.getFrameAtTime(timestamp*1000L,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                Bitmap original=retriever.getFrameAtTime(timestamp*1000L,MediaMetadataRetriever.OPTION_CLOSEST);
                 if(original==null) continue;
                 Bitmap frame=scale(original,MAX_BITMAP_SIDE);
                 if(frame!=original) original.recycle();

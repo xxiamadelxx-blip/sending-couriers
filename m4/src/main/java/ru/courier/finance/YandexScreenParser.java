@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v5";
+    public static final String VERSION = "yandex-pro-video-extract-v6";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -60,6 +60,14 @@ public final class YandexScreenParser {
 
         /** Stable identity for combining partial observations of the same order or slot. */
         String mergeKey() {
+            if("ORDER_LIST_ROW".equals(candidateType)) {
+                String time=null,occurrence="1";
+                for(Field field:fields) {
+                    if("order_time".equals(field.name)) time=field.value;
+                    else if("occurrence".equals(field.name)) occurrence=field.value;
+                }
+                if(time!=null) return candidateType+"\n"+time+"\n"+occurrence;
+            }
             String identityField="SLOT_DETAIL".equals(candidateType)?"slot_id":
                 ("ORDER_DETAIL".equals(candidateType)?"order_number":null);
             if(identityField==null) return stableKey();
@@ -84,8 +92,17 @@ public final class YandexScreenParser {
             if(other==null||!candidateType.equals(other.candidateType)) return this;
             LinkedHashMap<String,Field> merged=new LinkedHashMap<>();
             for(Field field:fields) merged.put(field.name,field);
-            for(Field field:other.fields) if(!merged.containsKey(field.name)) merged.put(field.name,field);
+            for(Field field:other.fields) {
+                Field prior=merged.get(field.name);
+                if(prior==null||other.ruleScore>ruleScore&&sameFieldValue(field.name,prior,field)) merged.put(field.name,field);
+            }
             return new Candidate(candidateType,Math.max(ruleScore,other.ruleScore),new ArrayList<>(merged.values()));
+        }
+
+        private static boolean sameFieldValue(String name,Field a,Field b) {
+            // OCR candidate values can conflict when a distant slot total was
+            // mistakenly associated with a row. Keep the best-scored reading.
+            return "amount_kopecks".equals(name)||"demand_coefficient".equals(name);
         }
     }
 
@@ -213,26 +230,37 @@ public final class YandexScreenParser {
     }
 
     private static void addOrderRows(String[] lines,String slotId,List<Candidate> out) {
+        java.util.Map<String,Integer> occurrences=new java.util.HashMap<>();
         for(int i=0;i<lines.length;i++) {
+            // The Android status bar starts with the device clock and may contain
+            // a second clock from a screen recording. Never join it to the slot
+            // summary amount on the next OCR line and misread it as an order.
+            if(i==0&&countClockTokens(lines[i])>=2) continue;
             Matcher time=TIME_PREFIX.matcher(lines[i]);
             if(!time.matches()) continue;
             if(time.group(3).trim().matches("^[-–—].*")) continue;
             // Strip the clock first so "12:34 100 ₽" cannot be misread as "34 100 ₽".
             Long amount=parseRowMoney(time.group(3)); String coefficient=null;
+            int amountDistance=amount==null?Integer.MAX_VALUE:0;
             if(normalize(lines[i]).contains("коэф")) coefficient=parseDecimal(valueAfterInline(lines[i],".*?коэф(?:ф)?\\.?(?:\\s+спроса)?"));
-            for(int j=i+1;j<lines.length&&j<=i+8;j++) {
+            for(int j=i+1;j<lines.length&&j<=i+1;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
-                if(amount==null) amount=parseRowMoney(lines[j]);
+                if(amount==null) { amount=parseRowMoney(lines[j]); if(amount!=null) amountDistance=j-i; }
                 if(coefficient==null&&normalize(lines[j]).startsWith("коэф"))
                     coefficient=parseDecimal(valueAfterInline(lines[j],"коэф(?:ф)?\\.?(?:\\s+спроса)?"));
                 if(amount!=null&&coefficient!=null) break;
             }
             if(amount==null) continue;
-            CandidateBuilder candidate=new CandidateBuilder("ORDER_LIST_ROW",0.78f);
-            candidate.add("order_time","time",two(time.group(1))+":"+time.group(2));
+            String normalizedTime=two(time.group(1))+":"+time.group(2);
+            String occurrenceKey=String.valueOf(slotId)+"\n"+normalizedTime;
+            int occurrence=occurrences.containsKey(occurrenceKey)?occurrences.get(occurrenceKey)+1:1;
+            occurrences.put(occurrenceKey,occurrence);
+            CandidateBuilder candidate=new CandidateBuilder("ORDER_LIST_ROW",amountDistance==0?0.94f:0.84f);
+            candidate.add("order_time","time",normalizedTime);
             addMoney(candidate,"amount_kopecks",amount);
             addDecimal(candidate,"demand_coefficient",coefficient);
             addText(candidate,"slot_id",slotId);
+            candidate.add("occurrence","integer",String.valueOf(occurrence));
             addIfPresent(out,candidate);
         }
     }
@@ -240,15 +268,23 @@ public final class YandexScreenParser {
     private static int countTimedMoneyRows(String[] lines) {
         int count=0;
         for(int i=0;i<lines.length;i++) {
+            if(i==0&&countClockTokens(lines[i])>=2) continue;
             Matcher time=TIME_PREFIX.matcher(lines[i]);
             if(!time.matches()||time.group(3).trim().matches("^[-–—].*")) continue;
             Long amount=parseRowMoney(time.group(3));
-            for(int j=i+1;amount==null&&j<lines.length&&j<=i+8;j++) {
+            for(int j=i+1;amount==null&&j<lines.length&&j<=i+1;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
                 amount=parseRowMoney(lines[j]);
             }
             if(amount!=null) count++;
         }
+        return count;
+    }
+
+    private static int countClockTokens(String line) {
+        Matcher matcher=Pattern.compile("(?<!\\d)(?:[01]?\\d|2[0-3])[:.]([0-5]\\d)(?!\\d)").matcher(line==null?"":line);
+        int count=0;
+        while(matcher.find()) count++;
         return count;
     }
 

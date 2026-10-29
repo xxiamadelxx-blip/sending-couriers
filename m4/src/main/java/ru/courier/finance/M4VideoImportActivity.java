@@ -89,6 +89,7 @@ public final class M4VideoImportActivity extends Activity {
                         (done,total)->runOnUiThread(()->{if(status!=null)status.setText("Кадров обработано: "+done+" из "+total+"…");}));
                 }
                 VideoImportDatabase.PersistResult saved=new VideoImportDatabase(this).persist(analysis,mime);
+                M4ForecastFactWriter.ImportResult forecastFacts=M4ForecastFactWriter.importFacts(this,analysis);
                 JSONObject response=new JSONObject(); response.put("ok",true); response.put("duplicate",saved.duplicate);
                 response.put("frames",saved.frameCount); response.put("uniqueFrames",analysis.uniqueFramesOcr);
                 response.put("unknownScreens",saved.unknownScreenCount); response.put("durationMs",analysis.durationMs);
@@ -101,9 +102,19 @@ public final class M4VideoImportActivity extends Activity {
                 response.put("extractedCandidateCount",analysis.uniqueCandidateCount());
                 response.put("extractionsTruncated",uniqueCandidates.size()>MAX_RETURNED_CANDIDATES);
                 response.put("extractions",extractions);
+                response.put("forecastFactsAccepted",forecastFacts.accepted);
+                response.put("forecastFactsDuplicate",forecastFacts.duplicate);
+                response.put("forecastFactMessage",forecastFacts.message);
+                if(forecastFacts.accepted) {
+                    response.put("forecastSource",forecastFacts.source);
+                    response.put("forecastDay",forecastFacts.forecastDay);
+                    response.put("importedOrderCount",forecastFacts.orderCount);
+                    response.put("confirmedDeliveryIntervals",forecastFacts.deliveryIntervals);
+                }
                 String message=saved.duplicate
                     ?"Видео уже импортировалось. Ниже показан повторный анализ новой версии парсера; ранее сохранённые результаты не перезаписаны.\n\n"+extractionSummary(analysis,false)
                     :extractionSummary(analysis,true);
+                message=message+"\n\n"+forecastFacts.message;
                 finishWith(response.toString(),message);
             } catch(Exception error) {
                 String message=error.getMessage()==null?"Проверьте файл и повторите импорт.":error.getMessage();
@@ -158,9 +169,8 @@ public final class M4VideoImportActivity extends Activity {
         for(int i=0;i<shown;i++) summary.append("\n• ").append(formatCandidate(candidates.get(i)));
         if(candidates.isEmpty()) summary.append("\nПоля не распознаны; кадры доступны для локальной проверки.");
         else if(candidates.size()>shown) summary.append("\n… ещё ").append(candidates.size()-shown).append(" кандидатов сохранено.");
-        if(candidatesSaved)
-            summary.append("\n\nКандидаты сохранены локально для проверки; факты в историю заказов и доходов не записаны.");
-        else summary.append("\n\nКандидаты повторного анализа показаны только здесь; ранее сохранённые результаты не перезаписаны.");
+        if(candidatesSaved) summary.append("\n\nИсходные OCR-кадры и кандидаты сохранены локально.");
+        else summary.append("\n\nИсходные OCR-кадры и кандидаты уже есть в локальной базе.");
         return summary.toString();
     }
 

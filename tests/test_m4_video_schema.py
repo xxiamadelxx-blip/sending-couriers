@@ -1,4 +1,4 @@
-"""M4 evidence and parsed candidates remain local and review-only."""
+"""M4 evidence stays local; cross-checked facts are stored separately."""
 import pathlib
 import sqlite3
 import unittest
@@ -6,7 +6,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCHEMA_V1 = (ROOT / "web/m4_schema_v1.sql").read_text(encoding="utf8")
 SCHEMA_V2 = (ROOT / "web/m4_schema_v2.sql").read_text(encoding="utf8")
+SCHEMA_V3 = (ROOT / "web/m4_schema_v3.sql").read_text(encoding="utf8")
 MIGRATION_V1_TO_V2 = (ROOT / "web/m4_migration_v1_to_v2.sql").read_text(encoding="utf8")
+MIGRATION_V2_TO_V3 = (ROOT / "web/m4_migration_v2_to_v3.sql").read_text(encoding="utf8")
 
 
 def insert_v1_evidence(db):
@@ -39,6 +41,40 @@ class M4VideoSchemaTest(unittest.TestCase):
         self.assertNotIn("files", backup)
         self.assertNotIn("database", extraction)
         self.assertNotIn("files", extraction)
+
+    def test_new_schema_records_closest_frame_method_and_keeps_candidate_import_available(self):
+        db = sqlite3.connect(":memory:")
+        db.execute("PRAGMA foreign_keys=ON")
+        db.executescript(SCHEMA_V3)
+        insert_v1_evidence(db)
+        self.assertEqual(db.execute("SELECT frame_selection_method FROM m4_screen_observations WHERE id='obs-1'").fetchone()[0], "closest_sync")
+        db.execute("""INSERT INTO m4_screen_observations
+            (id,import_id,frame_index,timestamp_ms,timestamp_basis,frame_selection_method,frame_sha256,
+             screen_type,parse_reason,ocr_text,ocr_confidence,parser_version,created_at_utc)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("obs-2", "video-1", 1, 1500, "requested_nearest_sync", "closest_frame", "c" * 64,
+             "ORDERS", "order_fields_extracted", "orders", 0.9, "p2", "later"))
+        self.assertEqual(db.execute("SELECT frame_selection_method FROM m4_screen_observations WHERE id='obs-2'").fetchone()[0], "closest_frame")
+        self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+        db.close()
+
+    def test_v2_to_v3_migration_preserves_observations_and_unknown_queue(self):
+        db = sqlite3.connect(":memory:")
+        db.execute("PRAGMA foreign_keys=ON")
+        db.executescript(SCHEMA_V2)
+        insert_v1_evidence(db)
+        db.executescript(MIGRATION_V2_TO_V3)
+        self.assertEqual(db.execute("SELECT ocr_text FROM m4_screen_observations WHERE id='obs-1'").fetchone()[0], "private OCR text")
+        self.assertEqual(db.execute("SELECT screenshot_path FROM m4_unknown_screen_queue WHERE id='queue-1'").fetchone()[0], "m4-review/frame.jpg")
+        self.assertEqual(db.execute("SELECT frame_selection_method FROM m4_screen_observations WHERE id='obs-1'").fetchone()[0], "closest_sync")
+        db.execute("""INSERT INTO m4_screen_observations
+            (id,import_id,frame_index,timestamp_ms,timestamp_basis,frame_selection_method,frame_sha256,
+             screen_type,parse_reason,ocr_text,ocr_confidence,parser_version,created_at_utc)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("obs-2", "video-1", 1, 1500, "requested_nearest_sync", "closest_frame", "c" * 64,
+             "ORDERS", "order_fields_extracted", "orders", 0.9, "p2", "later"))
+        self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+        db.close()
 
     def test_fresh_v2_schema_keeps_candidates_immutable_and_reviewable(self):
         db = sqlite3.connect(":memory:")
@@ -74,6 +110,8 @@ class M4VideoSchemaTest(unittest.TestCase):
         db.execute("""INSERT INTO m4_extracted_candidates
             (id,observation_id,candidate_type,candidate_json,rule_score,created_at_utc)
             VALUES(?,?,?,?,?,?)""", ("candidate-1", "obs-1", "ORDER_DETAIL", "{}", 0.8, "later"))
+        db.executescript(MIGRATION_V2_TO_V3)
+        self.assertEqual(db.execute("SELECT frame_selection_method FROM m4_screen_observations WHERE id='obs-1'").fetchone()[0], "closest_sync")
         self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
         db.close()
 
