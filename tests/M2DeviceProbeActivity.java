@@ -82,6 +82,19 @@ public final class M2DeviceProbeActivity extends Activity {
     if(!store.matchesLegacy(original))throw new AssertionError("legacy survives close-reopen");
     if(!original.equals(store.readVerifiedState()))throw new AssertionError("verified read fails after reopening SQLite");
     if(!store.hasCompleteWorkbook(sha))throw new AssertionError("archive parity lost after reopening");
+    // RED: a workbook with fifteen tab names but no usable facts is not
+    // adequate evidence for promoting SQLite to the active store.
+    JSONObject incomplete=new JSONObject();
+    for(String name:new String[]{"Заказы RAW","Дневные итоги","Финансовые факты",
+        "Прогнозы","Смены","Точность","Настройки","Календарь",
+        "Методика","Решения","Модели","Финансовые правила","Контроль",
+        "Аудит 19.10","Снимки периода"}){
+      incomplete.put(name,new JSONObject().put("2",new JSONObject().put("A","unknown")));
+    }
+    String partialSha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    eq(store.mirrorWorkbook(new JSONObject().put("sheets",incomplete).toString(),partialSha),15,"archive has 15 source rows");
+    if(store.hasCompleteWorkbook(partialSha))
+      throw new AssertionError("partial 15-tab workbook incorrectly authorized primary cutover");
     store.close();
   }
   static class App { static Activity instance; }
