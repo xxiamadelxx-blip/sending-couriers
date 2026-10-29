@@ -93,7 +93,7 @@ jobs:
           set -euo pipefail
           APK=app/build/outputs/apk/m4Qa/app-m4Qa.apk
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.m4qa'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.m4qa3c8959b'"
           unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"

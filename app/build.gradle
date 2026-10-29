@@ -62,7 +62,7 @@ android {
         release { minifyEnabled false }
         m4Qa {
             initWith release
-            applicationIdSuffix '.m4qa'
+            applicationIdSuffix '.m4qa3c8959b'
             signingConfig signingConfigs.debug
             matchingFallbacks = ['release']
         }
