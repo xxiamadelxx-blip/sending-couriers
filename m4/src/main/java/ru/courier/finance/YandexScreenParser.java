@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v4";
+    public static final String VERSION = "yandex-pro-video-extract-v5";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -65,6 +65,17 @@ public final class YandexScreenParser {
             if(identityField==null) return stableKey();
             for(Field field:fields) if(identityField.equals(field.name)&&!field.value.isEmpty())
                 return candidateType+"\n"+identityField+"\n"+field.value;
+            if("ORDER_DETAIL".equals(candidateType)) {
+                String started=null,completed=null,total=null;
+                for(Field field:fields) {
+                    if("started_at".equals(field.name)) started=field.value;
+                    else if("completed_at".equals(field.name)) completed=field.value;
+                    else if("total_kopecks".equals(field.name)) total=field.value;
+                }
+                if(started!=null||completed!=null)
+                    return candidateType+"\ntime_pair\n"+String.valueOf(started)+"\n"
+                        +String.valueOf(completed)+"\n"+String.valueOf(total);
+            }
             return stableKey();
         }
 
@@ -100,7 +111,7 @@ public final class YandexScreenParser {
     private static final Pattern BARE_AMOUNT_WITH_OCR_CURRENCY=Pattern.compile(
         "^\\s*([-+−–—]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)[.,]\\d{2})\\s+\\d\\s*$");
     private static final Pattern DECIMAL=Pattern.compile("(?<![\\p{L}\\p{N}])([0-9]{1,3}(?:[.,][0-9]{1,4})?)(?![\\p{L}\\p{N}])");
-    private static final Pattern TIME_PREFIX=Pattern.compile("^\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)(?!\\d)(.*)$");
+    private static final Pattern TIME_PREFIX=Pattern.compile("^\\s*[•·|>›]*\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)(?!\\d)(.*)$");
     private static final Pattern DATE_TIME=Pattern.compile("(?<!\\d)(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
     private static final Pattern DAY_FIRST_DATE_TIME=Pattern.compile("(?<!\\d)(\\d{1,2})[./-](\\d{1,2})[./-](20\\d{2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
 
@@ -119,11 +130,14 @@ public final class YandexScreenParser {
         boolean income=containsAny(text,"доход","заработано","выплата","income","earnings","вознаграждение");
         boolean incomeBreakdown=containsAny(text,"вознаграждение")&&containsAny(text,"комиссия партнера");
         boolean activity=containsAny(text,"на линии","активность","смена","online","activity");
+        boolean repeatedOrderRows=countTimedMoneyRows(lines)>=3;
 
         ScreenType screen;
         String reason;
-        if((orders&&(yandex||containsAny(text,"на линии","заказы сегодня")||slot||orderDetails))
-            ||(slot&&(demandCoefficient||containsAny(text,"информация по слоту","тип слота")))) {
+        if(orderDetails
+            ||(orders&&(yandex||containsAny(text,"на линии","заказы сегодня")||slot))
+            ||(slot&&(demandCoefficient||containsAny(text,"информация по слоту","тип слота")))
+            ||(!income&&demandCoefficient&&repeatedOrderRows)) {
             screen=ScreenType.ORDERS; reason="order_screen_signature";
         } else if(income&&(yandex||incomeBreakdown)) {
             screen=ScreenType.INCOME; reason="income_screen_signature";
@@ -206,7 +220,7 @@ public final class YandexScreenParser {
             // Strip the clock first so "12:34 100 ₽" cannot be misread as "34 100 ₽".
             Long amount=parseRowMoney(time.group(3)); String coefficient=null;
             if(normalize(lines[i]).contains("коэф")) coefficient=parseDecimal(valueAfterInline(lines[i],".*?коэф(?:ф)?\\.?(?:\\s+спроса)?"));
-            for(int j=i+1;j<lines.length&&j<=i+4;j++) {
+            for(int j=i+1;j<lines.length&&j<=i+8;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
                 if(amount==null) amount=parseRowMoney(lines[j]);
                 if(coefficient==null&&normalize(lines[j]).startsWith("коэф"))
@@ -221,6 +235,21 @@ public final class YandexScreenParser {
             addText(candidate,"slot_id",slotId);
             addIfPresent(out,candidate);
         }
+    }
+
+    private static int countTimedMoneyRows(String[] lines) {
+        int count=0;
+        for(int i=0;i<lines.length;i++) {
+            Matcher time=TIME_PREFIX.matcher(lines[i]);
+            if(!time.matches()||time.group(3).trim().matches("^[-–—].*")) continue;
+            Long amount=parseRowMoney(time.group(3));
+            for(int j=i+1;amount==null&&j<lines.length&&j<=i+8;j++) {
+                if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
+                amount=parseRowMoney(lines[j]);
+            }
+            if(amount!=null) count++;
+        }
+        return count;
     }
 
     private static void addIncomeSummary(String[] lines,List<Candidate> out) {
