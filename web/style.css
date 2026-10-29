@@ -1525,7 +1525,7 @@ dialog .button{margin:8px 0 0}
    A period is an editable chronological ledger, not another Home dashboard.
    Source values come from calculateDay and the original entry records.
    Main Home, bottom navigation, gauge and financial model are untouched. */
-.period-page .period-notice{margin:5px 0 9px}
+.period-page .period-notice{margin:18px 0 9px}
 .period-page .period-notice .payment-status{
   position:static;
   display:flex;
