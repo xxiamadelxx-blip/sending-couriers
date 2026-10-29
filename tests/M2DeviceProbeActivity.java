@@ -96,7 +96,7 @@ public final class M2DeviceProbeActivity extends Activity {
         database.close();
         // Deliberately stale backup: live UI must follow the verified primary.
         boolean saved=getSharedPreferences("courier_finance",MODE_PRIVATE).edit()
-          .putString("state","{\\"schemaVersion\\":6,\\"entries\\":[]}")
+          .putString("state","{\"schemaVersion\":6,\"entries\":[]}")
           .putBoolean("m2_sqlite_primary",true).commit();
         if(!saved)throw new AssertionError("cannot mark primary backend");
         startActivity(new android.content.Intent(this,MainActivity.class));
