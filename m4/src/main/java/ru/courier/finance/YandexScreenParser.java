@@ -157,10 +157,14 @@ public final class YandexScreenParser {
         String completed=valueAfter(lines,"завершение|окончание|время\\s+завершения");
         String slotId=slotId(lines);
         Long amount=parseLabeledMoney(header);
+        String orderCount=parseSlotOrderCount(lines);
+        String distanceKm=parseDistanceKm(lines);
 
         CandidateBuilder candidate=new CandidateBuilder("SLOT_DETAIL",0.90f);
         addText(candidate,"slot_id",slotId);
         addMoney(candidate,"slot_total_kopecks",amount);
+        addInteger(candidate,"slot_order_count",orderCount);
+        addDecimal(candidate,"distance_km",distanceKm);
         addText(candidate,"slot_type",normalizeSlotType(type));
         addText(candidate,"status",normalizeStatus(status));
         addDateTime(candidate,"started_at",parseDateTime(started));
@@ -290,6 +294,26 @@ public final class YandexScreenParser {
         return null;
     }
 
+    private static String parseSlotOrderCount(String[] lines) {
+        Pattern count=Pattern.compile("(?<!\\d)(\\d{1,4})\\s+заказ(?:а|ов)?(?![\\p{L}])",
+            Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+        for(String line:lines) {
+            Matcher matcher=count.matcher(line);
+            if(matcher.find()) return matcher.group(1);
+        }
+        return null;
+    }
+
+    private static String parseDistanceKm(String[] lines) {
+        Pattern distance=Pattern.compile("(?<!\\d)(\\d{1,4}(?:[.,]\\d{1,2})?)\\s*(?:км|km)(?![\\p{L}])",
+            Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+        for(String line:lines) {
+            Matcher matcher=distance.matcher(line);
+            if(matcher.find()) return matcher.group(1).replace(',','.');
+        }
+        return null;
+    }
+
     private static String extractOrderId(String value) {
         if(value==null) return null;
         Matcher matcher=Pattern.compile("(?<!\\d)(\\d{6,}(?:[-–]\\d{4,})?)(?!\\d)").matcher(value);
@@ -370,6 +394,9 @@ public final class YandexScreenParser {
 
     private static void addMoney(CandidateBuilder candidate,String name,Long value) {
         if(value!=null) candidate.add(name,"integer",String.valueOf(value));
+    }
+    private static void addInteger(CandidateBuilder candidate,String name,String value) {
+        if(value!=null) candidate.add(name,"integer",value);
     }
     private static void addDecimal(CandidateBuilder candidate,String name,String value) {
         if(value!=null) candidate.add(name,"decimal",value);
