@@ -235,6 +235,7 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             source.put("status","staging");source.put("created_at",when);source.put("updated_at",when);
             db.insertWithOnConflict("import_sources",null,source,SQLiteDatabase.CONFLICT_REPLACE);
             int rowsInserted=0;
+            java.util.Map<String,Integer> normalizedExpected=new java.util.HashMap<>();
             java.util.Iterator<String> names=sheets.keys();
             while(names.hasNext()){
                 String name=names.next();
@@ -259,6 +260,8 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                     JSONObject normalized=SheetFactNormalizer.normalize(name,values);
                     if(normalized==null)continue;
                     String table=normalized.getString("table");
+                    normalizedExpected.put(table,normalizedExpected.containsKey(table)
+                        ? normalizedExpected.get(table)+1 : 1);
                     ContentValues checked=new ContentValues();
                     checked.put("id",sourceId+":"+name+":"+row);
                     checked.put("source_id",sourceId);
@@ -324,6 +327,20 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             }
             long stored=countQuery(db,"SELECT COUNT(*) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
             if(stored!=rowsInserted) throw new SQLiteException("Sheet row parity mismatch");
+            // Independent normalized-vs-source-row count check: a failed/partial
+            // insert cannot silently mark an XLSX as fully migrated.
+            for(java.util.Map.Entry<String,Integer> expectation:normalizedExpected.entrySet()){
+                String table=expectation.getKey();
+                if(!java.util.Arrays.asList("orders","aggregate_order_counts",
+                    "financial_ledger","period_snapshots","historical_forecasts",
+                    "historical_rule_specs","historical_model_specs").contains(table))
+                    throw new SQLiteException("Unexpected source mapping in parity check");
+                try(Cursor actual=db.rawQuery("SELECT COUNT(*) FROM "+table+" WHERE source_id=?",
+                    new String[]{sourceId})){
+                    if(!actual.moveToFirst()||actual.getInt(0)!=expectation.getValue())
+                        throw new SQLiteException("M2 normalized count mismatch: "+table);
+                }
+            }
             ContentValues success=new ContentValues();
             success.put("status","mirrored");success.put("updated_at",when);
             db.update("import_sources",success,"id=?",new String[]{sourceId});
@@ -356,8 +373,23 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         try(Cursor rows=db.rawQuery(
             "SELECT COUNT(DISTINCT sheet_name) FROM sheet_import_rows WHERE source_id=?",
             new String[]{sourceId})) {
-            return rows.moveToFirst()&&rows.getLong(0)==15;
+            if(!rows.moveToFirst()||rows.getLong(0)!=15)return false;
         }
+        // A 15-tab spreadsheet full of blanks/unknown values is NOT a
+        // migration. Require independent source-grounded counts and ledgers
+        // before allowing the WebView to switch its authoritative backend.
+        for(String table:new String[]{"orders","aggregate_order_counts",
+            "financial_ledger","period_snapshots","historical_forecasts",
+            "historical_rule_specs","historical_model_specs"}) {
+            try(Cursor facts=db.rawQuery("SELECT COUNT(*) FROM "+table+" WHERE source_id=?",
+                new String[]{sourceId})) {
+                if(!facts.moveToFirst()||facts.getLong(0)<1)return false;
+            }
+        }
+        try(Cursor integrity=db.rawQuery("PRAGMA quick_check",null)) {
+            if(!integrity.moveToFirst()||!"ok".equals(integrity.getString(0)))return false;
+        }
+        return true;
     }
 
     /**

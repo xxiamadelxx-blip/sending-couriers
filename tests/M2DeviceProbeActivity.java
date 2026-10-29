@@ -59,6 +59,11 @@ public final class M2DeviceProbeActivity extends Activity {
         "Аудит 19.10","Снимки периода"}){
       sheets.put(name,new JSONObject().put("2",new JSONObject().put("A","source evidence")));
     }
+    // A real period snapshot is required for full 15-tab parity; a
+    // placeholder sheet name alone cannot authorize the SQLite cutover.
+    sheets.put("Снимки периода",new JSONObject()
+      .put("2",new JSONObject().put("A","2026-10-19")
+        .put("B","16.10.2026–29.10.2026").put("C",43).put("D",62)));
     String workbook=new JSONObject().put("sheets",sheets).toString();
     String sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     long archivedBefore=count(db,"SELECT COUNT(*) FROM sheet_import_rows");
