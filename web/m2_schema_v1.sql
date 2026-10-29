@@ -229,3 +229,58 @@ CREATE TABLE sheet_import_rows (
  FOREIGN KEY(source_id) REFERENCES import_sources(id)
 );
 CREATE INDEX ix_sheet_rows_sheet ON sheet_import_rows(source_id,sheet_name);
+
+-- Non-prospective archive of historic spreadsheets. No training cutoff or
+-- independently witnessed publication time: never invent one just to satisfy
+-- forecast_snapshots. These entries must never be evaluated as online forecasts.
+CREATE TABLE historical_forecasts (
+ id TEXT PRIMARY KEY NOT NULL,
+ source_id TEXT NOT NULL,
+ row_number INTEGER NOT NULL CHECK(row_number>=2),
+ target_date TEXT NOT NULL,
+ window_label TEXT,
+ center_orders INTEGER CHECK(center_orders IS NULL OR (typeof(center_orders)='integer' AND center_orders>=0)),
+ lower_orders INTEGER CHECK(lower_orders IS NULL OR (typeof(lower_orders)='integer' AND lower_orders>=0)),
+ upper_orders INTEGER CHECK(upper_orders IS NULL OR (typeof(upper_orders)='integer' AND upper_orders>=0)),
+ claimed_publication TEXT,
+ claimed_model TEXT,
+ source_status TEXT NOT NULL CHECK(source_status IN('unverified_historical','reconstructed_publication')),
+ record_json TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ FOREIGN KEY(source_id) REFERENCES import_sources(id),
+ UNIQUE(source_id,row_number)
+);
+CREATE INDEX ix_historical_forecast_date ON historical_forecasts(target_date);
+CREATE TRIGGER historical_forecasts_immutable_update BEFORE UPDATE ON historical_forecasts
+ BEGIN SELECT RAISE(ABORT,'immutable imported historical forecast'); END;
+CREATE TRIGGER historical_forecasts_immutable_delete BEFORE DELETE ON historical_forecasts
+ BEGIN SELECT RAISE(ABORT,'immutable imported historical forecast'); END;
+
+-- User financial rules are archived as text, not silently made effective
+-- in the current live financial engine. Distinguish policy from paid money.
+CREATE TABLE historical_rule_specs (
+ id TEXT PRIMARY KEY NOT NULL,
+ source_id TEXT NOT NULL,
+ row_number INTEGER NOT NULL CHECK(row_number>=2),
+ rule_label TEXT NOT NULL,
+ rule_text TEXT,
+ source_status TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ FOREIGN KEY(source_id) REFERENCES import_sources(id),
+ UNIQUE(source_id,row_number)
+);
+
+-- Spreadsheet declarations are not evidence of a trained model, and do not
+-- satisfy model_registry's independently verified training-cutoff contract.
+CREATE TABLE historical_model_specs (
+ id TEXT PRIMARY KEY NOT NULL,
+ source_id TEXT NOT NULL,
+ row_number INTEGER NOT NULL CHECK(row_number>=2),
+ model_label TEXT NOT NULL,
+ model_state TEXT,
+ declared_version TEXT,
+ source_status TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ FOREIGN KEY(source_id) REFERENCES import_sources(id),
+ UNIQUE(source_id,row_number)
+);
