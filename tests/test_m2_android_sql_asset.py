@@ -18,4 +18,20 @@ class AndroidSQLAssetTest(unittest.TestCase):
         self.assertIn("script = script.replaceAll",java)
         self.assertLess(java.index("script = script.replaceAll"),java.index("script.split("))
 
+    def test_v2_views_upgrade_preserves_legacy_rows(self):
+        import sqlite3
+        v2=(ROOT/"web/m2_views_v2.sql").read_text(encoding="utf8")
+        self.assertEqual(v2.count("CREATE VIEW IF NOT EXISTS"),7)
+        with sqlite3.connect(":memory:") as db:
+            db.executescript((ROOT/"web/m2_schema_v1.sql").read_text(encoding="utf8"))
+            db.execute("INSERT INTO legacy_slot_facts(id,date,raw_json,source,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+                       ("slot","2026-10-18","{}","legacy_state","now","now"))
+            db.executescript(v2)
+            db.executescript(v2)  # idempotent migration
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM legacy_slot_facts").fetchone()[0],1)
+            self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
+        java=(ROOT/"android/src/ru/courier/finance/CourierDatabase.java").read_text()
+        self.assertIn("public static final int VERSION = 2;",java)
+        self.assertIn('applySchema(db, "www/m2_views_v2.sql");',java)
+
 if __name__=="__main__":unittest.main()
