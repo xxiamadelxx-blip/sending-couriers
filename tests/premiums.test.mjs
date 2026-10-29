@@ -154,5 +154,5 @@ test('Opening amount validates 84-day dates and never silently overwrites or lea
  let another=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21',cycleOpening:{cycleStart:'2026-08-21',through:'2026-10-15',grossIncome:90000,source:'manual'}});
  assert.throws(()=>core.mergeImport(another,state),/накопленн|сумм/i);
  assert.equal(core.calculatePremiumCycle(state,'2026-11-13').premium,null);
- assert.equal(core.updateSettings(state,{cycleOpening:null}).settings.cycleOpening,null);
+ assert.ok(core.updateSettings(state,{cycleOpening:null}).settings.cycleOpening == null);
 });

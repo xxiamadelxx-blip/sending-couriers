@@ -204,7 +204,7 @@ function normalizeSettings(input) {
   const theme = input?.theme ?? 'dark';
   if (!['dark','light'].includes(theme)) throw new Error('Выберите дневную или ночную тему.');
   return { premiumCycleStart: start == null || start === '' ? null : start,
-    cycleOpening: normalizeCycleOpening(input?.cycleOpening, start),
+    ...(input?.cycleOpening == null ? {} : {cycleOpening:normalizeCycleOpening(input.cycleOpening,start)}),
     soundEnabled: input?.soundEnabled ?? true, hapticsEnabled: input?.hapticsEnabled ?? true, theme, paymentRules:normalizePaymentRules(input?.paymentRules) };
 }
 export function updateSettings(state, input) {
@@ -329,7 +329,7 @@ export function calculatePremiumCycle(state, date = today()) {
     (opening ? Math.round(percentage(opening.grossIncome,openingPercent)*100) : 0) +
     breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)
   )/100;
-  const boundaryEntries = eligible.filter(e => {
+  const boundaryEntries = state.entries.filter(e => !opening || e.date > opening.through).filter(e => {
     const legacy = e.legacyReading;
     if (legacy?.interpretation !== 'cumulative' || legacy.hoursEdited || !(e.dailyHours > 0)) return false;
     const from = legacy.fromDate ? isoDate(dateMillis(legacy.fromDate) + DAY) : periodFor(legacy.date).start;
