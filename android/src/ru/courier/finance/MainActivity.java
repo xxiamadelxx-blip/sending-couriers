@@ -29,6 +29,9 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.util.Log;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -47,6 +50,8 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private View launch;
     private SharedPreferences preferences;
+    private CourierDatabase factMirrorDatabase;
+    private final ExecutorService factMirrorExecutor = Executors.newSingleThreadExecutor();
     private File pendingSave;
     private boolean darkTheme = true;
     private Boolean appliedNightMode;
@@ -55,6 +60,10 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         preferences = getSharedPreferences("courier_finance", MODE_PRIVATE);
+        factMirrorDatabase = new CourierDatabase(this);
+        // Source of truth remains the existing, intact JSON until verified
+        // M2 migration parity. Recover interrupted shadow writes on next launch.
+        mirrorFacts(preferences.getString("state", ""));
         try { darkTheme = !"light".equals(new JSONObject(preferences.getString("state", "{}")).optJSONObject("settings").optString("theme")); }
         catch (Exception ignored) { darkTheme = true; }
         setTheme(darkTheme ? R.style.AppThemeDark : R.style.AppThemeLight);
@@ -191,6 +200,17 @@ public final class MainActivity extends Activity {
     private void error(String message) {
         runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
     }
+    private void mirrorFacts(String serialized) {
+        if (serialized == null || serialized.isEmpty()) return;
+        factMirrorExecutor.execute(() -> {
+            try { factMirrorDatabase.mirrorLegacy(serialized); }
+            catch (Exception error) {
+                // Never log the user's private financial JSON or block saving it.
+                Log.e("CourierSQLite", "M2 shadow copy failed: " + error.getClass().getSimpleName());
+            }
+        });
+    }
+
     public final class NativeBridge {
         @JavascriptInterface public double fontScale() { return getResources().getConfiguration().fontScale; }
         @JavascriptInterface public void applyTheme(String mode) {
@@ -216,7 +236,9 @@ public final class MainActivity extends Activity {
                 JSONObject parsed = new JSONObject(value);
                 int schemaVersion = parsed.getInt("schemaVersion");
                 if ((schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 && schemaVersion != 6) || parsed.getJSONArray("entries").length() > 10000) return false;
-                return preferences.edit().putString("state", value).commit();
+                boolean saved = preferences.edit().putString("state", value).commit();
+                if (saved) mirrorFacts(value);
+                return saved;
             } catch (Exception ignored) { return false; }
         }
         @JavascriptInterface public void ready() { runOnUiThread(() -> { if (launch != null) { root.removeView(launch); launch = null; } }); }
@@ -337,6 +359,7 @@ public final class MainActivity extends Activity {
         if (pendingSave != null) out.putString("pendingSave", "exports/" + pendingSave.getParentFile().getName() + "/" + pendingSave.getName());
     }
     @Override protected void onDestroy() {
+        factMirrorExecutor.shutdown(); // Queued writes finish; next launch also repairs interruption.
         if (web != null) { web.removeJavascriptInterface("CourierNative"); web.destroy(); }
         super.onDestroy();
     }
