@@ -64,3 +64,11 @@ Owner requested in-code branding change (not standalone pictures): apply the ref
 ## Real gradient in existing SHIFT CONTROL logo · 29 October 2026
 
 Owner corrected the prior release: it had only four flat-painted arms, no real gradient. The new Android launcher and Android system/native splash use four unchanged original pathData arms, each containing an actual Android VectorDrawable `<aapt:attr name="android:fillColor"><gradient ...>` (supported API 26+) with stops orange `#ff7952` → amber `#ffbd57` → cream `#f4f1e9` → orange. HTML fallback mirrors the same stops and gradient axis in SVG `linearGradient`. Shape, background graphite `#10151a`, package name and persisted data untouched. This is the requested continuous color transition, not a new neon brand or a generated picture. Build must validate Android AAPT resource compilation, XML gradient extraction, 2 themes, update without uninstall and actual icon/startup screenshots. Prior test-only PASS cannot be reused.
+
+## Approved layered pearl icon and startup art · 29 October 2026
+
+The owner **explicitly approved** the 3D pearlescent emblem with four separately layered pieces on graphite: upper-left cream, upper-right orange/coral, lower-left metallic amber, lower-right cream. The approved 1:1 and 9:16 outputs, not a newly approximated SVG gradient, are now checked in as binary resources:
+- `android/res/drawable-nodpi/approved_launcher.png` (512x512, SHA-256 74396b61a9cc62f6898843673d6fee6f90dcc45b956fc5083ca4dbfe4657ca24).
+- `android/res/drawable-nodpi/approved_mark.png` (512x512 transparent icon extracted from the approved square artwork, SHA-256 13ec9a78d10169862146b8dbc8ff004f4f67c49dd42dbf52c69082041dc43394); shared by Android 12 system splash and Java loading overlay.
+- `web/brand_splash.jpg` (approved vertical illustration without text, SHA-256 f2608234928bbb3cc0065b2159b01a2b387a755c1c9c8a0454e958c31fdd3b38) displayed in the WebView fallback.
+The app keeps `#10151a` background and its existing orange palette, all business logic, package IDs, stored facts and current UI screens. Regression test `tests/launch-branding.test.mjs` verifies exact approved artwork hashes. For release, run Android 35 native emulator checks and sign transfer APK with the existing original certificate without exposing private files.

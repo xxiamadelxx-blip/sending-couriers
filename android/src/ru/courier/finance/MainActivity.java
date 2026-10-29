@@ -117,7 +117,7 @@ public final class MainActivity extends Activity {
                     String path = uri.getPath().substring(8);
                     if (path.contains("..") || !request.getMethod().equals("GET")) return blocked();
                     try {
-                        String type = path.endsWith(".html") ? "text/html" : path.endsWith(".css") ? "text/css" : path.endsWith(".mjs") || path.endsWith(".js") ? "application/javascript" : "application/octet-stream";
+                        String type = path.endsWith(".html") ? "text/html" : path.endsWith(".css") ? "text/css" : path.endsWith(".mjs") || path.endsWith(".js") ? "application/javascript" : path.endsWith(".jpg") ? "image/jpeg" : path.endsWith(".png") ? "image/png" : "application/octet-stream";
                         return new WebResourceResponse(type, "UTF-8", getAssets().open("www/" + path));
                     } catch (Exception ignored) { return blocked(); }
                 }
@@ -158,7 +158,7 @@ public final class MainActivity extends Activity {
         halo.setBackground(radial);
         mark.addView(halo, new FrameLayout.LayoutParams(dp(280), dp(280), Gravity.CENTER));
         ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_brand_mark);
+        icon.setImageResource(R.drawable.approved_mark);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         mark.addView(icon, new FrameLayout.LayoutParams(dp(164), dp(164), Gravity.CENTER));
         layout.addView(mark, new LinearLayout.LayoutParams(dp(280), dp(280)));

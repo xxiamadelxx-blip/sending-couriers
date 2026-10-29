@@ -2,7 +2,7 @@
 <resources>
   <style name="AppTheme" parent="AppThemeBase">
     <item name="android:windowSplashScreenBackground">#10151a</item>
-    <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_brand_mark</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@drawable/approved_mark</item>
     <item name="android:windowSplashScreenIconBackgroundColor">#10151a</item>
   </style>
 </resources>
