@@ -1,4 +1,4 @@
-"""M2 RED/GREEN: v1 and v2 on-disk schemas must migrate to v3 with no data loss.
+"""M2 RED/GREEN: v1/v2 on-disk schemas must migrate to v4 with no data loss.
 
 Tests a real SQLite file, foreign keys, missing late-added table objects,
 forecast immutability, and an independent reconstruction of the exact
@@ -12,15 +12,16 @@ import unittest
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 SCHEMA=(ROOT/"web/m2_schema_v1.sql").read_text("utf8")
+M3=(ROOT/"web/m3_schema_v1.sql").read_text("utf8")
 VIEWS=(ROOT/"web/m2_views_v2.sql").read_text("utf8")
 PRE_ARCHIVE=SCHEMA.split("-- Source-row archive",1)[0]
 
 class UpgradeFromShippedSchemas(unittest.TestCase):
     def test_real_v1_and_v2_preserve_existing_records_and_create_missing_objects(self):
         source=(ROOT/"android/src/ru/courier/finance/CourierDatabase.java").read_text()
-        self.assertIn('public static final int VERSION = 3;',source)
+        self.assertIn('public static final int VERSION = 4;',source)
         self.assertIn('applySchema(db, "www/m2_schema_v1.sql", true);',source)
-        self.assertIn('if ((from == 1 || from == 2) && to == 3)',source)
+        self.assertIn('if ((from == 1 || from == 2) && to == 4)',source)
         for version in (1,2):
             with self.subTest(version=version),tempfile.TemporaryDirectory() as folder:
                 path=pathlib.Path(folder)/"legacy.db"
@@ -49,10 +50,11 @@ class UpgradeFromShippedSchemas(unittest.TestCase):
                                        "CREATE "+kind+" IF NOT EXISTS ",upgrade)
                     db.executescript(upgrade)
                     db.executescript(VIEWS)
-                    db.execute("PRAGMA user_version=3")
+                    db.executescript(M3)
+                    db.execute("PRAGMA user_version=4")
                     db.commit()
                 with sqlite3.connect(path) as db:
-                    self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],3)
+                    self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],4)
                     self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
                     self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(),[])
                     self.assertEqual(db.execute("SELECT COUNT(*) FROM legacy_slot_facts").fetchone()[0],1)
@@ -64,6 +66,7 @@ class UpgradeFromShippedSchemas(unittest.TestCase):
                     # An upgrade may run only once; repeating additive SQL is harmless.
                     db.executescript(upgrade)
                     db.executescript(VIEWS)
+                    db.executescript(M3)
                     self.assertEqual(db.execute("SELECT COUNT(*) FROM legacy_slot_facts").fetchone()[0],1)
 
 if __name__=="__main__":unittest.main()
