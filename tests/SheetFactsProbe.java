@@ -59,6 +59,31 @@ public final class SheetFactsProbe {
             "archive model description separately from trained model registry");
         check(SheetFactNormalizer.normalize("Прогнозы",
             row("A","2026-10-19","D","33.5"))==null,"fractional order counts cannot be rounded");
-        System.out.println("PASS: M2 actual conservative Java normalization 14/15/19 Oct, unknowns, no invented RAW");
+        JSONObject rawOne=SheetFactNormalizer.normalize("Заказы RAW",
+            row("A","2026-10-18","C","18:57","D","13","E","100",
+                "K","Высокая","L","18:34","M","18:57"));
+        JSONObject rawTwo=SheetFactNormalizer.normalize("Заказы RAW",
+            row("A","2026-10-18","C","18:57","D","14","E","100",
+                "K","Высокая","M","18:57"));
+        check("orders".equals(rawOne.getString("table")) &&
+            "orders".equals(rawTwo.getString("table")),"two visible deliveries are separate");
+        check("2026-10-18T18:34:00+03:00".equals(rawOne.getString("accepted_at")),
+            "acceptance time must come from L only");
+        check("2026-10-18T18:57:00+03:00".equals(rawOne.getString("completed_at")) &&
+            "2026-10-18T18:57:00+03:00".equals(rawTwo.getString("completed_at")),
+            "two finished at the same minute do not collapse");
+        check(!rawTwo.has("accepted_at"),"C=visible time is not acceptance evidence");
+        check(rawOne.getLong("reward_kopecks")==10000,"100 RUB is 10000 kopecks");
+        check(!rawOne.has("yandex_order_id"),"daily ordinal D is not Yandex order ID");
+        JSONObject lowConfidence=SheetFactNormalizer.normalize("Заказы RAW",
+            row("A","2026-09-01","C",0.4368055555,"D",1,"E",100,
+                "K","Средняя"));
+        check("reported_medium".equals(lowConfidence.getString("confidence")) &&
+             !lowConfidence.has("accepted_at") && !lowConfidence.has("completed_at"),
+             "reconstructed/medium event cannot masquerade as confirmed timestamps");
+        JSONObject midnight=SheetFactNormalizer.normalize("Заказы RAW",
+            row("A","2026-10-18","E",100,"K","Высокая","L","23:55","M","00:10"));
+        check(!midnight.has("completed_at"),"do not guess next-day delivery without explicit date");
+        System.out.println("PASS: M2 actual conservative Java normalization 14/15/19 Oct, unknowns, source-grounded RAW with distinct IDs");
     }
 }
