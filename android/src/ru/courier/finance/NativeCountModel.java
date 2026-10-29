@@ -179,6 +179,7 @@ public final class NativeCountModel {
         } else if ("negative-binomial-daily".equals(selected) && nb != null) {
             mean = nb.mean(targetDate, targetWorkMinutes);
             alpha = nb.alpha;
+            intervalMethod = "Negative Binomial predictive, nominal 90%";
         } else {
             alpha = 1.0 / Math.max(.5, base.weightedOrders + .5);
         }
