@@ -258,25 +258,51 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                     ContentValues checked=new ContentValues();
                     checked.put("id",sourceId+":"+name+":"+row);
                     checked.put("source_id",sourceId);
-                    checked.put("source_kind","xlsx");
-                    checked.put("created_at",when);checked.put("updated_at",when);
+                    checked.put("created_at",when);
                     if("aggregate_order_counts".equals(table)){
+                        checked.put("source_kind","xlsx");checked.put("updated_at",when);
                         checked.put("date",normalized.getString("date"));
                         checked.put("order_count",normalized.getInt("order_count"));
                         checked.put("confidence",normalized.getString("confidence"));
                     }else if("financial_ledger".equals(table)){
+                        checked.put("source_kind","xlsx");checked.put("updated_at",when);
                         checked.put("date",normalized.getString("date"));
                         checked.put("kind",normalized.getString("kind"));
                         checked.put("amount_kopecks",normalized.getLong("amount_kopecks"));
                         checked.put("gross_or_net","unspecified");
                         checked.put("confidence",normalized.getString("confidence"));
                     }else if("period_snapshots".equals(table)){
+                        checked.put("source_kind","xlsx");checked.put("updated_at",when);
                         checked.put("period_start",normalized.getString("period_start"));
                         checked.put("period_end",normalized.getString("period_end"));
                         checked.put("seen_at",normalized.getString("seen_at"));
                         checked.put("precision",normalized.getString("precision"));
                         if(normalized.has("orders")) checked.put("orders",normalized.getInt("orders"));
                         if(normalized.has("accounted_hundredths")) checked.put("accounted_hundredths",normalized.getInt("accounted_hundredths"));
+                    }else if("historical_forecasts".equals(table)){
+                        checked.put("row_number",row);
+                        checked.put("target_date",normalized.getString("target_date"));
+                        checked.put("center_orders",normalized.getInt("center_orders"));
+                        checked.put("source_status",normalized.getString("source_status"));
+                        checked.put("record_json",values.toString());
+                        for(String key : new String[]{"window_label","claimed_publication","claimed_model"})
+                            if(normalized.has(key))checked.put(key,normalized.getString(key));
+                        for(String key : new String[]{"lower_orders","upper_orders"})
+                            if(normalized.has(key))checked.put(key,normalized.getInt(key));
+                    }else if("historical_rule_specs".equals(table)){
+                        checked.put("row_number",row);
+                        checked.put("rule_label",normalized.getString("rule_label"));
+                        checked.put("source_status",normalized.getString("source_status"));
+                        if(normalized.has("rule_text"))
+                            checked.put("rule_text",normalized.getString("rule_text"));
+                    }else if("historical_model_specs".equals(table)){
+                        checked.put("row_number",row);
+                        checked.put("model_label",normalized.getString("model_label"));
+                        checked.put("source_status",normalized.getString("source_status"));
+                        if(normalized.has("model_state"))
+                            checked.put("model_state",normalized.getString("model_state"));
+                        if(normalized.has("declared_version"))
+                            checked.put("declared_version",normalized.getString("declared_version"));
                     }else throw new SQLiteException("Unexpected sheet normalization table");
                     db.insertOrThrow(table,null,checked);
                 }
