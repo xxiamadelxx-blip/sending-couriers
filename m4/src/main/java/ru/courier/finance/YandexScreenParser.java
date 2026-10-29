@@ -243,7 +243,7 @@ public final class YandexScreenParser {
             Long amount=parseRowMoney(time.group(3)); String coefficient=null;
             int amountDistance=amount==null?Integer.MAX_VALUE:0;
             if(normalize(lines[i]).contains("коэф")) coefficient=parseDecimal(valueAfterInline(lines[i],".*?коэф(?:ф)?\\.?(?:\\s+спроса)?"));
-            for(int j=i+1;j<lines.length&&j<=i+1;j++) {
+            for(int j=i+1;j<lines.length&&j<=i+3;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
                 if(amount==null) { amount=parseRowMoney(lines[j]); if(amount!=null) amountDistance=j-i; }
                 if(coefficient==null&&normalize(lines[j]).startsWith("коэф"))
@@ -272,7 +272,7 @@ public final class YandexScreenParser {
             Matcher time=TIME_PREFIX.matcher(lines[i]);
             if(!time.matches()||time.group(3).trim().matches("^[-–—].*")) continue;
             Long amount=parseRowMoney(time.group(3));
-            for(int j=i+1;amount==null&&j<lines.length&&j<=i+1;j++) {
+            for(int j=i+1;amount==null&&j<lines.length&&j<=i+3;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
                 amount=parseRowMoney(lines[j]);
             }
