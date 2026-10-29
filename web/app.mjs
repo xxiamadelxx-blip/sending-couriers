@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 16849)
-Total output lines: 770
-
 import {
   today, periodFor, shiftPeriod, formatDate, periodLabel, emptyState, normalizeState,
   calculate, calculateDay, newEntryId, hoursText, money, paceText, reserveText,
@@ -320,7 +317,78 @@ function periodDetails() {
   $('#cycleOpeningGross').addEventListener('input',e=>{ e.target.dataset.source='manual'; });
   $('#cycleOpeningThrough').addEventListener('change',()=>{ $('#cycleOpeningGross').dataset.source='manual'; });
   $('#importCycleReport').addEventListener('click',()=>{
-    if(Native…1849 tokens truncated…matDate(rule.effectivePeriodStart)}`);
+    if(Native) Native.importData(); else $('#cycleReportFile').click();
+  });
+  $('#cycleReportFile').addEventListener('change',async e=>{
+    const selected=e.target.files?.[0]; e.target.value='';
+    if(selected) window.receiveImport(await selected.text());
+  });
+  $('#settingsForm').addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      const saved=updateSettings(state,{premiumCycleStart:$('#premiumCycleStart').value,cycleOpening:cycleOpeningInput()});
+      persist(saved);periodDetails();notify('Доход сохранён, премия пересчитана');
+    }
+    catch (error) { $('#settingsError').textContent = error.message; $('#settingsError').hidden = false; feedback('error'); }
+  });
+  $('#periodExport').addEventListener('click', openExportDialog);
+  $('#periodHistory').addEventListener('click', history);
+  app.querySelectorAll('.period-slot-edit').forEach(button=>button.addEventListener('click',()=>form(button.dataset.entry,'period')));
+  resetScroll();
+}
+function settings() {
+  if(!leaveForecast())return;
+  app.className = 'settings-page'; view = 'settings'; editingId = null;
+  const chosenDate = selectedPeriod === periodFor(today()).id ? today() : selectedPeriod;
+  const initial = paymentTermsFor(state, chosenDate);
+  const ruleHistory = () => state.settings.paymentRules.length ? `<details class="calculation payment-history"><summary>История условий</summary>${[...state.settings.paymentRules].reverse().map(rule => `<div class="payment-rule"><strong>С ${esc(formatDate(rule.effectivePeriodStart))}</strong><span>${esc(money(rule.hourlyRate))}/ч · темп ${goalText(rule.basePace)}</span><span>Темп ${goalText(rule.premiumPace)}: ${percentText(rule.paceBonusPercent)}% · 12 недель: ${percentText(rule.cycleBonusPercent)}%</span></div>`).join('')}</details>` : '';
+  app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><div class="date-box settings-date-box"><span id="paymentDateVisible">${esc(formatDate(chosenDate, true))}</span>${icon['chevron-down']}<input id="paymentPeriod" type="date" lang="ru" value="${esc(chosenDate)}" required></div><p class="hint">Ставка применяется с выбранного дня, в том числе внутри текущего периода.</p></div>
+    <div class="tariff-rate">${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}<span class="tariff-rate-unit">/ час</span></div>
+    <details class="payment-more"><summary>Остальные условия${icons.down}</summary><div class="form-grid">
+    ${field('basePace','Темп для оплаты',initial.basePace,{unit:'заказа/ч',full:true})}
+    ${field('premiumPace','Темп для премии',initial.premiumPace,{unit:'заказа/ч',full:true})}
+    ${field('minimumHours','Минимум часов за период',initial.minimumHours ?? 80,{unit:'ч',full:true})}
+    ${field('criticalPace','Критический темп',initial.criticalPace ?? initial.basePace,{unit:'заказа/ч',full:true})}
+    ${field('paceBonusPercent','Премия за темп',initial.paceBonusPercent,{unit:'%'})}
+    ${field('cycleBonusPercent','Премия за 12 недель',initial.cycleBonusPercent,{unit:'%'})}</div></details>
+    <p class="payment-effective-date" id="paymentEffectiveDate" aria-live="polite">Выбрана дата: ${esc(formatDate(chosenDate))}</p><div class="error" id="paymentError" role="alert" hidden></div><button class="button primary" id="savePaymentTerms" type="submit">Сохранить условия</button></form><div id="paymentHistory">${ruleHistory()}</div></section>
+    <section class="detail-card appearance-card"><h2>Тема интерфейса</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная</option></select></div></section>
+    <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
+  const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
+  bottomNav('settings'); $('#goBack').addEventListener('click', summary);
+  // Keep the editable hourly amount and its ₽ suffix visually together,
+  // including after loading another date's historical tariff.
+  const rateInput = $('#hourlyRate');
+  const sizeRateInput = () => {
+    rateInput.style.width = `${Math.max(3.25, Math.min(10, rateInput.value.length + .25))}ch`;
+  };
+  rateInput.addEventListener('input', sizeRateInput);
+  sizeRateInput();
+  $('#themeSelect').addEventListener('change', event => {
+    try { persist(updateSettings(state, { theme:event.target.value })); $('#preferencesError').hidden = true; }
+    catch (error) { event.target.value = state.settings.theme; $('#preferencesError').textContent = error.message; $('#preferencesError').hidden = false; feedback('error'); }
+  });
+  $('#paymentPeriod').addEventListener('change', event => {
+    const terms = paymentTermsFor(state,event.target.value);
+    for (const key of ['hourlyRate','basePace','premiumPace','paceBonusPercent','cycleBonusPercent','minimumHours','criticalPace']) $('#' + key).value = String(terms[key] ?? (key==='minimumHours'?80:terms.basePace)).replace('.',',');
+    $('#paymentEffectiveDate').textContent = `Выбрана дата: ${formatDate(event.target.value)}`;
+    $('#paymentDateVisible').textContent = formatDate(event.target.value, true);
+    sizeRateInput();
+    $('#paymentError').hidden = true;
+  });
+  $('#paymentForm').addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      const rule = { effectivePeriodStart:$('#paymentPeriod').value };
+      for (const key of ['hourlyRate','basePace','premiumPace','paceBonusPercent','cycleBonusPercent','minimumHours','criticalPace']) rule[key] = $('#' + key).value;
+      const base=paymentTermsFor(state,rule.effectivePeriodStart);
+      paymentFields.forEach(key=>{
+        try { setPaymentTerms(state,{...base,effectivePeriodStart:rule.effectivePeriodStart,[key]:rule[key]}); }
+        catch(error) { if(key!=='hourlyRate')$('.payment-more').open=true;$('#'+key).focus();throw error; }
+      });
+      persist(setPaymentTerms(state,rule));
+      $('#paymentError').hidden = true; $('#paymentHistory').innerHTML = ruleHistory();
+      notify(`Условия сохранены с ${formatDate(rule.effectivePeriodStart)}`);
     } catch (error) { $('#paymentError').textContent = error.message; $('#paymentError').hidden = false; feedback('error'); }
   });
   for (const key of ['soundEnabled', 'hapticsEnabled']) {
