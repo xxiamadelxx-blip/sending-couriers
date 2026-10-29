@@ -8,5 +8,8 @@ jar=root.parent/'tools/test-deps/json-20250517.jar';platform=root.parent/'tools/
 cp=os.pathsep.join(map(str,[classes,jar,platform]))
 subprocess.run(['java','com.sun.tools.javac.Main','-cp',cp,'-d',str(out),str(root/'tests/WorkbookProbe.java')],check=True)
 subprocess.run(['java','-cp',str(out)+os.pathsep+cp,'ru.courier.finance.WorkbookProbe',str(Path(a.workbook).resolve()),str(Path(a.output).resolve())],check=True)
-s=json.load(open(a.output))['sheets'];assert set(s)=={'Смены','Дневные итоги','Заказы RAW','Прогнозы','Точность','Модели','Настройки','Финансовые правила'}
-print('PASS: production WorkbookReader parses all eight forecast/history sheets; no formula execution')
+s=json.load(open(a.output))['sheets'];assert set(s)=={'Смены','Дневные итоги','Заказы RAW','Прогнозы','Точность','Модели','Настройки','Финансовые правила','Календарь','Методика','Решения','Финансовые факты','Контроль','Аудит 19.10','Снимки периода'}
+assert s['Финансовые факты']['2']['C']=='22 376,00'
+assert s['Снимки периода']['2']['C']==43
+
+print('PASS: production WorkbookReader parses all fifteen forecast/history sheets; no formula execution')
