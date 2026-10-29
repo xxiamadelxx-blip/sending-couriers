@@ -28,7 +28,7 @@ import org.json.JSONObject;
  */
 public final class CourierDatabase extends SQLiteOpenHelper {
     public static final String FILE_NAME = "courier_facts_v1.db";
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
     private final Context appContext;
 
     public CourierDatabase(Context context) {
@@ -47,6 +47,10 @@ public final class CourierDatabase extends SQLiteOpenHelper {
     }
 
     private void applySchema(SQLiteDatabase db, String asset) {
+        applySchema(db,asset,false);
+    }
+
+    private void applySchema(SQLiteDatabase db, String asset, boolean additive) {
         try (InputStream in = appContext.getAssets().open(asset);
              ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
             byte[] chunk = new byte[4096];
@@ -60,6 +64,14 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             // comments between statements hide the CREATE boundary from
             // Android SQLiteDatabase.execSQL (one statement per call).
             script = script.replaceAll("(?m)^\\s*--[^\\r\\n]*", "");
+            if (additive) {
+                // Version 1/2 installations may lack tables appended after
+                // the first schema shipped. Reapply ALL declarations without
+                // deleting old rows or replacing their table definitions.
+                for(String kind:new String[]{"TABLE","INDEX","TRIGGER"})
+                    script=script.replaceAll("(?i)\\bCREATE\\s+"+kind+"\\s+(?!IF\\s+NOT\\s+EXISTS)",
+                        "CREATE "+kind+" IF NOT EXISTS ");
+            }
             // A trigger has an internal ';' before END. Split only before the
             // following CREATE keyword; never execute half a trigger.
             for (String statement : script.split(";\\s*(?=CREATE)")) {
@@ -71,8 +83,11 @@ public final class CourierDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int from, int to) {
-        if (from == 1 && to == 2) {
-            // Non-destructive migration: existing historical rows stay intact.
+        if ((from == 1 || from == 2) && to == 3) {
+            // Legacy v1/v2 DBs lack subsequently added XLSX history tables.
+            // SQLiteOpenHelper wraps onUpgrade in a transaction. Reapply only
+            // missing schema objects and preserve all existing records.
+            applySchema(db, "www/m2_schema_v1.sql", true);
             applySchema(db, "www/m2_views_v2.sql");
             return;
         }

@@ -142,13 +142,13 @@ public final class M2DeviceProbeActivity extends Activity {
       older.setVersion(1);
     } finally {older.close();}
     store=new CourierDatabase(App.instance);
-    eq(count(store.getReadableDatabase(),"PRAGMA user_version"),2,"v1 to v2 migration");
+    eq(count(store.getReadableDatabase(),"PRAGMA user_version"),3,"v1 to v3 migration");
     eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM legacy_slot_facts"),2,
        "two slots survive schema upgrade");
     eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM active_orders"),2,
        "active RAW survives schema upgrade");
     if(!original.equals(store.readVerifiedState()))
-      throw new AssertionError("legacy state lost during v1-v2 migration");
+      throw new AssertionError("legacy state lost during v1-v3 migration");
     store.close();
   }
   static class App { static Activity instance; }

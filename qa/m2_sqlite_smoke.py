@@ -48,7 +48,7 @@ def verify(db_path, fixture):
         assert con.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]==1
         assert con.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
         version=con.execute("PRAGMA user_version").fetchone()[0]
-        assert version==2, "SQLite v1 -> v2 migration must finish with user_version=2"
+        assert version==3, "SQLite v1/v2 -> v3 migration must finish with user_version=3"
         views={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='view'")}
         assert "active_aggregate_order_counts" in views and len(views)>=7, views
         return {"slots":len(slots),"orders_raw":0,"orders_aggregated":total,"reward_kopecks":money["reward"],"audit_events":1,"sqlite_version":version}
@@ -86,8 +86,8 @@ def main():
                 raise AssertionError(f"M2 DB never passed after Android launch, pass {pass_no}: {last}")
         print("PASS: real Android M2 database migration pass", pass_no+1, result,flush=True)
     # Exercise a genuine Android SQLiteOpenHelper onUpgrade(1, 2):
-    # turn the disposable test database back into the pre-v2 schema on disk,
-    # restart the exact production Activity, and prove the v2 views reappear.
+    # turn the disposable test database back into the pre-v3 schema on disk,
+    # restart the exact production Activity, and prove the views reappear.
     adb("shell","am","force-stop",PKG)
     with tempfile.TemporaryDirectory() as directory:
         dbfile=copy_database(directory)
@@ -110,13 +110,13 @@ def main():
         for _ in range(25):
             try:
                 result=verify(copy_database(directory),fixture)
-                print("PASS: real Android onUpgrade v1→v2 preserved facts",result,flush=True)
+                print("PASS: real Android onUpgrade v1→v3 preserved facts",result,flush=True)
                 break
             except (AssertionError, sqlite3.Error, TypeError, subprocess.CalledProcessError) as exc:
                 last=exc
                 time.sleep(1)
         else:
-            raise AssertionError(f"Android v1-to-v2 upgrade failed: {last}")
+            raise AssertionError(f"Android v1-to-v3 upgrade failed: {last}")
     adb("shell","am","force-stop",PKG)
 
 if __name__=="__main__":
