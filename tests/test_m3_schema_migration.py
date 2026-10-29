@@ -1,5 +1,6 @@
 """M3 append-only snapshot/evaluation storage and schema v3 -> v4 migration."""
 import pathlib
+import re
 import sqlite3
 import unittest
 
@@ -66,10 +67,9 @@ class M3SchemaMigrationTest(unittest.TestCase):
                     ("slot","2026-10-18",12,650,"{}","legacy_state","now","now"))
                 db.execute("PRAGMA user_version=" + str(version))
                 # Same additive SQL strategy used by CourierDatabase.onUpgrade.
-                import re
-                upgrade = re.sub(r"(?im)^\\s*--[^\\r\\n]*", "", M2)
+                upgrade = re.sub(r"(?im)^\s*--[^\r\n]*", "", M2)
                 for kind in ("TABLE", "INDEX", "TRIGGER"):
-                    upgrade = re.sub(r"(?i)\\bCREATE\\s+" + kind + r"\\s+(?!IF\\s+NOT\\s+EXISTS)",
+                    upgrade = re.sub(r"(?i)\bCREATE\s+" + kind + r"\s+(?!IF\s+NOT\s+EXISTS)",
                                      "CREATE " + kind + " IF NOT EXISTS ", upgrade)
                 db.executescript(upgrade)
                 db.executescript(VIEWS)
