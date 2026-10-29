@@ -29,9 +29,9 @@ test('custom pace premium compares exact counters and honours zero-percent disab
 test('12-week premium uses each period rate and percentage, with per-period kopeck rounding',()=>{
  let s=updateSettings(emptyState(),{premiumCycleStart:'2026-08-21'});s=add(add(add(s,oldPeriod),current),next);
  s=setPaymentTerms(setPaymentTerms(s,rule()),rule(next,{hourlyRate:400,cycleBonusPercent:2.5}));
- const c=calculatePremiumCycle(s,'2026-11-12');assert.equal(c.hours,30);assert.equal(c.hourlyBase,11800);assert.equal(c.totalIncome,11980);assert.equal(c.premium,625.3);assert.equal(c.breakdown.length,3);
+ const c=calculatePremiumCycle(s,'2026-11-12');assert.equal(c.hours,30);assert.equal(c.hourlyBase,11800);assert.equal(c.totalIncome,11800);assert.equal(c.premium,616);assert.equal(c.breakdown.length,3);
  let cents=updateSettings(emptyState(),{premiumCycleStart:'2026-08-21'});cents=setPaymentTerms(cents,rule(oldPeriod,{hourlyRate:10,cycleBonusPercent:5}));cents=add(add(cents,oldPeriod,0.01,0),current,0.01,0);
- assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,6.02); // Both entries use the effective 10 RUB/5% rule; each earns 3.01.
+ assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,0.02); // Two 0.10 RUB bases, each 5% rounds to 0.01.
 });
 test('old imports preserve rules/theme; explicit backups restore them and conflicts reject atomically',()=>{
  const s=updateSettings(setPaymentTerms(add(emptyState(),current),rule()),{theme:'light'});
@@ -65,7 +65,7 @@ test('midperiod change preserves earlier hours, splits same-day slots, backup, a
  assert.equal(result.hours,10);assert.equal(result.hourlyBase,4300);assert.equal(result.estimatedYandexOwed,1300);
  assert.equal(result.grossUserIncome,4480);assert.deepEqual(s.entries.map(e=>[e.id,e.reward,e.tips,e.tax,e.parkCommission]),actual);
  const cycle=calculatePremiumCycle(s,'2026-10-24');
- assert.equal(cycle.hourlyBase,4300);assert.equal(cycle.totalIncome,4480);assert.equal(cycle.premium,355);assert.equal(cycle.breakdown.length,2);
+ assert.equal(cycle.hourlyBase,4300);assert.equal(cycle.totalIncome,4300);assert.equal(cycle.premium,340);assert.equal(cycle.breakdown.length,2);
  assert.equal(calculateDayFor(s,'2026-10-22'),1800);assert.equal(calculateDayFor(s,'2026-10-23'),2500);
  assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(s))).settings.paymentRules,s.settings.paymentRules);
 });
