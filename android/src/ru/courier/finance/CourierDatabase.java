@@ -28,7 +28,7 @@ import org.json.JSONObject;
  */
 public final class CourierDatabase extends SQLiteOpenHelper {
     public static final String FILE_NAME = "courier_facts_v1.db";
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
     private final Context appContext;
 
     public CourierDatabase(Context context) {
@@ -42,7 +42,12 @@ public final class CourierDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onCreate(SQLiteDatabase db) {
-        try (InputStream in = appContext.getAssets().open("www/m2_schema_v1.sql");
+        applySchema(db, "www/m2_schema_v1.sql");
+        applySchema(db, "www/m2_views_v2.sql");
+    }
+
+    private void applySchema(SQLiteDatabase db, String asset) {
+        try (InputStream in = appContext.getAssets().open(asset);
              ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
             byte[] chunk = new byte[4096];
             int n;
@@ -66,7 +71,11 @@ public final class CourierDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int from, int to) {
-        // Never use destructive fallback for real financial facts.
+        if (from == 1 && to == 2) {
+            // Non-destructive migration: existing historical rows stay intact.
+            applySchema(db, "www/m2_views_v2.sql");
+            return;
+        }
         throw new SQLiteException("Unreviewed courier migration from " + from + " to " + to);
     }
 
@@ -225,7 +234,11 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         SQLiteDatabase db=getWritableDatabase();
         String sourceId="xlsx:"+fileSha, when=nowUtc();
         try (Cursor cursor=db.rawQuery("SELECT status FROM import_sources WHERE id=?",new String[]{sourceId})) {
-            if (cursor.moveToFirst() && "mirrored".equals(cursor.getString(0))) return 0;
+            if (cursor.moveToFirst()) {
+                String status=cursor.getString(0);
+                if ("mirrored".equals(status) || "superseded".equals(status)
+                    || "partial".equals(status)) return 0;
+            }
         }
         db.beginTransaction();
         try {
@@ -341,8 +354,26 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                         throw new SQLiteException("M2 normalized count mismatch: "+table);
                 }
             }
+            // Source revisions are immutable evidence. Only one COMPLETE XLSX
+            // revision is active; partial files never supersede verified facts.
+            String[] required={"orders","aggregate_order_counts","financial_ledger",
+                "period_snapshots","historical_forecasts","historical_rule_specs",
+                "historical_model_specs"};
+            long represented=countQuery(db,
+                "SELECT COUNT(DISTINCT sheet_name) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
+            boolean complete=sheets.length()==15 && represented==15;
+            for(String category:required)
+                complete &= normalizedExpected.getOrDefault(category,0)>0;
+            if(complete) {
+                ContentValues obsolete=new ContentValues();
+                obsolete.put("status","superseded");obsolete.put("updated_at",when);
+                db.update("import_sources",obsolete,
+                    "source_kind=? AND status=? AND id<>?",
+                    new String[]{"xlsx","mirrored",sourceId});
+            }
             ContentValues success=new ContentValues();
-            success.put("status","mirrored");success.put("updated_at",when);
+            success.put("status",complete?"mirrored":"partial");
+            success.put("updated_at",when);
             db.update("import_sources",success,"id=?",new String[]{sourceId});
             ContentValues audit=new ContentValues();
             audit.put("id","workbook:"+fileSha); audit.put("happened_at",when);
