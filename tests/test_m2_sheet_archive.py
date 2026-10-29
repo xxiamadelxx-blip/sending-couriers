@@ -46,5 +46,23 @@ class M2SheetArchiveTest(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM financial_ledger").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM sheet_import_rows").fetchone()[0],1)
 
+
+    def test_two_versions_of_same_fact_have_only_one_active_count(self):
+        for name, digest, status in (("old","a"*64,"mirrored"),("new","b"*64,"superseded")):
+            self.db.execute("INSERT INTO import_sources(id,sha256,source_kind,parser_version,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                (name,digest,"xlsx","m2-sheet-archive-1",status,"now","now"))
+            self.db.execute("""INSERT INTO aggregate_order_counts
+                (id,date,order_count,source_id,source_kind,confidence,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?)""",
+                (name+":14","2026-10-14",12,name,"xlsx","reported_sheet","now","now"))
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM aggregate_order_counts").fetchone()[0],2,
+                         "Both immutable source revisions remain auditable")
+        self.assertEqual(self.db.execute("SELECT SUM(order_count) FROM active_aggregate_order_counts").fetchone()[0],12,
+                         "Updated workbooks must not double count identical facts")
+        self.db.execute("UPDATE import_sources SET status='superseded' WHERE id='old'")
+        self.db.execute("UPDATE import_sources SET status='mirrored' WHERE id='new'")
+        self.assertEqual(self.db.execute("SELECT SUM(order_count) FROM active_aggregate_order_counts").fetchone()[0],12,
+                         "Latest validated revision stays the sole active source")
+
 if __name__=="__main__":
     unittest.main()
