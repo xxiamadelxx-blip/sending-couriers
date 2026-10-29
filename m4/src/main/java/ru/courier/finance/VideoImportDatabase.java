@@ -21,7 +21,7 @@ import java.util.TimeZone;
 /** Private local database for OCR evidence; it never writes finance or order facts. */
 public final class VideoImportDatabase extends SQLiteOpenHelper {
     public static final String FILE_NAME="courier_video_imports_v1.db";
-    public static final int VERSION=1;
+    public static final int VERSION=2;
     private final Context app;
 
     public VideoImportDatabase(Context context) {
@@ -35,7 +35,7 @@ public final class VideoImportDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onCreate(SQLiteDatabase db) {
-        try(InputStream input=app.getAssets().open("www/m4_schema_v1.sql");ByteArrayOutputStream output=new ByteArrayOutputStream()) {
+        try(InputStream input=app.getAssets().open("www/m4_schema_v2.sql");ByteArrayOutputStream output=new ByteArrayOutputStream()) {
             byte[] buffer=new byte[4096];int count;
             while((count=input.read(buffer))!=-1) {output.write(buffer,0,count);if(output.size()>64_000)throw new SQLiteException("M4 schema too large");}
             String script=new String(output.toByteArray(),StandardCharsets.UTF_8).replaceAll("(?m)^\\s*--[^\\r\\n]*","");
@@ -44,13 +44,27 @@ public final class VideoImportDatabase extends SQLiteOpenHelper {
     }
 
     @Override public void onUpgrade(SQLiteDatabase db,int from,int to) {
+        if(from==1&&to==2) {
+            executeAssetScript(db,"www/m4_migration_v1_to_v2.sql");
+            return;
+        }
         throw new SQLiteException("Unreviewed video evidence migration from "+from+" to "+to);
+    }
+
+    private void executeAssetScript(SQLiteDatabase db,String asset) {
+        try(InputStream input=app.getAssets().open(asset);ByteArrayOutputStream output=new ByteArrayOutputStream()) {
+            byte[] buffer=new byte[4096];int count;
+            while((count=input.read(buffer))!=-1) {output.write(buffer,0,count);if(output.size()>64_000)throw new SQLiteException("M4 migration too large");}
+            String script=new String(output.toByteArray(),StandardCharsets.UTF_8).replaceAll("(?m)^\\s*--[^\\r\\n]*","");
+            for(String statement:script.split(";\\s*(?=CREATE)")) if(!statement.trim().isEmpty()) db.execSQL(statement.trim());
+        } catch(Exception error) { throw new SQLiteException("Failed to upgrade local video evidence database: "+error.getClass().getSimpleName()); }
     }
 
     public PersistResult persist(VideoImportProcessor.Result result,String mimeType) {
         SQLiteDatabase db=getWritableDatabase();
         String importId="m4v_"+result.sourceSha256.substring(0,32);
         boolean duplicate=false;
+        int insertedCandidates=0;
         db.beginTransaction();
         try {
             try(Cursor found=db.query("m4_video_imports",new String[]{"id"},"source_sha256=?",new String[]{result.sourceSha256},null,null,null)) {
@@ -80,11 +94,24 @@ public final class VideoImportDatabase extends SQLiteOpenHelper {
                         queue.put("review_status","pending"); queue.put("created_at_utc",now); queue.put("updated_at_utc",now);
                         db.insertOrThrow("m4_unknown_screen_queue",null,queue);
                     }
+                    for(int candidateIndex=0;candidateIndex<row.candidates.size();candidateIndex++) {
+                        YandexScreenParser.Candidate candidate=row.candidates.get(candidateIndex);
+                        ContentValues extracted=new ContentValues();
+                        extracted.put("id",observationId+"_c"+candidateIndex);
+                        extracted.put("observation_id",observationId);
+                        extracted.put("candidate_type",candidate.candidateType);
+                        extracted.put("candidate_json",candidate.toJson());
+                        extracted.put("rule_score",candidate.ruleScore);
+                        extracted.put("review_status","pending");
+                        extracted.put("created_at_utc",now);
+                        db.insertOrThrow("m4_extracted_candidates",null,extracted);
+                        insertedCandidates++;
+                    }
                 }
             }
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
-        return new PersistResult(importId,duplicate,result.observations.size(),result.unknownScreenCount());
+        return new PersistResult(importId,duplicate,result.observations.size(),result.unknownScreenCount(),insertedCandidates);
     }
 
     /** Deletes only locally extracted evidence and its private preview files. */
@@ -120,8 +147,10 @@ public final class VideoImportDatabase extends SQLiteOpenHelper {
 
     public static final class PersistResult {
         public final String importId; public final boolean duplicate; public final int frameCount; public final int unknownScreenCount;
-        PersistResult(String importId,boolean duplicate,int frameCount,int unknownScreenCount) {
-            this.importId=importId;this.duplicate=duplicate;this.frameCount=frameCount;this.unknownScreenCount=unknownScreenCount;
+        public final int insertedCandidateCount;
+        PersistResult(String importId,boolean duplicate,int frameCount,int unknownScreenCount,int insertedCandidateCount) {
+            this.importId=importId;this.duplicate=duplicate;this.frameCount=frameCount;
+            this.unknownScreenCount=unknownScreenCount;this.insertedCandidateCount=insertedCandidateCount;
         }
     }
 }

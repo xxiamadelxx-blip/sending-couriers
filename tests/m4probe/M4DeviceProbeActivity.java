@@ -13,7 +13,7 @@ import java.io.InputStream;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 
-/** Android-only probe for real video frame extraction + local Cyrillic/number OCR. */
+/** Android-only probe for video frame extraction, local OCR, and structured review candidates. */
 public final class M4DeviceProbeActivity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private TextView label;
@@ -47,16 +47,22 @@ public final class M4DeviceProbeActivity extends Activity {
             boolean cyrillic=false,numbers=false,orders=false;
             for(VideoImportProcessor.Observation row:result.observations) {
                 cyrillic |= row.ocrText.toLowerCase(java.util.Locale.ROOT).contains("заказ");
-                numbers |= row.ocrText.contains("18");
+                numbers |= row.ocrText.contains("900") || row.ocrText.contains("12:34");
                 orders |= row.screenType==YandexScreenParser.ScreenType.ORDERS;
             }
-            if(!cyrillic || !numbers || !orders) throw new AssertionError("OCR/parser mismatch: cyrillic="+cyrillic+", number="+numbers+", orders="+orders);
+            boolean slotCandidate=result.uniqueCandidateCount("SLOT_DETAIL")>0;
+            boolean orderRowCandidate=result.uniqueCandidateCount("ORDER_LIST_ROW")>0;
+            if(!cyrillic || !numbers || !orders || !slotCandidate || !orderRowCandidate)
+                throw new AssertionError("OCR/extraction mismatch: cyrillic="+cyrillic+", number="+numbers
+                    +", orders="+orders+", slot="+slotCandidate+", orderRow="+orderRowCandidate);
             VideoImportDatabase database=new VideoImportDatabase(this);
             String probeImportId="m4v_"+result.sourceSha256.substring(0,32);
             database.deleteImport(probeImportId);
             VideoImportDatabase.PersistResult stored=database.persist(result,"video/mp4");
-            if(stored.duplicate || stored.frameCount<1) throw new AssertionError("local evidence persistence failed");
-            show("M4 OFFLINE VIDEO OCR QA PASS\nSynthetic fixture only\n"+stored.frameCount+" timed frames · Cyrillic + 18 recognized\nNo order or payment fact created.");
+            if(stored.duplicate || stored.frameCount<1 || stored.insertedCandidateCount<1)
+                throw new AssertionError("local evidence/candidate persistence failed");
+            show("M4 OFFLINE VIDEO OCR QA PASS\nSynthetic fixture only\n"+stored.frameCount
+                +" timed frames · "+stored.insertedCandidateCount+" parsed rows persisted\nNo order or payment fact created.");
         } catch(Throwable error) {
             show("M4 OFFLINE VIDEO OCR QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }

@@ -9,7 +9,9 @@ import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,6 +42,7 @@ public final class VideoImportProcessor {
         public final String parseReason;
         public final boolean reviewRequired;
         public final String reviewImagePath;
+        public final List<YandexScreenParser.Candidate> candidates;
 
         Observation(int frameIndex, long timestampMs, String frameSha256, String ocrText,
                     float ocrConfidence, YandexScreenParser.Result parsed, String reviewImagePath) {
@@ -47,7 +50,7 @@ public final class VideoImportProcessor {
             this.timestampBasis="requested_nearest_sync";
             this.ocrText=ocrText; this.ocrConfidence=ocrConfidence; this.screenType=parsed.screenType;
             this.parseReason=parsed.reason; this.reviewRequired=parsed.reviewRequired;
-            this.reviewImagePath=reviewImagePath;
+            this.reviewImagePath=reviewImagePath; this.candidates=parsed.candidates;
         }
     }
 
@@ -64,6 +67,20 @@ public final class VideoImportProcessor {
         }
         public int unknownScreenCount() {
             int count=0; for(Observation row:observations) if(row.reviewRequired) count++; return count;
+        }
+        /** Deduplicates repeated OCR detections while retaining each frame's raw evidence rows. */
+        public List<YandexScreenParser.Candidate> uniqueCandidates() {
+            LinkedHashMap<String,YandexScreenParser.Candidate> unique=new LinkedHashMap<>();
+            for(Observation observation:observations) for(YandexScreenParser.Candidate candidate:observation.candidates)
+                unique.put(candidate.stableKey(),candidate);
+            return Collections.unmodifiableList(new ArrayList<>(unique.values()));
+        }
+        public int uniqueCandidateCount() { return uniqueCandidates().size(); }
+        public int uniqueCandidateCount(String type) {
+            int count=0;
+            for(YandexScreenParser.Candidate candidate:uniqueCandidates())
+                if(type.equals(candidate.candidateType)) count++;
+            return count;
         }
     }
 

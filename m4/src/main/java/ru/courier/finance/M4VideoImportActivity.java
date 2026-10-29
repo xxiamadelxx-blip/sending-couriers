@@ -14,10 +14,13 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,6 +28,7 @@ import java.util.concurrent.Executors;
 /** User-started local MP4/MOV import. Shared videos and document-picker URIs follow the same path. */
 public final class M4VideoImportActivity extends Activity {
     private static final int PICK_VIDEO=410;
+    private static final int MAX_RETURNED_CANDIDATES=100;
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
     private TextView status;
     private ProgressBar progress;
@@ -87,8 +91,17 @@ public final class M4VideoImportActivity extends Activity {
                 JSONObject response=new JSONObject(); response.put("ok",true); response.put("duplicate",saved.duplicate);
                 response.put("frames",saved.frameCount); response.put("uniqueFrames",analysis.uniqueFramesOcr);
                 response.put("unknownScreens",saved.unknownScreenCount); response.put("durationMs",analysis.durationMs);
+                response.put("persistedCandidateRows",saved.insertedCandidateCount);
                 response.put("sourceSha256",analysis.sourceSha256);
-                finishWith(response.toString(),saved.duplicate?"Это видео уже обработано.":"Видео разобрано локально. Факты заказов и выплат не изменены.");
+                JSONArray extractions=new JSONArray();
+                java.util.List<YandexScreenParser.Candidate> uniqueCandidates=analysis.uniqueCandidates();
+                for(int i=0;i<uniqueCandidates.size()&&i<MAX_RETURNED_CANDIDATES;i++)
+                    extractions.put(new JSONObject(uniqueCandidates.get(i).toJson()));
+                response.put("extractedCandidateCount",analysis.uniqueCandidateCount());
+                response.put("extractionsTruncated",uniqueCandidates.size()>MAX_RETURNED_CANDIDATES);
+                response.put("extractions",extractions);
+                String message=saved.duplicate?"Это видео уже обработано.":extractionSummary(analysis);
+                finishWith(response.toString(),message);
             } catch(Exception error) {
                 String message=error.getMessage()==null?"Проверьте файл и повторите импорт.":error.getMessage();
                 try { JSONObject response=new JSONObject();response.put("ok",false);response.put("error",message);finishWith(response.toString(),message); }
@@ -119,6 +132,61 @@ public final class M4VideoImportActivity extends Activity {
             if(cursor!=null && cursor.moveToFirst()) return cursor.getString(0);
         } catch(Exception ignored) { }
         return uri.getLastPathSegment()==null?"video.mp4":uri.getLastPathSegment();
+    }
+
+    private String extractionSummary(VideoImportProcessor.Result result) {
+        StringBuilder summary=new StringBuilder("Видео разобрано локально. Кандидаты: заказов — ")
+            .append(result.uniqueCandidateCount("ORDER_DETAIL")+result.uniqueCandidateCount("ORDER_LIST_ROW"))
+            .append(", слотов — ").append(result.uniqueCandidateCount("SLOT_DETAIL"))
+            .append(", сводок дохода — ").append(result.uniqueCandidateCount("INCOME_SUMMARY"))
+            .append(", строк начислений — ").append(result.uniqueCandidateCount("INCOME_LINE"))
+            .append(".\n\nИзвлечено:");
+        List<YandexScreenParser.Candidate> candidates=result.uniqueCandidates();
+        int shown=Math.min(8,candidates.size());
+        for(int i=0;i<shown;i++) summary.append("\n• ").append(formatCandidate(candidates.get(i)));
+        if(candidates.isEmpty()) summary.append("\nПоля не распознаны; кадры доступны для локальной проверки.");
+        else if(candidates.size()>shown) summary.append("\n… ещё ").append(candidates.size()-shown).append(" кандидатов сохранено.");
+        summary.append("\n\nКандидаты сохранены локально для проверки; факты в историю заказов и доходов не записаны.");
+        return summary.toString();
+    }
+
+    private String formatCandidate(YandexScreenParser.Candidate candidate) {
+        StringBuilder line=new StringBuilder();
+        if("ORDER_DETAIL".equals(candidate.candidateType)) {
+            line.append("Заказ"); appendField(line,candidate,"total_kopecks","сумма",true);
+            appendField(line,candidate,"status","статус",false);
+            appendField(line,candidate,"started_at","начало",false);
+            appendField(line,candidate,"completed_at","завершение",false);
+        } else if("ORDER_LIST_ROW".equals(candidate.candidateType)) {
+            line.append("Строка заказа"); appendField(line,candidate,"order_time","время",false);
+            appendField(line,candidate,"amount_kopecks","сумма",true);
+            appendField(line,candidate,"demand_coefficient","коэффициент",false);
+        } else if("SLOT_DETAIL".equals(candidate.candidateType)) {
+            line.append("Слот"); appendField(line,candidate,"slot_total_kopecks","сумма",true);
+            appendField(line,candidate,"slot_type","тип",false);
+            appendField(line,candidate,"started_at","начало",false);
+            appendField(line,candidate,"completed_at","завершение",false);
+        } else if("INCOME_SUMMARY".equals(candidate.candidateType)) {
+            line.append("Доход"); appendField(line,candidate,"total_kopecks","итого",true);
+            appendField(line,candidate,"reward_kopecks","вознаграждение",true);
+            appendField(line,candidate,"partner_commission_kopecks","комиссия",true);
+            appendField(line,candidate,"tax_kopecks","налог",true);
+        } else {
+            line.append("Строка дохода"); appendField(line,candidate,"entry_time","время",false);
+            appendField(line,candidate,"amount_kopecks","сумма",true);
+        }
+        return line.toString();
+    }
+
+    private void appendField(StringBuilder line,YandexScreenParser.Candidate candidate,String key,String label,boolean money) {
+        for(YandexScreenParser.Field field:candidate.fields) if(key.equals(field.name)) {
+            line.append(" · ").append(label).append(": ");
+            if(money) {
+                try { line.append(new BigDecimal(field.value).movePointLeft(2).stripTrailingZeros().toPlainString()).append(" ₽"); }
+                catch(Exception ignored) { line.append(field.value).append(" коп."); }
+            } else line.append(field.value);
+            return;
+        }
     }
 
     private void finishWith(String json,String message) {
