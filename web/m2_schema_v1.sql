@@ -214,3 +214,18 @@ CREATE TABLE audit_events (
   source_kind TEXT NOT NULL,
   payload_json TEXT
 );
+
+-- Source-row archive: every observed historical Sheet row is retained before any
+-- business normalization. Raw cell values/formula flags are never guessed away.
+CREATE TABLE sheet_import_rows (
+ id TEXT PRIMARY KEY NOT NULL,
+ source_id TEXT NOT NULL,
+ sheet_name TEXT NOT NULL,
+ row_number INTEGER NOT NULL CHECK(row_number>=2),
+ raw_json TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL,
+ UNIQUE(source_id,sheet_name,row_number),
+ FOREIGN KEY(source_id) REFERENCES import_sources(id)
+);
+CREATE INDEX ix_sheet_rows_sheet ON sheet_import_rows(source_id,sheet_name);

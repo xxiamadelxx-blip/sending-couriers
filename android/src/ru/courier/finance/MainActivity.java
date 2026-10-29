@@ -344,8 +344,21 @@ public final class MainActivity extends Activity {
                     byte[] buffer = new byte[8192]; int count;
                     while ((count = in.read(buffer)) != -1) { out.write(buffer, 0, count); if (out.size() > MAX_BYTES) throw new IllegalArgumentException(); }
                     byte[] bytes = out.toByteArray();
-                    String text = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K'
-                        ? WorkbookReader.read(new ByteArrayInputStream(bytes)) : new String(bytes, StandardCharsets.UTF_8);
+                    boolean xlsx = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K';
+                    String text = xlsx ? WorkbookReader.read(new ByteArrayInputStream(bytes))
+                        : new String(bytes, StandardCharsets.UTF_8);
+                    if (xlsx) {
+                        try {
+                            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+                            StringBuilder digest=new StringBuilder(64);
+                            for (byte h : hash) digest.append(String.format(java.util.Locale.ROOT,"%02x",h & 0xff));
+                            factMirrorDatabase.mirrorWorkbook(text,digest.toString());
+                        } catch(Exception archiveError) {
+                            // Old, user-visible import must continue. Source-parity
+                            // migration is NOT marked successful on a shadow error.
+                            Log.e("CourierSQLite","M2 workbook archival failed: "+archiveError.getClass().getSimpleName());
+                        }
+                    }
                     String callback = requestCode == IMPORT_FORECAST ? "window.receiveForecastImport" : "window.receiveImport";
                     runOnUiThread(() -> web.evaluateJavascript(callback + "(" + JSONObject.quote(text) + ")", null));
                 } catch (Exception e) { error("Не удалось прочитать файл. Допустимы JSON и XLSX до 8 МБ без пароля."); }

@@ -207,6 +207,67 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         }
     }
 
+    /**
+     * Mirror every historical XLSX row exactly once. No "orders" are generated
+     * here, since sheet rows can be reconstructed, incomplete or aggregates.
+     * The caller gives a hash of ORIGINAL XLSX bytes, not the JSON projection.
+     */
+    public synchronized int mirrorWorkbook(String parsedWorkbook, String fileSha) throws Exception {
+        if (fileSha==null || !fileSha.matches("[0-9a-f]{64}"))
+            throw new IllegalArgumentException("Invalid original XLSX SHA256");
+        JSONObject root = new JSONObject(parsedWorkbook);
+        JSONObject sheets = root.getJSONObject("sheets");
+        if (sheets.length()>15) throw new IllegalArgumentException("Unsupported XLSX tabs");
+        SQLiteDatabase db=getWritableDatabase();
+        String sourceId="xlsx:"+fileSha, when=nowUtc();
+        try (Cursor cursor=db.rawQuery("SELECT status FROM import_sources WHERE id=?",new String[]{sourceId})) {
+            if (cursor.moveToFirst() && "mirrored".equals(cursor.getString(0))) return 0;
+        }
+        db.beginTransaction();
+        try {
+            ContentValues source=new ContentValues();
+            source.put("id",sourceId); source.put("sha256",fileSha);
+            source.put("source_kind","xlsx"); source.put("parser_version","m2-sheet-archive-1");
+            source.put("status","staging");source.put("created_at",when);source.put("updated_at",when);
+            db.insertWithOnConflict("import_sources",null,source,SQLiteDatabase.CONFLICT_REPLACE);
+            int rowsInserted=0;
+            java.util.Iterator<String> names=sheets.keys();
+            while(names.hasNext()){
+                String name=names.next();
+                JSONObject rows=sheets.getJSONObject(name);
+                java.util.Iterator<String> keys=rows.keys();
+                while(keys.hasNext()){
+                    String key=keys.next();
+                    int row=Integer.parseInt(key);
+                    if(row<2) continue; // headers belong to workbook structure
+                    JSONObject values=rows.getJSONObject(key);
+                    if(values.length()==0) continue;
+                    if(++rowsInserted>50_000) throw new IllegalArgumentException("Too many history rows");
+                    ContentValues fact=new ContentValues();
+                    fact.put("id",sourceId+":"+name+":"+row);
+                    fact.put("source_id",sourceId);fact.put("sheet_name",name);
+                    fact.put("row_number",row);fact.put("raw_json",values.toString());
+                    fact.put("created_at",when);fact.put("updated_at",when);
+                    db.insertOrThrow("sheet_import_rows",null,fact);
+                }
+            }
+            long stored=countQuery(db,"SELECT COUNT(*) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
+            if(stored!=rowsInserted) throw new SQLiteException("Sheet row parity mismatch");
+            ContentValues success=new ContentValues();
+            success.put("status","mirrored");success.put("updated_at",when);
+            db.update("import_sources",success,"id=?",new String[]{sourceId});
+            ContentValues audit=new ContentValues();
+            audit.put("id","workbook:"+fileSha); audit.put("happened_at",when);
+            audit.put("action","workbook_archived");audit.put("record_type","import_sources");
+            audit.put("record_id",sourceId);audit.put("source_kind","xlsx");
+            db.insertWithOnConflict("audit_events",null,audit,SQLiteDatabase.CONFLICT_IGNORE);
+            db.setTransactionSuccessful();
+            return rowsInserted;
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     /** For parity review only: verify immutable copy corresponds to the original. */
     public synchronized boolean matchesLegacy(String raw) throws Exception {
         if(raw==null||raw.isEmpty()) return false;
