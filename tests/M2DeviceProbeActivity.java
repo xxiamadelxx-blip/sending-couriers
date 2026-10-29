@@ -31,6 +31,7 @@ public final class M2DeviceProbeActivity extends Activity {
     boolean initial=store.mirrorLegacy(original);
     if(!initial && !store.matchesLegacy(original))throw new AssertionError("existing mirror did not recover");
     if(!store.matchesLegacy(original))throw new AssertionError("legacy roundtrip hash mismatch");
+    if(!original.equals(store.readVerifiedState()))throw new AssertionError("SQLite primary reader changed JSON");
     if(store.mirrorLegacy(original))throw new AssertionError("same JSON should be idempotent");
     SQLiteDatabase db=store.getReadableDatabase();
     eq(count(db,"SELECT COUNT(*) FROM legacy_slot_facts"),2,"two slots");
@@ -72,6 +73,7 @@ public final class M2DeviceProbeActivity extends Activity {
     store=new CourierDatabase(App.instance);
     eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM orders"),2,"orders survive close-reopen");
     if(!store.matchesLegacy(original))throw new AssertionError("legacy survives close-reopen");
+    if(!original.equals(store.readVerifiedState()))throw new AssertionError("verified read fails after reopening SQLite");
     store.close();
   }
   static class App { static Activity instance; }
