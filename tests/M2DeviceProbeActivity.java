@@ -142,7 +142,7 @@ public final class M2DeviceProbeActivity extends Activity {
       older.setVersion(1);
     } finally {older.close();}
     store=new CourierDatabase(App.instance);
-    eq(count(store.getReadableDatabase(),"PRAGMA user_version"),3,"v1 to v3 migration");
+    eq(count(store.getReadableDatabase(),"PRAGMA user_version"),4,"v1 to v4 migration");
     eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM legacy_slot_facts"),2,
        "two slots survive schema upgrade");
     eq(count(store.getReadableDatabase(),"SELECT COUNT(*) FROM active_orders"),2,
