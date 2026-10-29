@@ -43,9 +43,9 @@ class UpgradeFromShippedSchemas(unittest.TestCase):
                     db.execute("PRAGMA foreign_keys=ON")
                     # Mirrors only the additive rewrite in production Java.
                     upgrade=SCHEMA
-                    upgrade=re.sub(r"(?im)^\\s*--[^\\r\\n]*","",upgrade)
+                    upgrade=re.sub(r"(?im)^\s*--[^\r\n]*","",upgrade)
                     for kind in ("TABLE","INDEX","TRIGGER"):
-                        upgrade=re.sub(r"(?i)\\bCREATE\\s+"+kind+r"\\s+(?!IF\\s+NOT\\s+EXISTS)",
+                        upgrade=re.sub(r"(?i)\bCREATE\s+"+kind+r"\s+(?!IF\s+NOT\s+EXISTS)",
                                        "CREATE "+kind+" IF NOT EXISTS ",upgrade)
                     db.executescript(upgrade)
                     db.executescript(VIEWS)
