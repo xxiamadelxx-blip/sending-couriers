@@ -51,7 +51,10 @@ public final class M4DeviceProbeActivity extends Activity {
                 orders |= row.screenType==YandexScreenParser.ScreenType.ORDERS;
             }
             if(!cyrillic || !numbers || !orders) throw new AssertionError("OCR/parser mismatch: cyrillic="+cyrillic+", number="+numbers+", orders="+orders);
-            VideoImportDatabase.PersistResult stored=new VideoImportDatabase(this).persist(result,"video/mp4");
+            VideoImportDatabase database=new VideoImportDatabase(this);
+            String probeImportId="m4v_"+result.sourceSha256.substring(0,32);
+            database.deleteImport(probeImportId);
+            VideoImportDatabase.PersistResult stored=database.persist(result,"video/mp4");
             if(stored.duplicate || stored.frameCount<1) throw new AssertionError("local evidence persistence failed");
             show("M4 OFFLINE VIDEO OCR QA PASS\nSynthetic fixture only\n"+stored.frameCount+" timed frames · Cyrillic + 18 recognized\nNo order or payment fact created.");
         } catch(Throwable error) {
