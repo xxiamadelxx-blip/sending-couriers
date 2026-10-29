@@ -85,7 +85,7 @@ public final class M4VideoImportActivity extends Activity {
                 VideoImportProcessor.Result analysis;
                 try(TesseractOcrEngine ocr=new TesseractOcrEngine(this)) {
                     analysis=VideoImportProcessor.processFile(this,temporary,mime,name,ocr::recognize,
-                        (done,total)->runOnUiThread(()->{if(status!=null)status.setText("Распознано кадров: "+done+" из "+total+"…");}));
+                        (done,total)->runOnUiThread(()->{if(status!=null)status.setText("Кадров обработано: "+done+" из "+total+"…");}));
                 }
                 VideoImportDatabase.PersistResult saved=new VideoImportDatabase(this).persist(analysis,mime);
                 JSONObject response=new JSONObject(); response.put("ok",true); response.put("duplicate",saved.duplicate);
