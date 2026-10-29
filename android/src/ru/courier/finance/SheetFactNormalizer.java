@@ -91,7 +91,9 @@ public final class SheetFactNormalizer {
             String level=confidence.toLowerCase(Locale.ROOT);
             if(!level.equals("высокая")&&!level.equals("средняя"))return null;
             String visible=cell(row,"C"),ordinal=cell(row,"D");
-            if(visible==null&&ordinal==null)return null;
+            // Accepted/completed timestamps in L/M also demonstrate a
+            // visible order, even when C and the daily ordinal are missing.
+            if(visible==null&&ordinal==null&&cell(row,"L")==null&&cell(row,"M")==null)return null;
             String rewardRaw=cell(row,"E");
             Long cents=kopecks(rewardRaw);
             if(rewardRaw!=null&&cents==null)return null;
