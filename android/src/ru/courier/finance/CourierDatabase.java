@@ -51,6 +51,10 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                 if (buffer.size()>256_000) throw new SQLiteException("M2 schema unexpectedly large");
             }
             String script = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+            // Strip standalone SQL comments before splitting. Otherwise,
+            // comments between statements hide the CREATE boundary from
+            // Android SQLiteDatabase.execSQL (one statement per call).
+            script = script.replaceAll("(?m)^\\s*--[^\\r\\n]*", "");
             // A trigger has an internal ';' before END. Split only before the
             // following CREATE keyword; never execute half a trigger.
             for (String statement : script.split(";\\s*(?=CREATE)")) {
