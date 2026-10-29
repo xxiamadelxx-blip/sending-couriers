@@ -113,3 +113,46 @@ test('12-week tracker reports unknown when no verified hours exist, never invent
  const cycle=core.calculatePremiumCycle(state,'2026-10-29');
  assert.equal(cycle.totalIncome,null);assert.equal(cycle.premium,null);assert.equal(cycle.missingHours,1);
 });
+
+test('12-week historical opening income accumulates once; later slots remain independent',()=>{
+ let state=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21'});
+ state=add(state,'2026-10-14',4,7,{tips:10,separateBonus:20});
+ state=add(state,'2026-10-16',5,8,{tips:50,separateBonus:150});
+ const opening={cycleStart:'2026-08-21',through:'2026-10-15',grossIncome:'100000.00',source:'manual'};
+ state=core.updateSettings(state,{cycleOpening:opening});
+ const cycle=core.calculatePremiumCycle(state,'2026-10-29');
+ assert.equal(cycle.totalIncome,102000);
+ assert.equal(cycle.premium,5100);
+ assert.equal(cycle.excludedCount,1);
+ assert.equal(cycle.entries.length,2,'Original facts are never deleted');
+ assert.equal(core.calculate(state,'2026-10-16').grossUserIncome,2000,'Fortnight is unchanged');
+ const restored=core.normalizeState(JSON.parse(JSON.stringify(state)));
+ assert.deepEqual(restored.settings.cycleOpening,state.settings.cycleOpening);
+ assert.equal(core.calculatePremiumCycle(restored,'2026-10-29').premium,5100);
+ assert.equal(core.calculatePremiumCycle(restored,'2026-11-13').opening,null,'Opening only belongs to its own 84-day cycle');
+});
+test('ChatGPT JSON opening report is parsed safely and repeated import cannot double the accumulator',()=>{
+ const json=JSON.stringify({type:'courier-12week-income-v1',cycleStart:'2026-08-21',through:'2026-10-15',grossIncome:'100 000,50'});
+ const parsed=core.parseCycleIncomeReport(JSON.parse(json));
+ assert.equal(parsed.grossIncome,100000.5);
+ assert.equal(parsed.source,'chatgpt');
+ let state=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21',cycleOpening:parsed});
+ const before=core.calculatePremiumCycle(state,'2026-10-29').premium;
+ state=core.updateSettings(state,{cycleOpening:core.parseCycleIncomeReport(JSON.parse(json))});
+ assert.equal(core.calculatePremiumCycle(state,'2026-10-29').premium,before);
+ assert.equal(before,5000.03);
+ assert.throws(()=>core.parseCycleIncomeReport({type:'other',grossIncome:'100000'}),/формат/i);
+ assert.throws(()=>core.parseCycleIncomeReport({type:'courier-12week-income-v1',cycleStart:'2026-08-21',through:'2026-10-15',grossIncome:''}),/сумм/i);
+});
+test('Opening amount validates 84-day dates and never silently overwrites or leaks to next cycle',()=>{
+ let state=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21'});
+ for(const through of ['2026-08-20','2026-11-13','2026-02-30']) assert.throws(()=>core.updateSettings(state,{cycleOpening:{cycleStart:'2026-08-21',through,grossIncome:1000,source:'manual'}}));
+ state=core.updateSettings(state,{cycleOpening:{cycleStart:'2026-08-21',through:'2026-10-15',grossIncome:80000,source:'manual'}});
+ assert.throws(()=>core.updateSettings(state,{premiumCycleStart:'2026-08-22'}),/цикл/i);
+ const imported=core.mergeImport(core.emptyState(),state);
+ assert.deepEqual(imported.settings.cycleOpening,state.settings.cycleOpening);
+ let another=core.updateSettings(core.emptyState(),{premiumCycleStart:'2026-08-21',cycleOpening:{cycleStart:'2026-08-21',through:'2026-10-15',grossIncome:90000,source:'manual'}});
+ assert.throws(()=>core.mergeImport(another,state),/накопленн|сумм/i);
+ assert.equal(core.calculatePremiumCycle(state,'2026-11-13').premium,null);
+ assert.equal(core.updateSettings(state,{cycleOpening:null}).settings.cycleOpening,null);
+});
