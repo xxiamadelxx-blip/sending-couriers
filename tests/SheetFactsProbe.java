@@ -12,6 +12,9 @@ public final class SheetFactsProbe {
     public static void main(String[] ignored) throws Exception {
         JSONObject day=SheetFactNormalizer.normalize("Дневные итоги",row("A","2026-10-14","E","12","G","1200"));
         check("aggregate_order_counts".equals(day.getString("table")) && day.getInt("order_count")==12,"14 October is a count aggregate");
+        JSONObject excelDate=SheetFactNormalizer.normalize("Дневные итоги",row("A",46255.0,"E",32));
+        check("2026-08-21".equals(excelDate.getString("date")) && excelDate.getInt("order_count")==32,
+            "real Google XLSX date serial 46255.0 must map to 21 Aug, not disappear");
         check(!day.has("reward_kopecks"),"whole slot sum is not order reward");
         JSONObject closing=SheetFactNormalizer.normalize("Финансовые факты",
             row("A","2026-10-15","B","Финальная доплата почасовой гарантии","C","22 376,00"));

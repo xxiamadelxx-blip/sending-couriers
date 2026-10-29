@@ -23,6 +23,14 @@ public final class SheetFactNormalizer {
     private static String iso(String value) {
         if(value==null)return null;
         try {
+            // Google Sheets exports date-formatted cells as Excel serial numbers.
+            // This is an explicitly dated column; require an exact whole day.
+            if(value.matches("\\d{5}(?:\\.0+)?")) {
+                int serial=new BigDecimal(value).intValueExact();
+                LocalDate date=LocalDate.of(1899,12,30).plusDays(serial);
+                if(date.getYear()<2020 || date.getYear()>2100)return null;
+                return date.toString();
+            }
             if(value.matches("\\d{4}-\\d{2}-\\d{2}"))
                 return LocalDate.parse(value).toString();
             return LocalDate.parse(value,DateTimeFormatter.ofPattern("d.M.uuuu",Locale.ROOT)
