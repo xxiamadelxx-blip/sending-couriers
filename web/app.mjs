@@ -461,7 +461,7 @@ function form(id = null, returnTo = 'history') {
     <details class="additional slot-working"><summary>Рабочее время дня${icons.down}</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
-  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = '—'; });
+  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = 'Введите'; });
   installLargeTextFormLabelFocusGuard();
   $('#goBack').addEventListener('click', () => { returnTo === 'period' ? periodDetails() : history(); });
   let workingDirty=false;
@@ -474,12 +474,48 @@ function form(id = null, returnTo = 'history') {
     const pauses=actual?.intervals.filter(i=>i.state==='UNAVAILABLE')??[];
     const unknown=actual?.intervals.filter(i=>i.state==='UNKNOWN')??[];
     const clock=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
-    host.innerHTML=`<label for="slotWorkMode">Фактически работал</label><select id="slotWorkMode" class="period-select"><option value="unknown">Не указывать</option><option value="intervals">Интервалы С—До</option><option value="total">Итого за день</option><option value="rest">Выходной</option></select><div id="slotIntervals">${intervalField('slotWorkHours',mode==='intervals'?work:[],mode==='intervals'?actual.workingMin:null)}</div><div id="slotTotal">${field('slotWorkTotal','Часы фактической работы',mode==='total'?String(actual.workingMin/60).replace('.',','):'',{unit:'ч',full:true})}</div>${pauses.length?`<p class="hint">Сохранённая пауза: ${pauses.map(i=>clock(i.start)+'–'+clock(i.end)).join(', ')}</p>`:''}${unknown.length?`<p class="hint">Неизвестное окно: ${unknown.map(i=>clock(i.start)+'–'+clock(i.end)).join(', ')}</p>`:''}`;
-    $('#slotWorkMode').value=mode;
+    const choices=[['unknown','Не указывать'],['intervals','Интервалы С—До'],['total','Итого за день'],['rest','Выходной']];
+    host.innerHTML=`<span class="slot-mode-label" id="slotWorkModeLabel">Фактически работал</span>
+      <input id="slotWorkMode" type="hidden" value="${mode}">
+      <button class="slot-mode-button" id="slotWorkModeButton" type="button"
+        aria-labelledby="slotWorkModeLabel slotWorkModeValue" aria-controls="slotModeOptions" aria-expanded="false">
+        <span id="slotWorkModeValue">${esc(choices.find(([key])=>key===mode)?.[1]??choices[0][1])}</span>${icons.down}
+      </button>
+      <div class="slot-mode-options" id="slotModeOptions" role="radiogroup" aria-labelledby="slotWorkModeLabel" hidden>
+        ${choices.map(([key,label])=>`<button type="button" role="radio" data-slot-mode="${key}" aria-checked="${mode===key}" class="${mode===key?'selected':''}">
+          <span>${esc(label)}</span><span class="slot-mode-indicator" aria-hidden="true"></span></button>`).join('')}
+      </div>
+      <div id="slotIntervals">${intervalField('slotWorkHours',mode==='intervals'?work:[],mode==='intervals'?actual.workingMin:null)}</div>
+      <div id="slotTotal">${field('slotWorkTotal','Часы фактической работы',mode==='total'?String(actual.workingMin/60).replace('.',','):'',{unit:'ч',full:true})}</div>
+      ${pauses.length?`<p class="hint">Сохранённая пауза: ${pauses.map(i=>clock(i.start)+'–'+clock(i.end)).join(', ')}</p>`:''}
+      ${unknown.length?`<p class="hint">Неизвестное окно: ${unknown.map(i=>clock(i.start)+'–'+clock(i.end)).join(', ')}</p>`:''}`;
+    const modeInput=$('#slotWorkMode'), modeButton=$('#slotWorkModeButton'),options=$('#slotModeOptions');
+    const closeOptions=()=>{ options.hidden=true;modeButton.setAttribute('aria-expanded','false'); };
+    const show=()=>{$('#slotIntervals').hidden=modeInput.value!=='intervals';$('#slotTotal').hidden=modeInput.value!=='total';};
     bindIntervals(host);
-    const show=()=>{$('#slotIntervals').hidden=$('#slotWorkMode').value!=='intervals';$('#slotTotal').hidden=$('#slotWorkMode').value!=='total';};
     show();
-    $('#slotWorkMode').addEventListener('change',()=>{workingDirty=true;show();});
+    modeButton.addEventListener('click',()=>{
+      options.hidden=!options.hidden;
+      modeButton.setAttribute('aria-expanded',String(!options.hidden));
+    });
+    options.addEventListener('click',event=>{
+      const option=event.target.closest('[data-slot-mode]');
+      if(!option)return;
+      if(modeInput.value!==option.dataset.slotMode){
+        modeInput.value=option.dataset.slotMode;
+        $('#slotWorkModeValue').textContent=choices.find(([key])=>key===modeInput.value)?.[1]??choices[0][1];
+        options.querySelectorAll('[data-slot-mode]').forEach(button=>{
+          const active=button.dataset.slotMode===modeInput.value;
+          button.setAttribute('aria-checked',String(active));
+          button.classList.toggle('selected',active);
+        });
+        modeInput.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+      closeOptions();
+      modeButton.focus();
+    });
+    host.addEventListener('keydown',event=>{if(event.key==='Escape'&&!options.hidden){event.preventDefault();closeOptions();modeButton.focus();}});
+    modeInput.addEventListener('change',()=>{workingDirty=true;show();});
     $('#slotWorkHours').addEventListener('input',()=>{workingDirty=true;});
     $('#slotWorkTotal').addEventListener('input',()=>{workingDirty=true;});
   }

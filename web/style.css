@@ -1768,3 +1768,52 @@ dialog .button{margin:8px 0 0}
 .period-page .cycle-opening-fields input{min-height:48px;width:100%;font-variant-numeric:tabular-nums}
 .period-page .cycle-opening-fields .hint{font-size:11px;line-height:1.4;margin:3px 0 5px}
 .period-page .cycle-import-button{min-height:48px;width:100%;text-align:center;white-space:normal}
+
+/* Add Slot geometry repair: photo 29 Oct 2026. Scope strictly to form, preserve money math. */
+.form-page .form-grid{align-items:start;column-gap:12px;row-gap:18px}
+.form-page .form-grid>.field{min-width:0;align-self:start;gap:8px}
+.form-page .form-grid>.field:not(.form-date-field)>label{display:flex;align-items:flex-end;min-height:19px;line-height:1.35}
+.form-page .field-box{position:relative;min-height:54px;display:flex;align-items:stretch;width:100%}
+.form-page .form-grid .field-box input[type="text"]{
+  width:100%;min-height:54px;height:54px;margin:0;
+  padding:12px 45px 12px 15px!important;
+  line-height:1.25;font-family:system-ui,-apple-system,Roboto,sans-serif!important;
+  font-size:19px!important;font-weight:650!important;font-variant-numeric:tabular-nums;
+  text-align:left;letter-spacing:0;box-sizing:border-box
+}
+.form-page .form-grid .field-box .orders-input{padding-right:79px!important}
+.form-page .form-grid .field-box input::placeholder{font-size:14px;font-weight:400;letter-spacing:0;color:var(--muted);opacity:.76}
+.form-page .form-grid .field-box .field-unit{
+  display:flex;align-items:center;justify-content:flex-end;position:absolute;right:15px;top:0;
+  height:54px;transform:none;color:var(--muted);font-size:14px;line-height:1;font-weight:500
+}
+.form-page .form-grid .field-box .field-unit.orders{font-size:12px}
+.form-page .form-grid .field-note{line-height:1.35;min-height:18px;font-size:11px}
+.form-page .form-section-heading{margin-top:18px;padding-top:14px}
+.form-page .form-date-field .date-box{width:100%;min-height:54px;padding:12px 15px}
+.form-page .form-date-field .form-period{min-height:18px}
+.form-page .slot-working #slotWorkingEditor>.slot-mode-label{display:block;margin:6px 0 9px;font-size:13px;font-weight:650;color:var(--muted)}
+.form-page .slot-mode-button{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;min-height:54px;padding:10px 15px;border:1px solid var(--line);
+  border-radius:6px;background:var(--field);color:var(--ink);text-align:left;
+  font-size:15px;font-weight:650
+}
+.form-page .slot-mode-button[aria-expanded="true"]{border-color:var(--teal);outline:2px solid var(--teal);outline-offset:1px}
+.form-page .slot-mode-button svg{width:19px;height:19px;flex-shrink:0;color:var(--teal)}
+.form-page .slot-mode-options{
+  border:1px solid var(--line);border-radius:6px;background:var(--surface);
+  overflow:hidden;display:flex;flex-direction:column;margin:7px 0 13px
+}
+.form-page .slot-mode-options[hidden]{display:none!important}
+.form-page .slot-mode-options [role="radio"]{
+  width:100%;min-height:54px;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:12px 16px;border:0;border-bottom:1px solid var(--line);
+  background:transparent;color:var(--ink);font-size:15px;text-align:left
+}
+.form-page .slot-mode-options [role="radio"]:last-child{border-bottom:0}
+.form-page .slot-mode-options [role="radio"].selected{color:var(--teal);font-weight:750}
+.form-page .slot-mode-indicator{width:21px;height:21px;border:2px solid var(--muted);border-radius:50%;flex-shrink:0}
+.form-page .slot-mode-options [role="radio"].selected .slot-mode-indicator{border:6px solid var(--teal)}
+@media(max-width:374px){.form-page .form-grid{column-gap:9px}.form-page .form-grid .field-box input[type="text"]{padding-left:11px!important;font-size:17px!important}.form-page .form-grid .field-box .field-unit{right:10px}}
+:root[data-text-scale="large"] .form-page .form-grid{grid-template-columns:minmax(0,1fr)}
