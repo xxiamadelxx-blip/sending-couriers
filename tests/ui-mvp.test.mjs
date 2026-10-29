@@ -197,7 +197,7 @@ test('Add Slot form uses accessible in-app work-mode choice rather than Android 
  assert.doesNotMatch(page,/<select id="slotWorkMode"/,'native Android selector must not open a system popup');
  for(const s of ['id="slotWorkModeButton"','id="slotModeOptions"','role="radiogroup"','data-slot-mode="${key}"',"['unknown','Не указывать']","['intervals','Интервалы С—До']","['total','Итого за день']","['rest','Выходной']"])
    assert.ok(page.includes(s),s);
- assert.ok(page.includes("$('#slotWorkMode').value=mode"),'real mode state is retained for save');
+ assert.ok(page.includes('id="slotWorkMode" type="hidden" value="${mode}"'),'the mode is tracked as a real form control for save');
  assert.ok(page.includes('workingDirty=true'),'mode changes must be tracked as user edits');
 });
 test('Add Slot form has aligned responsive money fields and no dash placeholders',()=>{
