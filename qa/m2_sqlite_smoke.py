@@ -75,7 +75,7 @@ def main():
                     path=copy_database(directory)
                     result=verify(path,fixture)
                     break
-                except (AssertionError, sqlite3.Error, TypeError) as exc:
+                except (AssertionError, sqlite3.Error, TypeError, subprocess.CalledProcessError) as exc:
                     last=exc
                     time.sleep(1)
             else:
