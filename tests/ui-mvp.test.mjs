@@ -164,8 +164,10 @@ test('Period day totals use independent calculateDay facts, not forecast or Home
  assert.match(section,/periodDayMarkup\(s\.entries,date=>calculateDay\(state,date\)/);
  assert.doesNotMatch(section,/money\(s\.grossUserIncome\)/);
  assert.doesNotMatch(section,/id="periodReward"/);
- assert.match(section,/querySelectorAll\('\.period-slot-edit'\)/);
- assert.match(section,/form\(button\.dataset\.entry,'period'\)/);
+ // Period edit listeners are delegated in the module's final render setup,
+ // outside periodDetails() and the section slice above.
+ assert.match(app,/querySelectorAll\('\.period-slot-edit'\)/);
+ assert.match(app,/form\(button\.dataset\.entry,'period'\)/);
 });
 test('approved History: day reward plus full per-slot fields and separate edit by stable id',()=>{
  const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
