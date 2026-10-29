@@ -1519,3 +1519,235 @@ dialog .button{margin:8px 0 0}
 /* Match the short browser startup state to the native launch mark. */
 .splash-mark{width:108px;height:108px;flex:none}
 .splash h1{font-size:28px;line-height:1.04;text-transform:uppercase;letter-spacing:-.055em;font-weight:900}
+
+
+/* Owner-directed Period redesign · 29 Oct 2026.
+   A period is an editable chronological ledger, not another Home dashboard.
+   Source values come from calculateDay and the original entry records.
+   Main Home, bottom navigation, gauge and financial model are untouched. */
+.period-page .period-notice{margin:5px 0 9px}
+.period-page .period-notice .payment-status{
+  position:static;
+  display:flex;
+  align-items:flex-start;
+  width:100%;
+  margin:0;
+  border-radius:5px;
+  padding:11px 12px;
+  background:var(--surface);
+  box-shadow:none;
+}
+.period-page .period-notice .payment-status strong{font-size:13px;line-height:1.3}
+.period-page .period-notice .payment-status p{font-size:12px;line-height:1.4;margin-top:3px}
+.period-page .period-cycle-compact{
+  margin:8px 0 0;
+  padding:12px 14px 9px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:4px;
+  color:var(--ink);
+}
+.period-page .period-cycle-compact .cycle-header{
+  display:flex;
+  flex-direction:row;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:8px;
+}
+.period-page .period-cycle-compact .cycle-header h2{
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.3;
+  font-weight:800;
+}
+.period-page .period-cycle-compact .cycle-header span{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.3;
+  text-align:right;
+}
+.period-page .period-cycle-compact progress{
+  display:block;
+  width:100%;
+  height:5px;
+  margin:9px 0 2px;
+  accent-color:var(--teal);
+}
+.period-page .period-cycle-compact .cycle-config{
+  margin:3px 0 0;
+  padding:0;
+  border:0;
+}
+.period-page .period-cycle-compact #configureCycle{
+  display:flex;
+  min-height:37px;
+  align-items:center;
+  justify-content:space-between;
+  padding:5px 0;
+  color:var(--teal);
+  font-size:12px;
+  line-height:1.3;
+  border:0;
+  font-weight:650;
+}
+.period-page .period-cycle-compact #configureCycle svg{width:18px;height:18px;flex-shrink:0}
+.period-page .period-cycle-compact .cycle-config form{padding:10px 0 5px}
+.period-page .period-days{margin:19px 0 0}
+.period-page .period-days-heading{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:10px;
+  margin:0 0 11px;
+}
+.period-page .period-days-heading h2{
+  color:var(--ink);
+  font-size:22px;
+  line-height:1.2;
+  font-weight:850;
+  letter-spacing:-.025em;
+}
+.period-page .period-days-list{display:flex;flex-direction:column;gap:10px}
+.period-page .period-day{
+  margin:0;
+  border:1px solid var(--line);
+  background:var(--console-hero);
+  border-radius:4px;
+  color:var(--console-hero-ink);
+  overflow:hidden;
+}
+.period-page .period-day summary{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.04fr) 22px;
+  gap:10px;
+  min-height:83px;
+  padding:12px 12px 13px;
+  align-items:center;
+  cursor:pointer;
+  list-style:none;
+}
+.period-page .period-day summary::-webkit-details-marker{display:none}
+.period-page .period-day-title,
+.period-page .period-day-figures{min-width:0;display:flex;flex-direction:column;gap:6px}
+.period-page .period-day-title{
+  color:var(--console-hero-ink);
+  font-size:16px;
+  font-weight:800;
+  line-height:1.3;
+}
+.period-page .period-day-title small,
+.period-page .period-day-figures small{
+  color:var(--console-label);
+  font-size:11px;
+  font-weight:500;
+  line-height:1.3;
+}
+.period-page .period-day-figures{text-align:right}
+.period-page .period-day-figures strong{
+  color:var(--console-hero-ink);
+  font-family:system-ui,-apple-system,Roboto,sans-serif;
+  font-size:clamp(17px,5.5vw,24px);
+  font-weight:850;
+  line-height:1.2;
+  font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere;
+}
+.period-page .period-day-chevron{color:var(--teal);display:flex;align-items:center;justify-content:center}
+.period-page .period-day-chevron svg{width:19px;height:19px;transition:transform .15s}
+.period-page .period-day[open] .period-day-chevron svg{transform:rotate(180deg)}
+.period-page .period-day-slots{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:11px 11px 13px;
+  border-top:1px solid var(--line);
+}
+.period-page .period-day-slot{
+  min-width:0;
+  border:1px solid var(--line);
+  background:var(--surface);
+  border-radius:4px;
+  padding:12px 12px 10px;
+}
+.period-page .period-slot-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:10px;
+}
+.period-page .period-slot-header strong{font-size:15px;line-height:1.3;color:var(--ink)}
+.period-page .period-slot-edit{
+  display:flex;
+  gap:3px;
+  align-items:center;
+  min-height:41px;
+  padding:7px 3px 7px 10px;
+  border:0;
+  background:none;
+  color:var(--teal);
+  font-size:13px;
+  font-weight:700;
+  line-height:1.3;
+  white-space:nowrap;
+}
+.period-page .period-slot-edit svg{width:16px;height:16px}
+.period-page .period-slot-facts{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:11px 12px;
+  margin:0;
+  padding-top:10px;
+  border-top:1px solid var(--line);
+}
+.period-page .period-slot-facts>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.period-page .period-slot-facts dt{color:var(--muted);font-size:11px;line-height:1.4}
+.period-page .period-slot-facts dd{
+  margin:0;
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.3;
+  font-weight:750;
+  font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere;
+}
+.period-page .period-slot-note{
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px solid var(--line);
+  font-size:12px;
+  color:var(--muted);
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.period-page .period-no-days{
+  padding:22px 16px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  background:var(--surface);
+}
+.period-page .period-no-days h2{font-size:18px;font-weight:750}
+.period-page .period-no-days p{margin-top:8px;color:var(--muted);font-size:13px}
+.period-page .period-actions{margin:15px 0 0;gap:7px}
+.period-page .period-actions #periodHistory{
+  background:transparent;
+  color:var(--teal);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:8px 12px;
+  min-height:44px;
+  font-weight:650;
+  font-size:13px;
+}
+.period-page .period-actions .export-action{color:var(--teal)}
+:root[data-theme="light"] .period-page .period-cycle-compact{
+  color:var(--ink);
+  background:var(--surface);
+}
+:root[data-theme="light"] .period-page .period-cycle-compact .cycle-header h2{color:var(--ink)}
+:root[data-theme="light"] .period-page .period-cycle-compact .cycle-header span{color:var(--muted)}
+@media(max-width:374px){
+  .period-page .period-day summary{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 19px;gap:6px;padding:10px}
+  .period-page .period-day-title{font-size:15px}
+  .period-page .period-day-figures strong{font-size:17px}
+}
