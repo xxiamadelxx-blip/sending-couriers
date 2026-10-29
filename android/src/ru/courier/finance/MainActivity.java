@@ -202,13 +202,20 @@ public final class MainActivity extends Activity {
     }
     private void mirrorFacts(String serialized) {
         if (serialized == null || serialized.isEmpty()) return;
-        factMirrorExecutor.execute(() -> {
-            try { factMirrorDatabase.mirrorLegacy(serialized); }
-            catch (Exception error) {
-                // Never log the user's private financial JSON or block saving it.
-                Log.e("CourierSQLite", "M2 shadow copy failed: " + error.getClass().getSimpleName());
-            }
-        });
+        // During recovery or a legacy JVM probe, the mirror might not yet be
+        // initialized. Saving the existing primary store must never fail here.
+        if (factMirrorExecutor == null || factMirrorDatabase == null) return;
+        try {
+            factMirrorExecutor.execute(() -> {
+                try { factMirrorDatabase.mirrorLegacy(serialized); }
+                catch (Exception error) {
+                    // Never log private financial content or reject a valid save.
+                    Log.e("CourierSQLite", "M2 shadow copy failed: " + error.getClass().getSimpleName());
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // Activity is closing. The next launch replays the committed JSON.
+        }
     }
 
     public final class NativeBridge {
