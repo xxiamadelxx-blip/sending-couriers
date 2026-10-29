@@ -47,7 +47,11 @@ def verify(db_path, fixture):
         assert money["reward"]==150000 and money["tip"]==9000 and money["tax"]==8400, money
         assert con.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]==1
         assert con.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
-        return {"slots":len(slots),"orders_raw":0,"orders_aggregated":total,"reward_kopecks":money["reward"],"audit_events":1}
+        version=con.execute("PRAGMA user_version").fetchone()[0]
+        assert version==2, "SQLite v1 -> v2 migration must finish with user_version=2"
+        views={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='view'")}
+        assert "active_aggregate_order_counts" in views and len(views)>=7, views
+        return {"slots":len(slots),"orders_raw":0,"orders_aggregated":total,"reward_kopecks":money["reward"],"audit_events":1,"sqlite_version":version}
     finally:
         con.close()
 
@@ -81,6 +85,38 @@ def main():
             else:
                 raise AssertionError(f"M2 DB never passed after Android launch, pass {pass_no}: {last}")
         print("PASS: real Android M2 database migration pass", pass_no+1, result,flush=True)
+    # Exercise a genuine Android SQLiteOpenHelper onUpgrade(1, 2):
+    # turn the disposable test database back into the pre-v2 schema on disk,
+    # restart the exact production Activity, and prove the v2 views reappear.
+    adb("shell","am","force-stop",PKG)
+    with tempfile.TemporaryDirectory() as directory:
+        dbfile=copy_database(directory)
+        with sqlite3.connect(str(dbfile)) as con:
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            con.execute("PRAGMA journal_mode=DELETE")
+            names=[row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='view'")]
+            assert len(names)>=7, names
+            for name in names:
+                assert name.startswith("active_"), "Never drop an unrelated view"
+                con.execute('DROP VIEW "'+name+'"')
+            con.execute("PRAGMA user_version=1")
+            con.commit()
+            assert con.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+        run_as("rm","-f","databases/courier_facts_v1.db-wal","databases/courier_facts_v1.db-shm")
+        run_as("sh","-c","cat > databases/courier_facts_v1.db",input=dbfile.read_bytes())
+    adb("shell","am","start","-n",PKG+"/.MainActivity")
+    with tempfile.TemporaryDirectory() as directory:
+        last=None
+        for _ in range(25):
+            try:
+                result=verify(copy_database(directory),fixture)
+                print("PASS: real Android onUpgrade v1→v2 preserved facts",result,flush=True)
+                break
+            except (AssertionError, sqlite3.Error, TypeError, subprocess.CalledProcessError) as exc:
+                last=exc
+                time.sleep(1)
+        else:
+            raise AssertionError(f"Android v1-to-v2 upgrade failed: {last}")
     adb("shell","am","force-stop",PKG)
 
 if __name__=="__main__":
