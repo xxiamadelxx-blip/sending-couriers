@@ -1761,3 +1761,10 @@ dialog .button{margin:8px 0 0}
 .period-page .period-cycle-compact .cycle-bonus-metrics strong{display:block;font-size:clamp(17px,5vw,23px);font-weight:850;font-variant-numeric:tabular-nums;line-height:1.28;letter-spacing:-.025em;overflow-wrap:anywhere;margin-top:4px}
 .period-page .period-cycle-compact #cyclePremium{color:var(--teal)}
 .period-page .period-cycle-compact .cycle-bonus-note{font-size:11px;line-height:1.4;color:var(--muted);margin:7px 0 2px;overflow-wrap:anywhere}
+
+/* 12-week opening gross income, scoped to the already approved Period card. */
+.period-page .cycle-opening-fields{border-top:1px solid var(--line);margin:10px 0 4px;padding-top:11px;display:flex;flex-direction:column;gap:7px}
+.period-page .cycle-opening-fields label{font-size:12px;font-weight:750;color:var(--ink)}
+.period-page .cycle-opening-fields input{min-height:48px;width:100%;font-variant-numeric:tabular-nums}
+.period-page .cycle-opening-fields .hint{font-size:11px;line-height:1.4;margin:3px 0 5px}
+.period-page .cycle-import-button{min-height:48px;width:100%;text-align:center;white-space:normal}

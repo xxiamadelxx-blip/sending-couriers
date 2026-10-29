@@ -172,6 +172,28 @@ function percentage(amount, percent) {
 function requiredOrderCount(hundredths, pace) { return Number((BigInt(hundredths) * BigInt(Math.round(pace*1000)) + 99999n) / 100000n); }
 function reachesPace(hundredths, orders, pace) { return BigInt(orders)*100000n >= BigInt(hundredths)*BigInt(Math.round(pace*1000)); }
 export function emptyState() { return { schemaVersion: SCHEMA_VERSION, entries: [], closures: {}, settings: normalizeSettings(), forecast:emptyForecast() }; }
+function normalizeCycleOpening(raw, anchor) {
+  if (raw == null) return null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Проверьте накопленную сумму за 12 недель.');
+  if (!anchor) throw new Error('Сначала укажите начало 12-недельного цикла.');
+  const cycleStart = String(raw.cycleStart ?? '');
+  const through = String(raw.through ?? '');
+  if (cycleStart !== anchor) throw new Error('Накопленная сумма относится к другому 12-недельному циклу.');
+  const end = isoDate(dateMillis(cycleStart) + 83 * DAY);
+  dateMillis(through);
+  if (through < cycleStart || through > end) throw new Error('Дата накопленного дохода должна быть внутри выбранного цикла.');
+  if (raw.grossIncome == null || String(raw.grossIncome).trim() === '') throw new Error('Введите сумму накопленного общего дохода.');
+  const grossIncome = parseMoney(raw.grossIncome, 'Накопленный общий доход');
+  const source = raw.source ?? 'manual';
+  if (!['manual','chatgpt'].includes(source)) throw new Error('Неизвестный источник накопленного дохода.');
+  return {cycleStart,through,grossIncome,source};
+}
+export function parseCycleIncomeReport(report) {
+  if (!report || typeof report !== 'object' || Array.isArray(report) || report.type !== 'courier-12week-income-v1')
+    throw new Error('Неверный формат отчёта: нужен JSON courier-12week-income-v1.');
+  return normalizeCycleOpening({cycleStart:report.cycleStart,through:report.through,
+    grossIncome:report.grossIncome,source:'chatgpt'},report.cycleStart);
+}
 function normalizeSettings(input) {
   const start = input?.premiumCycleStart;
   if (start != null && start !== '') dateMillis(start);
@@ -182,6 +204,7 @@ function normalizeSettings(input) {
   const theme = input?.theme ?? 'dark';
   if (!['dark','light'].includes(theme)) throw new Error('Выберите дневную или ночную тему.');
   return { premiumCycleStart: start == null || start === '' ? null : start,
+    cycleOpening: normalizeCycleOpening(input?.cycleOpening, start),
     soundEnabled: input?.soundEnabled ?? true, hapticsEnabled: input?.hapticsEnabled ?? true, theme, paymentRules:normalizePaymentRules(input?.paymentRules) };
 }
 export function updateSettings(state, input) {
@@ -264,14 +287,20 @@ export function forecastFinances(state, start, overrides = {}, clockDate = today
 }
 export function calculatePremiumCycle(state, date = today()) {
   const anchor = state.settings?.premiumCycleStart;
-  if (!anchor) return { status: 'unconfigured', start: null, end: null, premium: null, totalIncome: null, hourlyBase: null, hours: null, entries: [], missingHours: 0, elapsedDays: 0, cycleNumber: null, boundaryEntries: [], boundaryNote: '', breakdown:[] };
+  if (!anchor) return { status: 'unconfigured', start: null, end: null, premium: null, totalIncome: null, hourlyBase: null, hours: null, entries: [], missingHours: 0, elapsedDays: 0, cycleNumber: null, boundaryEntries: [], boundaryNote: '', breakdown:[], opening:null, openingPercent:null, excludedCount:0 };
   const stamp = dateMillis(date), first = dateMillis(anchor);
   const cycleNumber = Math.max(0, Math.floor((stamp - first) / (84 * DAY)));
   const startStamp = first + cycleNumber * 84 * DAY;
   const start = isoDate(startStamp), end = isoDate(startStamp + 83 * DAY);
   const beforeStart = stamp < first;
   const entries = state.entries.filter(e => e.date >= start && e.date <= end).slice().sort(entryOrder);
-  const known = entries.filter(e => e.dailyHours != null);
+  // The opening balance already includes every date through its cutoff.
+  // Keep original entries untouched, exclude them from the premium only.
+  const opening = state.settings?.cycleOpening?.cycleStart === start && !beforeStart ? state.settings.cycleOpening : null;
+  const openingPercent = opening ? paymentTermsFor(state,opening.through).cycleBonusPercent : null;
+  const eligible = opening ? entries.filter(e=>e.date > opening.through) : entries;
+  const excludedCount = entries.length - eligible.length;
+  const known = eligible.filter(e => e.dailyHours != null);
   const hours = known.length ? known.reduce((acc, e) => acc + Math.round(e.dailyHours * 100), 0) / 100 : null;
   const grouped = new Map();
   for (const entry of known) { const key = periodFor(entry.date).id; const rows=grouped.get(key)??[];rows.push(entry);grouped.set(key,rows); }
@@ -293,9 +322,14 @@ export function calculatePremiumCycle(state, date = today()) {
     });
   });
   const hourlyBase = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.hourlyBase*100),0)/100;
-  const totalIncome = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.totalIncome*100),0)/100;
-  const premium = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)/100;
-  const boundaryEntries = state.entries.filter(e => {
+  const totalIncome = !opening && hours == null ? null : (
+    (opening ? Math.round(opening.grossIncome*100) : 0) + breakdown.reduce((sum,b)=>sum+Math.round(b.totalIncome*100),0)
+  )/100;
+  const premium = !opening && hours == null ? null : (
+    (opening ? Math.round(percentage(opening.grossIncome,openingPercent)*100) : 0) +
+    breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)
+  )/100;
+  const boundaryEntries = eligible.filter(e => {
     const legacy = e.legacyReading;
     if (legacy?.interpretation !== 'cumulative' || legacy.hoursEdited || !(e.dailyHours > 0)) return false;
     const from = legacy.fromDate ? isoDate(dateMillis(legacy.fromDate) + DAY) : periodFor(legacy.date).start;
@@ -304,8 +338,8 @@ export function calculatePremiumCycle(state, date = today()) {
   });
   const boundaryNote = boundaryEntries.length ? 'Старые накопительные интервалы пересекают границу цикла или перенесены на другую дату. Часы отнесены по датам записей; точно разделить их по границе невозможно. Премия за 12 недель — оценка.' : '';
   return {
-    status: beforeStart ? 'not-started' : 'estimate', start, end, entries, hours, hourlyBase, totalIncome:beforeStart?null:totalIncome,
-    premium: beforeStart ? null : premium, breakdown, missingHours: entries.length - known.length,
+    status: beforeStart ? 'not-started' : 'estimate', start, end, entries, hours, hourlyBase, opening, openingPercent, excludedCount, totalIncome:beforeStart?null:totalIncome,
+    premium: beforeStart ? null : premium, breakdown, missingHours: eligible.length - known.length,
     elapsedDays: Math.min(84, Math.max(0, Math.floor((stamp - startStamp) / DAY) + 1)), cycleNumber: cycleNumber + 1,
     boundaryEntries, boundaryNote
   };
@@ -521,7 +555,16 @@ export function mergeImport(state, incoming) {
       rules.set(rule.effectivePeriodStart,existing??rule);
     }
   }
-  const settings = normalizeSettings({ ...state.settings, ...(incoming.settings ?? {}), paymentRules:[...rules.values()], premiumCycleStart: currentStart ?? incomingStart });
+  const currentOpening = state.settings?.cycleOpening ?? null;
+  const incomingOpening = incoming.settings?.cycleOpening != null ? parsed.settings.cycleOpening : null;
+  if (currentOpening && incomingOpening && (
+    currentOpening.cycleStart !== incomingOpening.cycleStart ||
+    currentOpening.through !== incomingOpening.through ||
+    Math.round(currentOpening.grossIncome*100) !== Math.round(incomingOpening.grossIncome*100)
+  )) throw new Error('В копии другая накопленная сумма за 12 недель. Исправьте её вручную перед импортом. Записи не изменены.');
+  const settings = normalizeSettings({ ...state.settings, ...(incoming.settings ?? {}),
+    paymentRules:[...rules.values()], premiumCycleStart: currentStart ?? incomingStart,
+    cycleOpening:currentOpening ?? incomingOpening });
   const byId = new Map(state.entries.map(e => [e.id, e]));
   const oldInput = incoming.schemaVersion !== SCHEMA_VERSION && !(Array.isArray(incoming) ? incoming : incoming.entries).some(e => e?.id != null);
   for (const row of parsed.entries) {
@@ -578,7 +621,8 @@ export function markdownReport(state, id, exportDate = today()) {
     `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база по ставкам дат записей, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
     `- Начало 12-недельного отсчёта: ${state.settings?.premiumCycleStart ?? 'не настроено'}.`,
     `- Цикл 12 недель: ${cycle.start ? `${cycle.start} — ${cycle.end}` : 'не настроен'}.`,
-    `- Почасовая база за 12 недель: ${money(cycle.hourlyBase)}. Общий доход цикла (база + чаевые + отдельные бонусы): ${money(cycle.totalIncome)}. Расчётная премия по ставкам периодов: ${money(cycle.premium)}. Выплата премии не подтверждена.`,
+    `- Почасовая база введённых слотов за 12 недель: ${money(cycle.hourlyBase)}. Общий доход цикла (включая стартовую накопленную сумму): ${money(cycle.totalIncome)}. Расчётная премия по ставкам периодов: ${money(cycle.premium)}. Выплата премии не подтверждена.`,
+    `- Накопленный доход из ${cycle.opening?.source === 'chatgpt' ? 'отчёта ChatGPT' : 'ручного ввода'}: ${cycle.opening ? money(cycle.opening.grossIncome) : 'не задан'}. Включительно по: ${cycle.opening?.through ?? '—'}. Старых слотов, исключённых во избежание двойного счёта: ${cycle.excludedCount}.`,
     '- Премия за темп считается от почасовой базы. Премия за 12 недель — от общего дохода (база + чаевые + отдельные бонусы) по условиям дат записей. Обе премии не прибавляются повторно к общему доходу и не подтверждают фактическую выплату.',
     `- Записей цикла без часов: ${cycle.missingHours}; сумма известна только по введённым часам.`, '',
     ...(cycle.boundaryNote ? [`- Внимание: ${cycle.boundaryNote}`, `- Проверьте интервалы записей: ${cycle.boundaryEntries.map(e => `${e.id} (дата записи ${e.date}, прежний интервал ${e.legacyReading.fromDate ?? 'с начала двухнедельного периода'} — ${e.legacyReading.date})`).map(mdSafe).join('; ')}.`, ''] : []),

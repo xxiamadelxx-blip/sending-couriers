@@ -1,7 +1,7 @@
 import {
   today, periodFor, shiftPeriod, formatDate, periodLabel, emptyState, normalizeState,
   calculate, calculateDay, newEntryId, hoursText, money, paceText, reserveText,
-  upsertEntry, mergeImport, parseMoney, parseHours, markdownReport, deductionChecks,
+  upsertEntry, mergeImport, parseCycleIncomeReport, parseMoney, parseHours, markdownReport, deductionChecks,
   TAX_PERCENT_MIN, TAX_PERCENT_MAX, PARK_COMMISSION_PERCENT,
   calculatePremiumCycle, updateSettings, setPaymentTerms, paymentTermsFor,
   goalText, percentText, APP_VERSION
@@ -175,7 +175,7 @@ function financeHint(s) {
   return `Оценка по введённым часам при итоговом темпе от ${goalText(s.terms.basePace)}.${s.hoursRecorded < s.entries.length ? ` Часы внесены для ${s.hoursRecorded} из ${s.entries.length} записей.` : ''}${s.hiddenMinutes ? ' Запас учитывает округление прежних часов до целого числа.' : ''}`;
 }
 function cycleBonusLabel(cycle, terms) {
-  const rates = [...new Set(cycle.breakdown.map(row => row.cycleBonusPercent))];
+  const rates = [...new Set([...cycle.breakdown.map(row => row.cycleBonusPercent), ...(cycle.openingPercent == null ? [] : [cycle.openingPercent])])];
   return rates.length > 1 ? 'За 12 недель' : `За 12 недель · ${percentText(rates[0] ?? terms.cycleBonusPercent)}%`;
 }
 function orderWord(value) {
@@ -241,6 +241,7 @@ function periodDetails() {
   if(!leaveForecast())return;
   app.className = 'period-page'; view = 'period'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
+  const opening = state.settings.cycleOpening;
   // The Period tab is for correcting day/slot facts, not duplicating Home KPIs.
   // Every displayed day total comes from the same existing calculateDay model.
   const daily=periodDayMarkup(s.entries,date=>calculateDay(state,date),
@@ -258,14 +259,24 @@ function periodDetails() {
         <div><span>Общий доход цикла</span><strong id="cycleTotalIncome">${esc(money(cycle.totalIncome))}</strong></div>
         <div><span>${esc(cycleBonusLabel(cycle,s.terms))}</span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
       </div>
-      <p class="cycle-bonus-note">${!cycle.start ? 'Укажите дату начала цикла.' : cycle.status === 'not-started' ? 'Цикл ещё не начался.' : cycle.totalIncome == null ? 'Пока нет дохода по известным часам.' : 'Расчётная премия, выплата не подтверждена.'}${cycle.missingHours ? ` Записей без часов: ${cycle.missingHours}.` : ''}${cycle.boundaryNote ? ' Есть старые интервалы: расчёт приблизительный.' : ''}</p>
+      <p class="cycle-bonus-note">${!cycle.start ? 'Укажите дату начала цикла.' : cycle.status === 'not-started' ? 'Цикл ещё не начался.' : cycle.totalIncome == null ? 'Пока нет дохода по известным часам.' : 'Расчётная премия, выплата не подтверждена.'}${cycle.opening ? ` Включено накопленное до ${esc(formatDate(cycle.opening.through))}; ${cycle.excludedCount} старых записей не посчитаны повторно.` : ''}${cycle.missingHours ? ` Записей без часов: ${cycle.missingHours}.` : ''}${cycle.boundaryNote ? ' Есть старые интервалы: расчёт приблизительный.' : ''}</p>
       ${cycle.start ? `<progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress>` : ''}
-      <details id="cycleConfig" class="cycle-config"><summary id="configureCycle">${cycle.start ? 'Изменить дату начала' : 'Указать дату начала'}${icons.down}</summary>
+      <details id="cycleConfig" class="cycle-config"><summary id="configureCycle">Настройки премии и накопленного дохода${icons.down}</summary>
         <form id="settingsForm" novalidate>
           <div class="field cycle-start"><label for="premiumCycleStart">Начало первого цикла</label><input type="date" id="premiumCycleStart" name="premiumCycleStart" min="1900-01-01" max="2200-10-09" value="${esc(state.settings.premiumCycleStart ?? '')}"></div>
           <p class="hint settings-preview" id="cyclePreview"></p>
+          <div class="cycle-opening-fields">
+            <label for="cycleOpeningGross">Общий доход, накопленный до даты (₽)</label>
+            <input type="text" id="cycleOpeningGross" inputmode="decimal" placeholder="Например, 100000,50" value="${esc(opening?.grossIncome ?? '')}">
+            <label for="cycleOpeningThrough">По какую дату включительно</label>
+            <input type="date" id="cycleOpeningThrough" value="${esc(opening?.through ?? '')}">
+            <p class="hint">Сумма за период с начала 12 недель по указанную дату. Старые записи до этой даты не прибавятся повторно. Для новых дней подсчёт продолжится автоматически.</p>
+            <button class="button quiet cycle-import-button" id="importCycleReport" type="button">Загрузить отчёт ChatGPT (JSON)</button>
+            <input id="cycleReportFile" type="file" accept=".json,application/json" hidden>
+            <p class="hint">Отчёт ChatGPT: JSON с type «courier-12week-income-v1», cycleStart, through и grossIncome.</p>
+          </div>
           <div class="error" id="settingsError" role="alert" hidden></div>
-          <button class="button primary" id="saveSettings" type="submit">Сохранить дату</button>
+          <button class="button primary" id="saveSettings" type="submit">Сохранить накопленный доход</button>
         </form>
       </details>
     </section>
@@ -282,9 +293,26 @@ function periodDetails() {
     } catch (error) { $('#cyclePreview').textContent = error.message; }
   }
   $('#premiumCycleStart').addEventListener('input', previewCycle); previewCycle();
+  function cycleOpeningInput(){
+    const gross=$('#cycleOpeningGross').value.trim(),through=$('#cycleOpeningThrough').value;
+    if (!gross && !through) return null;
+    if (!gross || !through) throw new Error('Укажите и накопленную сумму, и дату её окончания.');
+    return {cycleStart:$('#premiumCycleStart').value,through,grossIncome:gross,
+      source:opening && gross.replace(/\\s/g,'').replace(',','.')===String(opening.grossIncome) && through===opening.through ? opening.source : 'manual'};
+  }
+  $('#importCycleReport').addEventListener('click',()=>{
+    if(Native) Native.importData(); else $('#cycleReportFile').click();
+  });
+  $('#cycleReportFile').addEventListener('change',async e=>{
+    const selected=e.target.files?.[0]; e.target.value='';
+    if(selected) window.receiveImport(await selected.text());
+  });
   $('#settingsForm').addEventListener('submit', event => {
     event.preventDefault();
-    try { persist(updateSettings(state, { premiumCycleStart: $('#premiumCycleStart').value })); periodDetails(); notify('Дата сохранена'); }
+    try {
+      const saved=updateSettings(state,{premiumCycleStart:$('#premiumCycleStart').value,cycleOpening:cycleOpeningInput()});
+      persist(saved);periodDetails();notify('Доход сохранён, премия пересчитана');
+    }
     catch (error) { $('#settingsError').textContent = error.message; $('#settingsError').hidden = false; feedback('error'); }
   });
   $('#periodExport').addEventListener('click', openExportDialog);
@@ -622,6 +650,17 @@ $('#closeExport').addEventListener('click', () => $('#exportDialog').close());
 window.receiveImport = text => {
   try {
     const raw = JSON.parse(text);
+    if(raw?.type === 'courier-12week-income-v1') {
+      const opening = parseCycleIncomeReport(raw);
+      periodDetails();
+      $('#cycleConfig').open=true;
+      $('#premiumCycleStart').value=opening.cycleStart;
+      $('#cycleOpeningThrough').value=opening.through;
+      $('#cycleOpeningGross').value=String(opening.grossIncome);
+      // Import is staged, not silently saved. The owner must confirm in settings.
+      notify('Отчёт загружен. Проверьте сумму и нажмите «Сохранить»');
+      return;
+    }
     const checked = normalizeState(raw);
     pendingImport = raw;
     const entriesCount = checked.entries.length;

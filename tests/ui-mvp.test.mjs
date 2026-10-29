@@ -185,3 +185,9 @@ test('Period secondary 12-week tracker shows gross-income and 5% premium separat
  for(const name of ['Общий доход цикла','cycleTotalIncome','cyclePremium','Расчётная премия, выплата не подтверждена']) assert.ok(section.includes(name),name);
  assert.match(css,/\.period-page \.period-cycle-compact #cyclePremium\{color:var\(--teal\)\}/);
 });
+
+test('Period cycle settings offer saved gross opening amount and ChatGPT JSON import with date cutoff',()=>{
+ const p=app.slice(app.indexOf('function periodDetails()'),app.indexOf('function settings()'));
+ for(const token of ['cycleOpeningGross','cycleOpeningThrough','importCycleReport','Сохранить накопленный доход','cycleOpeningInput()'])assert.ok(p.includes(token),token);
+ assert.ok(p.indexOf('class="period-days"') < p.indexOf('cycle-opening-fields'));
+});
