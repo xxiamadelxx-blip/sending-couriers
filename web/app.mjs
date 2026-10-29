@@ -81,6 +81,14 @@ function openForecast(initial = 'today') {
   warmForecast();
 }
 window.receiveForecastImport = text => { if(view!=='forecast')openForecast(); forecastScreen.receiveImport(text); };
+window.receiveVideoImport = raw => {
+  try {
+    const result = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
+    if (!result.ok) notify(result.error || 'Не удалось обработать видео.');
+    else if (result.duplicate) notify('Это видео уже обработано.');
+    else notify(`Разобрано кадров: ${result.frames}. Неизвестных экранов: ${result.unknownScreens}. Факты не изменены.`);
+  } catch { notify('Импорт видео завершился без читаемого результата.'); }
+};
 window.receiveWeather = text => {
   try {
     const p=weatherLocation(state.forecast);if(!p.weatherCity)return;
@@ -613,10 +621,11 @@ function history() {
       <p class="history-section-label">Работа с данными</p>
       <button class="button history-action" id="historyExport" type="button" aria-label="Экспорт для ChatGPT"><span class="history-action-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Экспорт для ChatGPT</strong><small>Отчёт о выбранном периоде</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
       <button class="button history-action" id="importData" type="button" aria-label="Импорт JSON"><span class="history-action-icon history-import-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Импорт JSON</strong><small>Восстановить записи из копии</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
+      <button class="button history-action" id="importVideo" type="button" aria-label="Импорт видео Яндекс Про"><span class="history-action-icon history-import-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Импорт видео Яндекс Про</strong><small>Распознать кадры локально</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
       <p class="history-section-label history-period-label">Действие с периодом</p>
       <button class="button history-action history-period-action" id="closePeriod" type="button" aria-label="${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}"><span class="history-action-icon" aria-hidden="true">${icon.calendar}</span><span class="history-action-copy"><strong>${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</strong></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
     </div>`;
-  const filledFooter = `<div class="history-footer"><button class="button quiet export-action" id="historyExport" type="button">${icons.share}Экспорт для ChatGPT</button><button class="button quiet" id="closePeriod" type="button">${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</button><button class="button quiet" id="importData" type="button">Импорт JSON</button></div>`;
+  const filledFooter = `<div class="history-footer"><button class="button quiet export-action" id="historyExport" type="button">${icons.share}Экспорт для ChatGPT</button><button class="button quiet" id="closePeriod" type="button">${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</button><button class="button quiet" id="importData" type="button">Импорт JSON</button><button class="button quiet" id="importVideo" type="button">Импорт видео</button></div>`;
   app.innerHTML = `${heading('История')}${navigation()}<div class="history-list">${groups.join('')}</div>${empty ? '<section class="empty-history"><h2>Пока нет записей</h2><p>Добавьте часы, заказы и выплаты за слот через «+» внизу экрана.</p></section>' : ''}
     ${s.closure ? `<p class="closure-fact">Период закрыт. Финальная доплата: ${esc(money(s.closure.finalAdjustment))}</p>` : ''}
     ${empty ? emptyFooter : filledFooter}<input type="file" id="importInput" accept=".json,application/json" hidden>`;
@@ -628,6 +637,10 @@ function history() {
   $('#closePeriod').addEventListener('click', closure);
   $('#importData').addEventListener('click', () => {
     if (Native) Native.importData(); else $('#importInput').click();
+  });
+  $('#importVideo').addEventListener('click', () => {
+    if (typeof Native?.importVideo === 'function') Native.importVideo();
+    else notify('Импорт видео доступен после обновления Android-приложения.');
   });
   $('#importInput').addEventListener('change', async event => {
     const file = event.target.files[0]; if (!file) return;

@@ -44,7 +44,7 @@ import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
     private static final String ORIGIN = "https://appassets.androidplatform.net";
-    private static final int SAVE_FILE = 101, IMPORT_FILE = 102, IMPORT_FORECAST = 103;
+    private static final int SAVE_FILE = 101, IMPORT_FILE = 102, IMPORT_FORECAST = 103, IMPORT_VIDEO = 104;
     private static final int MAX_BYTES = 8_000_000;
     private WebView web;
     private FrameLayout root;
@@ -277,6 +277,16 @@ public final class MainActivity extends Activity {
             } catch (Exception ignored) { return false; }
         }
         @JavascriptInterface public void ready() { runOnUiThread(() -> { if (launch != null) { root.removeView(launch); launch = null; } }); }
+        @JavascriptInterface public void importVideo() {
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent();
+                    intent.setClassName(MainActivity.this, "ru.courier.finance.M4VideoImportActivity");
+                    intent.putExtra("m4.returnResult", true);
+                    startActivityForResult(intent, IMPORT_VIDEO);
+                } catch (Exception e) { error("Импорт видео появится после обновления приложения."); }
+            });
+        }
         @JavascriptInterface public void importData() {
             runOnUiThread(() -> {
                 try {
@@ -352,6 +362,14 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == IMPORT_VIDEO) {
+            if (resultCode == RESULT_OK && data != null) {
+                String payload = data.getStringExtra("m4.video.result");
+                if (payload != null && web != null) web.evaluateJavascript(
+                    "window.receiveVideoImport && window.receiveVideoImport(" + JSONObject.quote(payload) + ")", null);
+            }
+            return;
+        }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         if (requestCode == SAVE_FILE && pendingSave != null) {
