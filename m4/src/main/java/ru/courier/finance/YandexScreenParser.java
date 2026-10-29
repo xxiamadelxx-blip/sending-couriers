@@ -76,7 +76,6 @@ public final class YandexScreenParser {
     private static final Pattern BARE_AMOUNT=Pattern.compile(
         "^\\s*([-+−]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?)\\s*$");
     private static final Pattern DECIMAL=Pattern.compile("(?<![\\p{L}\\p{N}])([0-9]{1,3}(?:[.,][0-9]{1,4})?)(?![\\p{L}\\p{N}])");
-    private static final Pattern TIME_ONLY=Pattern.compile("^\\s*([01]?\\d|2[0-3]):([0-5]\\d)\\s*$");
     private static final Pattern TIME_PREFIX=Pattern.compile("^\\s*([01]?\\d|2[0-3]):([0-5]\\d)(?!\\d)(.*)$");
     private static final Pattern DATE_TIME=Pattern.compile("(?<!\\d)(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
     private static final Pattern DAY_FIRST_DATE_TIME=Pattern.compile("(?<!\\d)(\\d{1,2})[./-](\\d{1,2})[./-](20\\d{2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
@@ -176,7 +175,8 @@ public final class YandexScreenParser {
             Matcher time=TIME_PREFIX.matcher(lines[i]);
             if(!time.matches()) continue;
             if(time.group(3).trim().matches("^[-–—].*")) continue;
-            Long amount=parseCurrencyMoney(lines[i]); String coefficient=null;
+            // Strip the clock first so "12:34 100 ₽" cannot be misread as "34 100 ₽".
+            Long amount=parseCurrencyMoney(time.group(3)); String coefficient=null;
             if(normalize(lines[i]).contains("коэф")) coefficient=parseDecimal(valueAfterInline(lines[i],".*?коэф(?:ф)?\\.?(?:\\s+спроса)?"));
             for(int j=i+1;j<lines.length&&j<=i+4;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
@@ -218,7 +218,8 @@ public final class YandexScreenParser {
             Matcher time=TIME_PREFIX.matcher(lines[i]);
             if(!time.matches()) continue;
             if(time.group(3).trim().matches("^[-–—].*")) continue;
-            Long amount=parseCurrencyMoney(lines[i]);
+            // Strip the clock before money parsing for the same HH:MM/thousands ambiguity.
+            Long amount=parseCurrencyMoney(time.group(3));
             for(int j=i+1;j<lines.length&&j<=i+3;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()) break;
                 amount=parseCurrencyMoney(lines[j]);
