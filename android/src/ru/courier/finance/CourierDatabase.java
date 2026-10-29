@@ -120,6 +120,7 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             if(existing.moveToFirst()&&fingerprint.equals(existing.getString(0))) return false;
         }
         String when=nowUtc();
+        int expectedAggregates=0, expectedFinanceRows=0;
         db.beginTransaction();
         try {
             // Future manual facts/imports have different source_kind and survive.
@@ -144,10 +145,11 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                 slot.put("created_at",created);slot.put("updated_at",updated);
                 db.insertOrThrow("legacy_slot_facts",null,slot);
                 if(count!=null) {
+                    expectedAggregates++;
                     ContentValues aggregate=new ContentValues();
                     aggregate.put("id","legacy:"+id);aggregate.put("date",date);
                     aggregate.put("slot_id",id);aggregate.put("order_count",count);
-                    aggregate.put("source_kind","legacy_state");aggregate.put("confidence","reported");
+                    aggregate.put("source_kind","legacy_state");aggregate.put("confidence","unverified_legacy");
                     aggregate.put("created_at",created);aggregate.put("updated_at",updated);
                     db.insertOrThrow("aggregate_order_counts",null,aggregate);
                 }
@@ -156,11 +158,12 @@ public final class CourierDatabase extends SQLiteOpenHelper {
                 for(int m=0;m<keys.length;m++) {
                     Long cents=kopecksOrNull(e,keys[m]);
                     if(cents==null) continue;
+                    expectedFinanceRows++;
                     ContentValues financial=new ContentValues();
                     financial.put("id","legacy:"+id+":"+kinds[m]);financial.put("date",date);
                     financial.put("slot_id",id);financial.put("kind",kinds[m]);
                     financial.put("amount_kopecks",cents);
-                    financial.put("source_kind","legacy_state");financial.put("confidence","reported");
+                    financial.put("source_kind","legacy_state");financial.put("confidence","unverified_legacy");
                     financial.put("created_at",created);financial.put("updated_at",updated);
                     db.insertOrThrow("financial_ledger",null,financial);
                 }
@@ -171,23 +174,36 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             snapshot.put("mirrored_at",when);
             db.insertWithOnConflict("legacy_state",null,snapshot,SQLiteDatabase.CONFLICT_REPLACE);
 
-            // Fixed source ID; changes in source are recorded as versions via audit_events.
-            db.execSQL("DELETE FROM import_sources WHERE id='legacy-state'"); // no FKs to this source yet
+            // Fixed source ID; update in-place, preserving future FK references.
             ContentValues source=new ContentValues();
             source.put("id","legacy-state");source.put("sha256",fingerprint);
             source.put("source_kind","legacy_state");source.put("parser_version","legacy-json-v6");
             source.put("status","mirrored");source.put("created_at",when);source.put("updated_at",when);
-            db.insertOrThrow("import_sources",null,source);
+            if(db.update("import_sources",source,"id=?",new String[]{"legacy-state"})==0)
+                db.insertOrThrow("import_sources",null,source);
             ContentValues audit=new ContentValues();
             audit.put("id","legacy-revision:"+fingerprint);
             audit.put("happened_at",when);audit.put("action","legacy_mirrored");
             audit.put("record_type","legacy_state");audit.put("record_id","1");
             audit.put("source_kind","legacy_state");
             db.insertWithOnConflict("audit_events",null,audit,SQLiteDatabase.CONFLICT_IGNORE);
+            // Verify parity while the transaction can still be rolled back.
+            long slots=countQuery(db,"SELECT COUNT(*) FROM legacy_slot_facts WHERE source='legacy_state'");
+            long aggregated=countQuery(db,"SELECT COUNT(*) FROM aggregate_order_counts WHERE source_kind='legacy_state'");
+            long financial=countQuery(db,"SELECT COUNT(*) FROM financial_ledger WHERE source_kind='legacy_state'");
+            if(slots!=entries.length()||aggregated!=expectedAggregates||financial!=expectedFinanceRows)
+                throw new SQLiteException("M2 mirror count mismatch; rolled back");
             db.setTransactionSuccessful();
             return true;
         } finally {
             db.endTransaction();
+        }
+    }
+
+    private static long countQuery(SQLiteDatabase db, String query) {
+        try(Cursor cursor=db.rawQuery(query,null)) {
+            if(!cursor.moveToFirst()) throw new SQLiteException("M2 parity query missing");
+            return cursor.getLong(0);
         }
     }
 
