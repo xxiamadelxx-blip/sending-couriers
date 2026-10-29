@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v3";
+    public static final String VERSION = "yandex-pro-video-extract-v4";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -91,12 +91,16 @@ public final class YandexScreenParser {
     }
 
     private static final Pattern CURRENCY_AMOUNT=Pattern.compile(
-        "(?<![\\p{N}])([-+−]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?)\\s*(?:₽|руб(?:лей|ля)?\\.?|р\\.?)(?![\\p{L}])",
+        "(?<![\\p{N}])([-+−–—]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?)\\s*(?:₽|руб(?:лей|ля)?\\.?|р\\.?|p)(?![\\p{L}])",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
     private static final Pattern BARE_AMOUNT=Pattern.compile(
         "^\\s*([-+−]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?)\\s*$");
+    // OCR can render the ruble glyph as one isolated digit after a decimal amount.
+    // Accept this only in an already identified money label/row context.
+    private static final Pattern BARE_AMOUNT_WITH_OCR_CURRENCY=Pattern.compile(
+        "^\\s*([-+−–—]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)[.,]\\d{2})\\s+\\d\\s*$");
     private static final Pattern DECIMAL=Pattern.compile("(?<![\\p{L}\\p{N}])([0-9]{1,3}(?:[.,][0-9]{1,4})?)(?![\\p{L}\\p{N}])");
-    private static final Pattern TIME_PREFIX=Pattern.compile("^\\s*([01]?\\d|2[0-3]):([0-5]\\d)(?!\\d)(.*)$");
+    private static final Pattern TIME_PREFIX=Pattern.compile("^\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)(?!\\d)(.*)$");
     private static final Pattern DATE_TIME=Pattern.compile("(?<!\\d)(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
     private static final Pattern DAY_FIRST_DATE_TIME=Pattern.compile("(?<!\\d)(\\d{1,2})[./-](\\d{1,2})[./-](20\\d{2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
 
@@ -195,17 +199,16 @@ public final class YandexScreenParser {
     }
 
     private static void addOrderRows(String[] lines,String slotId,List<Candidate> out) {
-        if(!containsLine(lines,"заказ") && !containsLine(lines,"orders")) return;
         for(int i=0;i<lines.length;i++) {
             Matcher time=TIME_PREFIX.matcher(lines[i]);
             if(!time.matches()) continue;
             if(time.group(3).trim().matches("^[-–—].*")) continue;
             // Strip the clock first so "12:34 100 ₽" cannot be misread as "34 100 ₽".
-            Long amount=parseCurrencyMoney(time.group(3)); String coefficient=null;
+            Long amount=parseRowMoney(time.group(3)); String coefficient=null;
             if(normalize(lines[i]).contains("коэф")) coefficient=parseDecimal(valueAfterInline(lines[i],".*?коэф(?:ф)?\\.?(?:\\s+спроса)?"));
             for(int j=i+1;j<lines.length&&j<=i+4;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()||isSectionBoundary(lines[j])) break;
-                if(amount==null) amount=parseCurrencyMoney(lines[j]);
+                if(amount==null) amount=parseRowMoney(lines[j]);
                 if(coefficient==null&&normalize(lines[j]).startsWith("коэф"))
                     coefficient=parseDecimal(valueAfterInline(lines[j],"коэф(?:ф)?\\.?(?:\\s+спроса)?"));
                 if(amount!=null&&coefficient!=null) break;
@@ -225,16 +228,20 @@ public final class YandexScreenParser {
         String periods=periodsSeen(lines);
         addText(candidate,"period_tabs_seen",periods);
 
-        int rewardLine=indexOfLabel(lines,"вознаграждение");
         Long total=null;
-        for(int i=0;i<lines.length&&(rewardLine<0||i<rewardLine);i++) {
-            total=parseCurrencyMoney(lines[i]);
-            if(total!=null) break;
+        Pattern rewardLabel=Pattern.compile("вознаграждение|earnings?",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+        for(String line:lines) {
+            Matcher reward=rewardLabel.matcher(line);
+            boolean hasReward=reward.find();
+            String beforeReward=hasReward?line.substring(0,reward.start()):line;
+            total=parseCurrencyMoney(beforeReward);
+            if(total==null&&!hasReward) total=parseCurrencyMoney(line);
+            if(total!=null||hasReward) break;
         }
         addMoney(candidate,"total_kopecks",total);
-        addMoney(candidate,"reward_kopecks",parseLabeledMoney(valueAfter(lines,"вознаграждение|earnings?")));
-        addMoney(candidate,"partner_commission_kopecks",parseLabeledMoney(valueAfter(lines,"комиссия\\s+партн(?:е|ё)ра|partner\\s+commission")));
-        addMoney(candidate,"tax_kopecks",parseLabeledMoney(valueAfter(lines,"налог|tax")));
+        addMoney(candidate,"reward_kopecks",parseLabeledMoney(valueAfterAnywhere(lines,"вознаграждение|earnings?")));
+        addMoney(candidate,"partner_commission_kopecks",parseLabeledMoney(valueAfterAnywhere(lines,"комиссия\\s+партн(?:е|ё)ра|partner\\s+commission")));
+        addMoney(candidate,"tax_kopecks",parseLabeledMoney(valueAfterAnywhere(lines,"налог|tax")));
         addIfPresent(out,candidate);
     }
 
@@ -244,10 +251,10 @@ public final class YandexScreenParser {
             if(!time.matches()) continue;
             if(time.group(3).trim().matches("^[-–—].*")) continue;
             // Strip the clock before money parsing for the same HH:MM/thousands ambiguity.
-            Long amount=parseCurrencyMoney(time.group(3));
+            Long amount=parseRowMoney(time.group(3));
             for(int j=i+1;j<lines.length&&j<=i+3;j++) {
                 if(TIME_PREFIX.matcher(lines[j]).matches()) break;
-                amount=parseCurrencyMoney(lines[j]);
+                if(amount==null) amount=parseRowMoney(lines[j]);
                 if(amount!=null) break;
             }
             if(amount==null) continue;
@@ -281,6 +288,19 @@ public final class YandexScreenParser {
         return null;
     }
 
+    private static String valueAfterAnywhere(String[] lines,String labelRegex) {
+        Pattern label=Pattern.compile("(?:^|\\s)(?:"+labelRegex+")\\s*[:：]?\\s*(.*?)\\s*$",
+            Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+        for(int i=0;i<lines.length;i++) {
+            Matcher matcher=label.matcher(lines[i]);
+            if(!matcher.find()) continue;
+            String value=matcher.group(1).trim();
+            if(!value.isEmpty()) return value;
+            if(i+1<lines.length) return lines[i+1].trim();
+        }
+        return null;
+    }
+
     private static String valueAfterInline(String line,String labelRegex) {
         Matcher matcher=Pattern.compile("^\\s*(?:"+labelRegex+")\\s*[:：]?\\s*(.*?)\\s*$",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE).matcher(line);
         return matcher.matches()?matcher.group(1).trim():null;
@@ -290,12 +310,6 @@ public final class YandexScreenParser {
         String normalizedNeedle=normalize(needle);
         for(String line:lines) if(normalize(line).contains(normalizedNeedle)) return true;
         return false;
-    }
-
-    private static int indexOfLabel(String[] lines,String needle) {
-        String normalizedNeedle=normalize(needle);
-        for(int i=0;i<lines.length;i++) if(normalize(lines[i]).startsWith(normalizedNeedle)) return i;
-        return -1;
     }
 
     private static boolean isSectionBoundary(String line) {
@@ -363,7 +377,13 @@ public final class YandexScreenParser {
         Long withCurrency=parseCurrencyMoney(value);
         if(withCurrency!=null) return withCurrency;
         Matcher bare=BARE_AMOUNT.matcher(value);
-        return bare.matches()?toKopecks(bare.group(1)):null;
+        if(bare.matches()) return toKopecks(bare.group(1));
+        Matcher ocrCurrency=BARE_AMOUNT_WITH_OCR_CURRENCY.matcher(value);
+        return ocrCurrency.matches()?toKopecks(ocrCurrency.group(1)):null;
+    }
+
+    private static Long parseRowMoney(String value) {
+        return parseLabeledMoney(value);
     }
 
     private static Long parseCurrencyMoney(String value) {
@@ -375,7 +395,7 @@ public final class YandexScreenParser {
     private static Long toKopecks(String amount) {
         try {
             String normalized=amount.replace(" ","").replace("\u00a0","").replace("\u202f","")
-                .replace("−","-").replace(',','.');
+                .replace("−","-").replace("–","-").replace("—","-").replace(',','.');
             return new BigDecimal(normalized).setScale(2,RoundingMode.UNNECESSARY).movePointRight(2).longValueExact();
         } catch(Exception ignored) { return null; }
     }

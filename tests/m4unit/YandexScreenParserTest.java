@@ -75,6 +75,33 @@ public final class YandexScreenParserTest {
         assertEquals("1.0",field(row,"demand_coefficient"));
     }
 
+    @Test public void extractsScrollingOrderRowsWithoutAVisibleListHeading() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "Яндекс Про\nЗаказы сегодня: 8\n18.22 Ресторан\n100,00 P\n"
+                +"18:41 Кафе\n250,50 2");
+        assertEquals(YandexScreenParser.ScreenType.ORDERS,result.screenType);
+        assertEquals(2,count(result,"ORDER_LIST_ROW"));
+        assertEquals("18:22",field(find(result,"ORDER_LIST_ROW"),"order_time"));
+        assertEquals("10000",field(find(result,"ORDER_LIST_ROW"),"amount_kopecks"));
+    }
+
+    @Test public void parsesInlineIncomeLabelsAndOcrCurrencyVariants() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "Yandex Pro\nДоход\n2 459,36 P\n"
+                +"Вознаграждение 2 600 P — Комиссия партнёра -130 P\nНалог -10,64 2");
+        assertEquals(YandexScreenParser.ScreenType.INCOME,result.screenType);
+        YandexScreenParser.Candidate summary=find(result,"INCOME_SUMMARY");
+        assertNotNull(summary);
+        assertEquals("245936",field(summary,"total_kopecks"));
+        assertEquals("260000",field(summary,"reward_kopecks"));
+        assertEquals("-13000",field(summary,"partner_commission_kopecks"));
+        assertEquals("-1064",field(summary,"tax_kopecks"));
+
+        YandexScreenParser.Result ambiguous=YandexScreenParser.parse(
+            "Yandex Pro\nДоход\nВознаграждение 2 600 ₽\nКомиссия партнёра -130 2");
+        assertNull(field(find(ambiguous,"INCOME_SUMMARY"),"partner_commission_kopecks"));
+    }
+
     @Test public void extractsIncomeTotalsCommissionsTaxAndVisibleLedgerRowsInKopecks() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "День Неделя Месяц\n2 459,36 ₽\nВознаграждение 2 600 ₽\n"
