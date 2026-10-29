@@ -36,7 +36,7 @@ public final class M2DeviceProbeActivity extends Activity {
     SQLiteDatabase db=store.getReadableDatabase();
     eq(count(db,"SELECT COUNT(*) FROM legacy_slot_facts"),2,"two slots");
     eq(count(db,"SELECT COUNT(*) FROM orders"),initial?0:2,"no invented RAW and preserved prior import");
-    eq(count(db,"SELECT SUM(order_count) FROM aggregate_order_counts"),21,"21 aggregate orders");
+    eq(count(db,"SELECT SUM(order_count) FROM aggregate_order_counts"),initial?21:50,"21 legacy orders, plus separately sourced XLSX history on restart");
     eq(count(db,"SELECT SUM(accounted_hundredths) FROM legacy_slot_facts"),1400,"14 accounted hours");
     eq(count(db,"SELECT SUM(amount_kopecks) FROM financial_ledger WHERE kind='reward'"),210000,"kopecks exact");
     eq(count(db,"SELECT SUM(amount_kopecks) FROM financial_ledger WHERE kind='tip'"),7000,"tips separate");
