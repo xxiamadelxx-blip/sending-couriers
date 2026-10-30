@@ -127,7 +127,7 @@ public final class YandexScreenParser {
     // OCR can render the ruble glyph as one isolated digit after a decimal amount.
     // Accept this only in an already identified money label/row context.
     private static final Pattern BARE_AMOUNT_WITH_OCR_CURRENCY=Pattern.compile(
-        "^\\s*([-+−–—]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)[.,]\\d{2})\\s+\\d\\s*$");
+        "^\\s*([-+−–—]?\\s*(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)[.,]\\d{2})\\s*\\d\\s*(?:[>›»])?\\s*$");
     private static final Pattern DECIMAL=Pattern.compile("(?<![\\p{L}\\p{N}])([0-9]{1,3}(?:[.,][0-9]{1,4})?)(?![\\p{L}\\p{N}])");
     private static final Pattern TIME_PREFIX=Pattern.compile("^\\s*[•·|>›]*\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)(?!\\d)(.*)$");
     private static final Pattern DATE_TIME=Pattern.compile("(?<!\\d)(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");

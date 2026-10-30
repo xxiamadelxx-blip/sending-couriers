@@ -113,6 +113,36 @@ public final class YandexScreenParserTest {
         assertEquals("10000",field(find(result,"ORDER_LIST_ROW"),"amount_kopecks"));
     }
 
+    @Test public void acceptsAnOcrCurrencyDigitBeforeTheOrderChevron() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "Яндекс Про\nЗаказы\n18:41 250,50 2 >\nКафе коэф 1.0");
+        assertEquals(1,count(result,"ORDER_LIST_ROW"));
+        assertEquals("25050",field(find(result,"ORDER_LIST_ROW"),"amount_kopecks"));
+
+        result=YandexScreenParser.parse("Яндекс Про\nЗаказы\n18:42 250,502 >\nКафе коэф 1.0");
+        assertEquals("25050",field(find(result,"ORDER_LIST_ROW"),"amount_kopecks"));
+
+        YandexScreenParser.Result ambiguous=YandexScreenParser.parse(
+            "Яндекс Про\nЗаказы\n18:41 250,50 20 >\nКафе коэф 1.0");
+        assertEquals(0,count(ambiguous,"ORDER_LIST_ROW"));
+    }
+
+    @Test public void resolvesOneFrameMoneyMisreadByRepeatedFrameEvidence() {
+        String slot="Слот: 3300,00 ₽\n341681811\n33 заказа · 34,43 км\n"
+            +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00";
+        String wrong="Яндекс Про\nЗаказы\n21:11 3 100,00 P >\nТеремок коэф 1.0";
+        String right="Яндекс Про\nЗаказы\n21:11 100,00 P >\nТеремок коэф 1.0";
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        observations.add(observation(0,"slot",slot));
+        observations.add(observation(1,"wrong",wrong));
+        observations.add(observation(2,"right-1",right));
+        observations.add(observation(3,"right-2",right));
+        observations.add(observation(4,"right-3",right));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,2000,observations,2);
+        assertEquals(1,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        assertEquals("10000",field(find(video.uniqueCandidates(),"ORDER_LIST_ROW"),"amount_kopecks"));
+    }
+
     @Test public void recognizesSlotListWhenRussianLabelsAreTransliteratedByOcr() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "€ Cnor: 600,00P\n341681811\n© 07:30 — 22:00\n6 3aka3a + 10,0 KM\n"
@@ -249,6 +279,10 @@ public final class YandexScreenParserTest {
         for(YandexScreenParser.Candidate candidate:result.candidates)
             if(type.equals(candidate.candidateType)) count++;
         return count;
+    }
+
+    private static VideoImportProcessor.Observation observation(int index,String id,String text) {
+        return new VideoImportProcessor.Observation(index,index*500L,id,text,1f,YandexScreenParser.parse(text),null);
     }
 
     private static String field(YandexScreenParser.Candidate candidate,String name) {

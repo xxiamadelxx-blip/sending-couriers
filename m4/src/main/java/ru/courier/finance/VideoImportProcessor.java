@@ -23,12 +23,11 @@ public final class VideoImportProcessor {
     public static final long MAX_VIDEO_BYTES = 2L * 1024L * 1024L * 1024L;
     public static final long MAX_DURATION_MS = 30L * 60L * 1000L;
     public static final int MAX_FRAMES = 320;
-    // Keep a 720x1608 phone recording at native resolution; shrinking it to 430x960
-    // makes the small order-list text too difficult for the bundled OCR to read.
+    // Preserve the source phone resolution so the bundled OCR can read the small order-list text.
     private static final int MAX_BITMAP_SIDE = 1608;
-    // Dense sampling is required for a screen recording where the user scrolls
-    // through a long order list. Identical decoded frames are OCR'd only once.
-    private static final long MIN_SAMPLE_SPACING_MS = 500L;
+    // A 1.5 s cadence captures scrolling list rows while avoiding OCR on near-identical
+    // adjacent positions. Identical decoded frames are still OCR'd only once.
+    private static final long MIN_SAMPLE_SPACING_MS = 1500L;
 
     public interface Ocr {
         TesseractOcrEngine.Recognition recognize(Bitmap bitmap) throws Exception;
@@ -79,7 +78,30 @@ public final class VideoImportProcessor {
         private static final class SupportedCandidate {
             YandexScreenParser.Candidate candidate;
             int frames;
-            SupportedCandidate(YandexScreenParser.Candidate candidate) { this.candidate=candidate; frames=1; }
+            final Map<String,Integer> amountVotes=new HashMap<>();
+            SupportedCandidate(YandexScreenParser.Candidate candidate) {
+                this.candidate=candidate; frames=1; recordAmount(candidate);
+            }
+            void add(YandexScreenParser.Candidate next) {
+                candidate=candidate.mergeMissingFields(next); frames++; recordAmount(next);
+            }
+            private void recordAmount(YandexScreenParser.Candidate value) {
+                for(YandexScreenParser.Field field:value.fields) if("amount_kopecks".equals(field.name))
+                    amountVotes.put(field.value,amountVotes.containsKey(field.value)?amountVotes.get(field.value)+1:1);
+            }
+            void resolveAmountConsensus() {
+                if(amountVotes.size()<2) return;
+                String winner=null; int best=0,ties=0;
+                for(Map.Entry<String,Integer> vote:amountVotes.entrySet()) {
+                    if(vote.getValue()>best) { winner=vote.getKey(); best=vote.getValue(); ties=1; }
+                    else if(vote.getValue()==best) ties++;
+                }
+                if(ties!=1) return;
+                List<YandexScreenParser.Field> fields=new ArrayList<>();
+                for(YandexScreenParser.Field field:candidate.fields) fields.add(
+                    "amount_kopecks".equals(field.name)?new YandexScreenParser.Field(field.name,field.valueType,winner):field);
+                candidate=new YandexScreenParser.Candidate(candidate.candidateType,candidate.ruleScore,fields);
+            }
         }
 
         /**
@@ -100,8 +122,9 @@ public final class VideoImportProcessor {
                 String key=mergeKey(candidate,slotHint);
                 SupportedCandidate previous=unique.get(key);
                 if(previous==null) unique.put(key,new SupportedCandidate(candidate));
-                else { previous.candidate=previous.candidate.mergeMissingFields(candidate); previous.frames++; }
+                else previous.add(candidate);
             }
+            for(SupportedCandidate supported:unique.values()) supported.resolveAmountConsensus();
 
             Set<String> slotIds=new HashSet<>();
             YandexScreenParser.Candidate slot=null;
