@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v8";
+    public static final String VERSION = "yandex-pro-video-extract-v9";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -134,7 +134,9 @@ public final class YandexScreenParser {
     private static final Pattern DATE_TIME=Pattern.compile("(?<!\\d)(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
     private static final Pattern DAY_FIRST_DATE_TIME=Pattern.compile("(?<!\\d)(\\d{1,2})[./-](\\d{1,2})[./-](20\\d{2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
     private static final Pattern HOCR_START_TAG=Pattern.compile("<(?:div|span)\\b([^>]*)>",Pattern.CASE_INSENSITIVE);
-    private static final Pattern HOCR_WORD_SPAN=Pattern.compile("<span\\b([^>]*)>(.*?)</span>",Pattern.CASE_INSENSITIVE|Pattern.DOTALL);
+    // hOCR nests ocrx_word spans inside ocr_line spans. Match only leaf spans:
+    // starting at an outer span would consume the first word's closing tag.
+    private static final Pattern HOCR_WORD_SPAN=Pattern.compile("<span\\b([^>]*)>([^<>]*)</span>",Pattern.CASE_INSENSITIVE|Pattern.DOTALL);
     private static final Pattern HOCR_ATTRIBUTE=Pattern.compile("(?i)(?:^|\\s)([a-z_:][-a-z0-9_:]*)\\s*=\\s*(['\"])(.*?)\\2");
     private static final Pattern HOCR_BBOX=Pattern.compile("(?:^|\\s)bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)(?:[;\\s]|$)");
     private static final Pattern HOCR_TIME_WORD=Pattern.compile("^((?:[01]?\\d|2[0-3])[:.]([0-5]\\d))\\d?$");
@@ -359,6 +361,7 @@ public final class YandexScreenParser {
         String completed=valueAfter(lines,"завершение|окончание|время\\s+завершения");
         String slotId=slotId(lines);
         Long amount=parseLabeledMoney(header);
+        if(amount==null) amount=parseLabeledMoney(slotTitleAmount(header));
         String orderCount=parseSlotOrderCount(lines);
         String distanceKm=parseDistanceKm(lines);
 
@@ -545,8 +548,16 @@ public final class YandexScreenParser {
 
     private static int slotHeaderIndex(String[] lines) {
         for(int i=0;i+1<lines.length;i++)
-            if(lines[i+1].matches("\\s*\\d{6,12}\\s*")&&parseLabeledMoney(lines[i])!=null) return i;
+            if(lines[i+1].matches("\\s*\\d{6,12}\\s*")
+                    &&(parseLabeledMoney(lines[i])!=null||slotTitleAmount(lines[i])!=null)) return i;
         return -1;
+    }
+
+    private static String slotTitleAmount(String line) {
+        if(line==null) return null;
+        Matcher title=Pattern.compile("(?:^|\\s)слот\\s*[:：]\\s*(.+)$",
+            Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE).matcher(line);
+        return title.find()?title.group(1).trim():null;
     }
 
     private static boolean hasStandaloneNumericId(String[] lines) {

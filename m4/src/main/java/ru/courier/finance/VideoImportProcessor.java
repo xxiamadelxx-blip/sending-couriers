@@ -140,11 +140,22 @@ public final class VideoImportProcessor {
             int slotEnd=singleSlot==null?-1:minuteOfDateTime(value(slot,"completed_at"));
             boolean hasSlotRange=slotStart>=0&&slotEnd>slotStart;
 
+            // A single OCR frame can turn 11:57 into 14:57. Do not let that
+            // weak local peak make a real, twice-seen following row look like
+            // the reversal; leave the suspect for the slot count/total check.
+            Set<String> oneFrameSequenceOutliers=new HashSet<>();
+            for(Map.Entry<String,SupportedCandidate> entry:unique.entrySet())
+                if("ORDER_LIST_ROW".equals(entry.getValue().candidate.candidateType)
+                        &&entry.getValue().frames==1
+                        &&isOneFrameTimeReversal(entry.getValue().candidate,singleSlot,unique))
+                    oneFrameSequenceOutliers.add(entry.getKey());
+
             int forward=0,backward=0;
             for(Observation observation:observations) {
                 int previous=-1;
                 for(YandexScreenParser.Candidate candidate:observation.candidates) {
                     if(!eligibleRow(candidate,singleSlot,slotStart,slotEnd,hasSlotRange)) continue;
+                    if(oneFrameSequenceOutliers.contains(mergeKey(candidate,slotHint))) continue;
                     int minute=orderMinute(candidate);
                     if(previous>=0) {
                         int delta=minute-previous;
@@ -163,6 +174,7 @@ public final class VideoImportProcessor {
                     if(!eligibleRow(candidate,singleSlot,slotStart,slotEnd,hasSlotRange)) continue;
                     int minute=orderMinute(candidate);
                     String key=mergeKey(candidate,slotHint);
+                    if(oneFrameSequenceOutliers.contains(key)) continue;
                     SupportedCandidate supported=unique.get(key);
                     if(extreme>=0 && supported!=null && supported.frames<=2
                             && (ascending?minute<extreme-5:minute>extreme+5)) {
@@ -223,8 +235,8 @@ public final class VideoImportProcessor {
          * are stable. Drop it only when the other rows independently repeat and
          * removing exactly that candidate makes both the slot count and total match.
          */
-        private static void reconcileSingleWeakOrderOutlier(List<YandexScreenParser.Candidate> candidates,
-                                                              Map<String,SupportedCandidate> evidence) {
+        private void reconcileSingleWeakOrderOutlier(List<YandexScreenParser.Candidate> candidates,
+                                                       Map<String,SupportedCandidate> evidence) {
             YandexScreenParser.Candidate slot=null;
             Set<String> slotIds=new HashSet<>();
             for(SupportedCandidate supported:evidence.values()) {
@@ -252,16 +264,40 @@ public final class VideoImportProcessor {
                 SupportedCandidate support=null;
                 for(SupportedCandidate possible:evidence.values()) if(possible.candidate==row) { support=possible; break; }
                 if(support==null||support.frames>1) continue;
-                boolean allOtherRowsRepeat=true;
+                boolean allOtherRowsRepeat=true,allOtherRowsSeenTwice=true;
                 long amount=parseLong(value(row,"amount_kopecks"));
                 for(int j=0;j<rows.size();j++) if(j!=i) {
                     YandexScreenParser.Candidate other=rows.get(j); SupportedCandidate otherSupport=null;
                     for(SupportedCandidate possible:evidence.values()) if(possible.candidate==other) { otherSupport=possible; break; }
-                    if(otherSupport==null||otherSupport.frames<3) { allOtherRowsRepeat=false; break; }
+                    if(otherSupport==null||otherSupport.frames<3) allOtherRowsRepeat=false;
+                    if(otherSupport==null||otherSupport.frames<2) { allOtherRowsSeenTwice=false; break; }
                 }
-                if(allOtherRowsRepeat&&rows.size()-1==declared&&sum-amount==total) { removable=row; matches++; }
+                if((allOtherRowsRepeat||allOtherRowsSeenTwice&&isOneFrameTimeReversal(row,value(slot,"slot_id"),evidence))
+                        &&rows.size()-1==declared&&sum-amount==total) { removable=row; matches++; }
             }
             if(matches==1) candidates.remove(removable);
+        }
+
+        private boolean isOneFrameTimeReversal(YandexScreenParser.Candidate row,String slotId,
+                                               Map<String,SupportedCandidate> evidence) {
+            String key=mergeKey(row,slotId);
+            int minute=orderMinute(row);
+            for(Observation observation:observations) {
+                List<YandexScreenParser.Candidate> frameRows=new ArrayList<>();
+                for(YandexScreenParser.Candidate candidate:observation.candidates)
+                    if("ORDER_LIST_ROW".equals(candidate.candidateType)&&orderMinute(candidate)>=0)
+                        frameRows.add(candidate);
+                for(int i=1;i+1<frameRows.size();i++) {
+                    if(!key.equals(mergeKey(frameRows.get(i),slotId))) continue;
+                    YandexScreenParser.Candidate before=frameRows.get(i-1),after=frameRows.get(i+1);
+                    SupportedCandidate beforeSupport=evidence.get(mergeKey(before,slotId));
+                    SupportedCandidate afterSupport=evidence.get(mergeKey(after,slotId));
+                    if(beforeSupport==null||beforeSupport.frames<2||afterSupport==null||afterSupport.frames<2) continue;
+                    int left=orderMinute(before),right=orderMinute(after);
+                    if(left<minute-5&&right<minute-5 || left>minute+5&&right>minute+5) return true;
+                }
+            }
+            return false;
         }
 
         private static Integer parseInteger(String value) {

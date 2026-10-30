@@ -130,9 +130,12 @@ public final class YandexScreenParserTest {
     @Test public void pairsListTimesAndAmountsByHocrRowCoordinates() {
         String text="Слот: 300,00 ₽\n341681811\nЗаказы\n10:00\n10:30\n20:340\n100,00 ₽\n100,00 ₽\n100,00 ₽";
         String hocr="<div class='ocr_page' title='image \"screen.png\"; bbox 0 0 720 1608; ppageno 0'>"
-            +hocrWord("10:00",15,260,87,282)+hocrWord("100,00",546,261,633,285)
-            +hocrWord("10:30",15,384,87,406)+hocrWord("100,00",546,385,633,409)
-            +hocrWord("20:340",15,508,124,532)+hocrWord("100,00",546,509,633,533)
+            +"<span class='ocr_line'>"+hocrWord("10:00",15,260,87,282)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("100,00",546,261,633,285)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("10:30",15,384,87,406)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("100,00",546,385,633,409)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("20:340",15,508,124,532)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("100,00",546,509,633,533)+"</span>"
             +"</div>";
         YandexScreenParser.Result result=YandexScreenParser.parse(text,hocr);
         assertEquals(3,count(result,"ORDER_LIST_ROW"));
@@ -242,6 +245,36 @@ public final class YandexScreenParserTest {
         }
         assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("10:00","10:30","10:50")),times);
         assertEquals(30000,amount);
+    }
+
+    @Test public void readsSlotTotalWhenHeaderCurrencyIsAnOcrDigit() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "< Слот: 900,002\n339533360\n17:59 — 22:00\n9 заказов · 12,33 км\n"
+            +"Итого\n900,00 P\nИнформация по слоту\n"
+            +"Начало\n2026.10.13 17:59\nЗавершение\n2026.10.13 22:00");
+        YandexScreenParser.Candidate slot=find(result,"SLOT_DETAIL");
+        assertNotNull(slot);
+        assertEquals("339533360",field(slot,"slot_id"));
+        assertEquals("90000",field(slot,"slot_total_kopecks"));
+        assertEquals("9",field(slot,"slot_order_count"));
+    }
+
+    @Test public void removesOneFrameTimeReversalWhenAnotherRealRowHasOnlyTwoFrames() {
+        String slot="Слот: 300,00 ₽\n341681811\n3 заказа · 3 км\n"
+            +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00";
+        String first="Яндекс Про\nЗаказы\n10:00 100,00 ₽ >\n10:30 100,00 ₽ >\n11:00 100,00 ₽ >";
+        String second="Яндекс Про\nЗаказы\n10:00 100,00 ₽ >\n10:30 100,00 ₽ >";
+        String noisy="Яндекс Про\nЗаказы\n10:00 100,00 ₽ >\n10:30 100,00 ₽ >\n"
+            +"14:57 100,00 ₽ >\n11:00 100,00 ₽ >";
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,6000,
+            java.util.Arrays.asList(observation(0,"slot",slot),observation(1,"first",first),
+                observation(2,"second",second),observation(3,"noisy",noisy)),4);
+        assertEquals(3,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        java.util.Set<String> times=new java.util.HashSet<>();
+        for(YandexScreenParser.Candidate row:video.uniqueCandidates()) if("ORDER_LIST_ROW".equals(row.candidateType))
+            times.add(field(row,"order_time"));
+        assertFalse(times.contains("14:57"));
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("10:00","10:30","11:00")),times);
     }
 
     @Test public void parsesInlineIncomeLabelsAndOcrCurrencyVariants() {
