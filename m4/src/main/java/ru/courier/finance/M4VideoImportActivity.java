@@ -6,7 +6,9 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.content.pm.ApplicationInfo;
 import android.provider.OpenableColumns;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -90,6 +92,7 @@ public final class M4VideoImportActivity extends Activity {
                 }
                 VideoImportDatabase.PersistResult saved=new VideoImportDatabase(this).persist(analysis,mime);
                 M4ForecastFactWriter.ImportResult forecastFacts=M4ForecastFactWriter.importFacts(this,analysis);
+                logDebugCounts(analysis,forecastFacts);
                 JSONObject response=new JSONObject(); response.put("ok",true); response.put("duplicate",saved.duplicate);
                 response.put("frames",saved.frameCount); response.put("uniqueFrames",analysis.uniqueFramesOcr);
                 response.put("unknownScreens",saved.unknownScreenCount); response.put("durationMs",analysis.durationMs);
@@ -146,6 +149,48 @@ public final class M4VideoImportActivity extends Activity {
             if(cursor!=null && cursor.moveToFirst()) return cursor.getString(0);
         } catch(Exception ignored) { }
         return uri.getLastPathSegment()==null?"video.mp4":uri.getLastPathSegment();
+    }
+
+    private void logDebugCounts(VideoImportProcessor.Result analysis,M4ForecastFactWriter.ImportResult forecast) {
+        if((getApplicationInfo().flags&ApplicationInfo.FLAG_DEBUGGABLE)==0) return;
+        int rowCount=0;long rowTotal=0;YandexScreenParser.Candidate slot=null;
+        List<YandexScreenParser.Candidate> partialSlots=new ArrayList<>();
+        for(YandexScreenParser.Candidate candidate:analysis.uniqueCandidates()) {
+            if("ORDER_LIST_ROW".equals(candidate.candidateType)) {
+                rowCount++;
+                try { rowTotal+=Long.parseLong(candidateField(candidate,"amount_kopecks")); }
+                catch(Exception ignored) { }
+            } else if("SLOT_DETAIL".equals(candidate.candidateType)) {
+                if(candidateField(candidate,"slot_id")!=null) slot=slot==null?candidate:slot.mergeMissingFields(candidate);
+                else partialSlots.add(candidate);
+            }
+        }
+        for(YandexScreenParser.Candidate partial:partialSlots) if(slot!=null) slot=slot.mergeMissingFields(partial);
+        String reason=forecast.accepted?"accepted":debugReason(forecast.message);
+        Log.i("M4VideoQa","rows="+rowCount+",rowKopecks="+rowTotal
+            +",slotIdPresent="+(candidateField(slot,"slot_id")!=null)
+            +",slotCount="+candidateField(slot,"slot_order_count")
+            +",slotKopecks="+candidateField(slot,"slot_total_kopecks")
+            +",slotStartPresent="+(candidateField(slot,"started_at")!=null)
+            +",slotEndPresent="+(candidateField(slot,"completed_at")!=null)
+            +",writer="+reason);
+    }
+
+    private static String candidateField(YandexScreenParser.Candidate candidate,String name) {
+        if(candidate==null) return null;
+        for(YandexScreenParser.Field field:candidate.fields) if(name.equals(field.name)) return field.value;
+        return null;
+    }
+
+    private static String debugReason(String message) {
+        if(message==null) return "unknown";
+        if(message.startsWith("Данные карточки слота неполны")) return "slot_incomplete";
+        if(message.startsWith("Не распознана карточка слота")) return "slot_missing";
+        if(message.startsWith("Дата или время слота")) return "slot_time_invalid";
+        if(message.startsWith("Извлечено строк заказов")) return "count_mismatch";
+        if(message.startsWith("Сумма строк списка")) return "total_mismatch";
+        if(message.startsWith("В видео найдено несколько")) return "multiple_slots";
+        return "other";
     }
 
     private String extractionSummary(VideoImportProcessor.Result result,boolean candidatesSaved) {

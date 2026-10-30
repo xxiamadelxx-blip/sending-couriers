@@ -66,6 +66,7 @@ if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4"
       timeout 8s adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
       screen=$(timeout 5s adb shell cat "$window" 2>/dev/null || true)
       if grep -Fq "Распознано и сверено строк заказов: $expected из $expected" <<<"$screen"; then
+        adb logcat -d -s M4VideoQa:I | tail -2 || true
         adb shell run-as "$package" rm "files/$name"
         adb shell rm "/data/local/tmp/$name"
         echo "M4 REAL IMPORT PASS: $expected orders"
@@ -75,6 +76,7 @@ if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4"
           || grep -Fq 'text="Результат импорта видео"' <<<"$screen"; then
         progress=$(grep -oE 'Извлечено строк заказов: [0-9]+|строк списка — [0-9]+|На карточке слота указано заказов: [0-9]+' <<<"$screen" | head -3 | tr '\n' ';' || true)
         echo "M4 REAL FAIL: completed import dialog without accepted facts; ${progress}"
+        adb logcat -d -s M4VideoQa:I | tail -2 || true
         return 1
       fi
       if ((attempt % 6 == 0)); then
