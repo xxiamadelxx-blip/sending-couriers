@@ -37,7 +37,9 @@ class M4VideoSchemaTest(unittest.TestCase):
     def test_export_provider_authority_is_unique_for_each_qa_package(self):
         manifest = (ROOT / "android/AndroidManifest.xml").read_text(encoding="utf8")
         provider = (ROOT / "android/src/ru/courier/finance/ExportProvider.java").read_text(encoding="utf8")
-        self.assertIn('android:authorities="${applicationId}.exports"', manifest)
+        gradle = (ROOT / "app/build.gradle").read_text(encoding="utf8")
+        self.assertIn('android:authorities="ru.courier.finance.exports"', manifest)
+        self.assertIn('android:authorities="${applicationId}.exports"', gradle)
         self.assertIn('getContext().getPackageName()+".exports"', provider)
 
     def test_private_evidence_is_not_added_to_android_backup_allowlist(self):

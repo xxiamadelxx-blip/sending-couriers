@@ -6,6 +6,6 @@
     <activity android:name=".MainActivity" android:exported="true" android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:windowSoftInputMode="adjustResize">
       <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
     </activity>
-    <provider android:name=".ExportProvider" android:authorities="${applicationId}.exports" android:exported="false" android:grantUriPermissions="true" />
+    <provider android:name=".ExportProvider" android:authorities="ru.courier.finance.exports" android:exported="false" android:grantUriPermissions="true" />
   </application>
 </manifest>

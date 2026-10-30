@@ -33,8 +33,11 @@ tasks.register('stageCourierManifest') {
         manifest=manifest.replaceFirst(/ package="ru\.courier\.finance"/,'')
         manifest=manifest.replaceFirst(/ android:versionCode="29" android:versionName="1\.7\.15"/,'')
         manifest=manifest.replaceFirst(/\s*<uses-sdk[^>]*\/>/,'')
+        manifest=manifest.replace('android:authorities="ru.courier.finance.exports"','android:authorities="${applicationId}.exports"')
         if(manifest.contains('package="ru.courier.finance"') || !manifest.contains('</application>'))
             throw new GradleException('Cannot safely stage the existing Android manifest')
+        if(!manifest.contains('android:authorities="${applicationId}.exports"'))
+            throw new GradleException('Cannot stage a package-specific export provider authority')
         String activity='''
     <activity android:name=".M4VideoImportActivity" android:exported="true" android:label="Импорт видео Яндекс Про" android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|uiMode">
       <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="video/mp4"/></intent-filter>
