@@ -98,6 +98,35 @@ jobs:
           unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"
+      - name: Run offline video OCR probe in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-boot-timeout: 600
+          script: |
+            set -euo pipefail
+            adb install app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n ru.courier.finance.m4probe/ru.courier.finance.M4DeviceProbeActivity
+            for attempt in $(seq 1 90); do
+              adb shell uiautomator dump /sdcard/m4-window.xml >/dev/null 2>&1 || true
+              screen=$(adb shell cat /sdcard/m4-window.xml 2>/dev/null || true)
+              if printf '%s' "$screen" | grep -q "M4 OFFLINE VIDEO OCR QA PASS"; then
+                printf '%s\n' "$screen"
+                exit 0
+              fi
+              if printf '%s' "$screen" | grep -q "M4 OFFLINE VIDEO OCR QA FAIL"; then
+                printf '%s\n' "$screen"
+                exit 1
+              fi
+              sleep 2
+            done
+            adb shell cat /sdcard/m4-window.xml || true
+            adb logcat -d -s AndroidRuntime:E
+            exit 1
       - name: Publish installable M4 APK for local Android import
         uses: actions/upload-artifact@v4
         with:
