@@ -54,25 +54,20 @@ capture_screen m4-forecast-restart.png
 
 if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4" ]]; then
   import_real_video() {
-    local name="$1" file="$2" expected="$3" id="" rows="" screen=""
-    adb push "$file" "/sdcard/Movies/$name" >/dev/null
-    adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
-      -d "file:///sdcard/Movies/$name" >/dev/null
-    for ((scan=0; scan<20; scan++)); do
-      rows=$(adb shell content query --uri content://media/external/video/media \
-        --projection _id:_display_name --where "_display_name='$name'" 2>/dev/null || true)
-      id=$(sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' <<<"$rows" | head -1)
-      [[ -n "$id" ]] && break
-      sleep 2
-    done
-    [[ -n "$id" ]] || { echo "M4 REAL FAIL: MediaStore did not index the video"; return 1; }
+    local name="$1" file="$2" expected="$3" screen=""
+    # run-as is available only for this isolated debug APK. A file URI owned by
+    # the app exercises M4VideoImportActivity without relying on MediaStore scan.
+    adb push "$file" "/data/local/tmp/$name" >/dev/null
+    adb shell run-as "$package" cp "/data/local/tmp/$name" "files/$name"
     adb shell am start -W -a android.intent.action.SEND -t video/mp4 \
-      --eu android.intent.extra.STREAM "content://media/external/video/media/$id" \
-      -f 0x1 -n "$package/ru.courier.finance.M4VideoImportActivity" >/dev/null
+      -d "file:///data/user/0/$package/files/$name" \
+      -n "$package/ru.courier.finance.M4VideoImportActivity" >/dev/null
     for ((attempt=0; attempt<240; attempt++)); do
       adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
       screen=$(adb shell cat "$window" 2>/dev/null || true)
       if grep -Fq "Распознано и сверено строк заказов: $expected из $expected" <<<"$screen"; then
+        adb shell run-as "$package" rm "files/$name"
+        adb shell rm "/data/local/tmp/$name"
         echo "M4 REAL IMPORT PASS: $expected orders"
         return 0
       fi
