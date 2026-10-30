@@ -54,7 +54,7 @@ capture_screen m4-forecast-restart.png
 
 if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4" ]]; then
   import_real_video() {
-    local name="$1" file="$2" expected="$3" screen=""
+    local name="$1" file="$2" expected="$3" screen="" progress="" observed_progress=""
     # run-as is available only for this isolated debug APK. A file URI owned by
     # the app exercises M4VideoImportActivity without relying on MediaStore scan.
     adb push "$file" "/data/local/tmp/$name" >/dev/null
@@ -62,24 +62,29 @@ if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4"
     adb shell am start -W -a android.intent.action.SEND -t video/mp4 \
       -d "file:///data/user/0/$package/files/$name" \
       -n "$package/ru.courier.finance.M4VideoImportActivity" >/dev/null
-    for ((attempt=0; attempt<240; attempt++)); do
-      adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
-      screen=$(adb shell cat "$window" 2>/dev/null || true)
+    for ((attempt=0; attempt<180; attempt++)); do
+      timeout 8s adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
+      screen=$(timeout 5s adb shell cat "$window" 2>/dev/null || true)
       if grep -Fq "Распознано и сверено строк заказов: $expected из $expected" <<<"$screen"; then
         adb shell run-as "$package" rm "files/$name"
         adb shell rm "/data/local/tmp/$name"
         echo "M4 REAL IMPORT PASS: $expected orders"
         return 0
       fi
-      if grep -Fq 'Извлечено строк заказов:' <<<"$screen" \
-          || grep -Fq 'Неполные данные оставлены кандидатами' <<<"$screen" \
-          || grep -Fq 'Не удалось обработать видео' <<<"$screen"; then
-        echo "M4 REAL FAIL: import rejected by app"
+      if grep -Fq 'text="Импорт видео"' <<<"$screen" \
+          || grep -Fq 'text="Результат импорта видео"' <<<"$screen"; then
+        progress=$(grep -oE 'Извлечено строк заказов: [0-9]+|строк списка — [0-9]+|На карточке слота указано заказов: [0-9]+' <<<"$screen" | head -3 | tr '\n' ';' || true)
+        echo "M4 REAL FAIL: completed import dialog without accepted facts; ${progress}"
         return 1
       fi
-      sleep 3
+      if ((attempt % 6 == 0)); then
+        progress=$(grep -oE 'Кадров обработано: [0-9]+ из [0-9]+' <<<"$screen" | head -1 || true)
+        if [[ -n "$progress" ]]; then observed_progress="$progress"; echo "M4 REAL OCR PROGRESS: $progress";
+        else echo "M4 REAL UI: waiting for import result"; fi
+      fi
+      sleep 5
     done
-    echo "M4 REAL FAIL: import timed out"
+    echo "M4 REAL FAIL: import timed out ${observed_progress}"
     return 1
   }
 
