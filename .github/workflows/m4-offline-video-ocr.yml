@@ -4,7 +4,7 @@ on:
     branches: [m4/offline-video-ocr-20261029]
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: courier-m4-${{ github.ref }}
   cancel-in-progress: true
@@ -98,6 +98,13 @@ jobs:
           unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"
+      - name: Publish installable M4 APK for local Android import
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-user-testable-apk-${{ github.sha }}
+          path: app/build/outputs/apk/m4Qa/app-m4Qa.apk
+          retention-days: 1
+          if-no-files-found: error
       - name: Enable KVM group permissions for Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -112,67 +119,4 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           emulator-boot-timeout: 600
-          script: |
-            set -eu
-            adb install app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n ru.courier.finance.m4probe/ru.courier.finance.M4DeviceProbeActivity
-            for attempt in $(seq 1 90); do
-              adb shell uiautomator dump /sdcard/m4-window.xml >/dev/null 2>&1 || true
-              screen=$(adb shell cat /sdcard/m4-window.xml 2>/dev/null || true)
-              if printf '%s' "$screen" | grep -q "M4 FORECAST WRITE PASS"; then
-                printf '%s\n' "$screen"
-                break
-              fi
-              if printf '%s' "$screen" | grep -q "M4 FORECAST QA FAIL"; then
-                printf '%s\n' "$screen"
-                exit 1
-              fi
-              sleep 2
-            done
-            if ! printf '%s' "$(adb shell cat /sdcard/m4-window.xml 2>/dev/null || true)" | grep -q "M4 FORECAST WRITE PASS"; then
-              adb shell cat /sdcard/m4-window.xml || true
-              adb logcat -d -s AndroidRuntime:E
-              exit 1
-            fi
-            adb shell am force-stop ru.courier.finance.m4probe
-            adb shell am start -W -n ru.courier.finance.m4probe/ru.courier.finance.M4DeviceProbeActivity --ez m4.verifyRestart true
-            for attempt in $(seq 1 30); do
-              adb shell uiautomator dump /sdcard/m4-window.xml >/dev/null 2>&1 || true
-              screen=$(adb shell cat /sdcard/m4-window.xml 2>/dev/null || true)
-              if printf '%s' "$screen" | grep -q "M4 FORECAST RESTART PASS"; then
-                printf '%s\n' "$screen"
-                exit 0
-              fi
-              if printf '%s' "$screen" | grep -q "M4 FORECAST RESTART FAIL"; then
-                printf '%s\n' "$screen"
-                exit 1
-              fi
-              sleep 2
-            done
-            adb shell cat /sdcard/m4-window.xml || true
-            adb logcat -d -s AndroidRuntime:E
-            exit 1
-      - name: Publish installable M4 APK for local Android import
-        uses: actions/upload-artifact@v4
-        with:
-          name: m4-user-testable-apk-${{ github.sha }}
-          path: app/build/outputs/apk/m4Qa/app-m4Qa.apk
-          retention-days: 1
-      - name: Publish exact-SHA synthetic probe APK to isolated QA branch
-        run: |
-          set -euo pipefail
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          USER_APK=app/build/outputs/apk/m4Qa/app-m4Qa.apk
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git config user.name 'github-actions[bot]'
-          git checkout -B ci/m4-limrun-probe-temp "$GITHUB_SHA"
-          mkdir -p qa
-          cp "$APK" qa/m4-limrun-debug.apk
-          cp "$USER_APK" qa/m4-user-testable.apk
-          printf '%s\n' "$GITHUB_SHA" > qa/m4-limrun-source-sha.txt
-          sha256sum qa/m4-limrun-debug.apk > qa/m4-limrun-apk-sha256.txt
-          printf '%s\n' "$GITHUB_SHA" > qa/m4-user-testable-source-sha.txt
-          sha256sum qa/m4-user-testable.apk > qa/m4-user-testable-apk-sha256.txt
-          git add -f qa/m4-limrun-debug.apk qa/m4-limrun-source-sha.txt qa/m4-limrun-apk-sha256.txt qa/m4-user-testable.apk qa/m4-user-testable-source-sha.txt qa/m4-user-testable-apk-sha256.txt
-          git commit -m "ci: publish M4 user-testable APK for $GITHUB_SHA"
-          git push --force origin HEAD:ci/m4-limrun-probe-temp
+          script: bash .github/scripts/m4-offline-video-probe.sh
