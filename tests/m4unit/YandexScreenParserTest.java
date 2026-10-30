@@ -133,7 +133,7 @@ public final class YandexScreenParserTest {
             +"<span class='ocr_line'>"+hocrWord("10:00",15,260,87,282)+"</span>"
             +"<span class='ocr_line'>"+hocrWord("100,00",546,261,633,285)+"</span>"
             +"<span class='ocr_line'>"+hocrWord("10:30",15,384,87,406)+"</span>"
-            +"<span class='ocr_line'>"+hocrWord("100,00",546,385,633,409)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("100,00",546,385,633,409)+hocrWord("2",640,394,650,396)+"</span>"
             +"<span class='ocr_line'>"+hocrWord("20:340",15,508,124,532)+"</span>"
             +"<span class='ocr_line'>"+hocrWord("100,00",546,509,633,533)+"</span>"
             +"</div>";

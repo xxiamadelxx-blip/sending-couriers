@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v9";
+    public static final String VERSION = "yandex-pro-video-extract-v10";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -140,6 +140,7 @@ public final class YandexScreenParser {
     private static final Pattern HOCR_ATTRIBUTE=Pattern.compile("(?i)(?:^|\\s)([a-z_:][-a-z0-9_:]*)\\s*=\\s*(['\"])(.*?)\\2");
     private static final Pattern HOCR_BBOX=Pattern.compile("(?:^|\\s)bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)(?:[;\\s]|$)");
     private static final Pattern HOCR_TIME_WORD=Pattern.compile("^((?:[01]?\\d|2[0-3])[:.]([0-5]\\d))\\d?$");
+    private static final Pattern HOCR_DECIMAL_MONEY=Pattern.compile("(?<!\\d)\\d+[.,]\\d{2}(?!\\d)");
 
     private YandexScreenParser() { }
 
@@ -274,11 +275,18 @@ public final class YandexScreenParser {
             String token=time.text.replaceAll("[^0-9:.]","");
             Matcher match=HOCR_TIME_WORD.matcher(token);
             if(!match.matches()) continue;
-            HocrWord nearest=null;int nearestDistance=Integer.MAX_VALUE;
+            HocrWord nearest=null;int nearestDistance=Integer.MAX_VALUE,bestMoneyPriority=-1;
             for(HocrWord amount:amounts) {
                 int distance=Math.abs(time.centerY()-amount.centerY());
                 int tolerance=Math.max(8,(time.height()+amount.height())/2+4);
-                if(distance<=tolerance&&distance<nearestDistance) { nearest=amount;nearestDistance=distance; }
+                int priority=HOCR_DECIMAL_MONEY.matcher(amount.text).find()?1:0;
+                // The ruble glyph can become an isolated "2" closer to the time's
+                // baseline than the real "100,00" amount. Prefer a decimal money
+                // word on the same row before comparing vertical distance.
+                if(distance<=tolerance&&(priority>bestMoneyPriority
+                        ||priority==bestMoneyPriority&&distance<nearestDistance)) {
+                    nearest=amount;nearestDistance=distance;bestMoneyPriority=priority;
+                }
             }
             if(nearest==null) continue;
             Long kopecks=parseRowMoney(nearest.text);
