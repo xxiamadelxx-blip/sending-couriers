@@ -120,3 +120,11 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           emulator-boot-timeout: 600
           script: bash .github/scripts/m4-offline-video-probe.sh
+      - name: Save synthetic Android screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-android-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/m4-artifacts/*.png
+          retention-days: 1
+          if-no-files-found: warn

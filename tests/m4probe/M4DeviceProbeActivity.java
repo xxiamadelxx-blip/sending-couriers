@@ -50,14 +50,31 @@ public final class M4DeviceProbeActivity extends Activity {
             boolean cyrillic=false,numbers=false,orders=false;
             for(VideoImportProcessor.Observation row:result.observations) {
                 cyrillic |= row.ocrText.toLowerCase(java.util.Locale.ROOT).contains("заказ");
-                numbers |= row.ocrText.contains("100") || row.ocrText.contains("12:34");
+                numbers |= row.ocrText.contains("100") || row.ocrText.contains("12:01");
                 orders |= row.screenType==YandexScreenParser.ScreenType.ORDERS;
             }
             boolean slotCandidate=result.uniqueCandidateCount("SLOT_DETAIL")>0;
-            boolean orderRowCandidate=result.uniqueCandidateCount("ORDER_LIST_ROW")>0;
+            int orderRows=result.uniqueCandidateCount("ORDER_LIST_ROW");
+            long rowTotal=0;int repeatedTimeRows=0;
+            for(YandexScreenParser.Candidate candidate:result.uniqueCandidates())
+                if("ORDER_LIST_ROW".equals(candidate.candidateType)) {
+                    String amount=field(candidate,"amount_kopecks");
+                    if(amount!=null) rowTotal+=Long.parseLong(amount);
+                    if("12:19".equals(field(candidate,"order_time"))) repeatedTimeRows++;
+                }
+            String slotTotal=null,slotOrderCount=null;
+            for(YandexScreenParser.Candidate candidate:result.uniqueCandidates())
+                if("SLOT_DETAIL".equals(candidate.candidateType)) {
+                    slotTotal=field(candidate,"slot_total_kopecks");
+                    slotOrderCount=field(candidate,"slot_order_count");
+                }
+            boolean orderRowCandidate=orderRows==33&&rowTotal==330000&&repeatedTimeRows==2
+                &&"330000".equals(slotTotal)&&"33".equals(slotOrderCount);
             if(!cyrillic || !numbers || !orders || !slotCandidate || !orderRowCandidate)
                 throw new AssertionError("OCR/extraction mismatch: cyrillic="+cyrillic+", number="+numbers
-                    +", orders="+orders+", slot="+slotCandidate+", orderRow="+orderRowCandidate);
+                    +", orders="+orders+", slot="+slotCandidate+", rowCount="+orderRows
+                    +", rowTotal="+rowTotal+", repeatedTimeRows="+repeatedTimeRows
+                    +", slotTotal="+slotTotal+", slotOrderCount="+slotOrderCount);
             VideoImportDatabase database=new VideoImportDatabase(this);
             String probeImportId="m4v_"+result.sourceSha256.substring(0,32);
             database.deleteImport(probeImportId);
@@ -65,14 +82,14 @@ public final class M4DeviceProbeActivity extends Activity {
             if(stored.duplicate || stored.frameCount<1 || stored.insertedCandidateCount<1)
                 throw new AssertionError("local evidence/candidate persistence failed");
             M4ForecastFactWriter.ImportResult forecast=M4ForecastFactWriter.importFacts(this,result);
-            if(!forecast.accepted || forecast.duplicate || forecast.orderCount!=1 || forecast.forecastDay==null
-                    || forecast.forecastDay.getInt("orders")!=1)
+            if(!forecast.accepted || forecast.duplicate || forecast.orderCount!=33 || forecast.forecastDay==null
+                    || forecast.forecastDay.getInt("orders")!=33)
                 throw new AssertionError("forecast writer did not accept the exact synthetic order: "+forecast.message);
             String date=forecast.forecastDay.getString("date");
             boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
                 .putString("source",forecast.source).putString("date",date).commit();
             if(!saved) throw new AssertionError("restart verification marker could not be saved");
-            show("M4 FORECAST WRITE PASS\nSynthetic fixture only\n1 order · 10000 kopecks\nForecast facts saved; restart check pending.");
+            show("M4 FORECAST WRITE PASS\nSynthetic fixture only\n33 orders · 330000 kopecks\nForecast facts saved; restart check pending.");
         } catch(Throwable error) {
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
@@ -91,10 +108,10 @@ public final class M4DeviceProbeActivity extends Activity {
             try(Cursor cursor=db.rawQuery("SELECT status FROM import_sources WHERE id=?",new String[]{source})) {
                 if(cursor.moveToFirst()) status=cursor.getString(0);
             }
-            if(orders[0]!=1||orders[1]!=10000||forecast[0]!=1||forecast[1]!=1||!"mirrored".equals(status))
+            if(orders[0]!=33||orders[1]!=330000||forecast[0]!=1||forecast[1]!=33||!"mirrored".equals(status))
                 throw new AssertionError("persisted forecast mismatch: orderRows="+orders[0]+", reward="+orders[1]
                     +", forecastRows="+forecast[0]+", forecastOrders="+forecast[1]+", sourceStatus="+status);
-            show("M4 FORECAST RESTART PASS\nSQLite survived force-stop\n1 order · ₽100 · forecast count 1\nSource status: mirrored");
+            show("M4 FORECAST RESTART PASS\nSQLite survived force-stop\n33 orders · ₽3,300 · forecast count 33\nSource status: mirrored");
         } catch(Throwable error) {
             show("M4 FORECAST RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(store!=null) store.close(); }
@@ -105,6 +122,11 @@ public final class M4DeviceProbeActivity extends Activity {
             if(!cursor.moveToFirst()) return new long[]{-1,-1};
             return new long[]{cursor.getLong(0),cursor.getLong(1)};
         }
+    }
+
+    private static String field(YandexScreenParser.Candidate candidate,String name) {
+        for(YandexScreenParser.Field field:candidate.fields) if(name.equals(field.name)) return field.value;
+        return null;
     }
 
     private void show(String text) { runOnUiThread(()->label.setText(text)); }
