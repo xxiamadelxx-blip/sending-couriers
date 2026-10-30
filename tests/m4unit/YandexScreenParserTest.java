@@ -127,6 +127,22 @@ public final class YandexScreenParserTest {
         assertEquals(0,count(ambiguous,"ORDER_LIST_ROW"));
     }
 
+    @Test public void pairsListTimesAndAmountsByHocrRowCoordinates() {
+        String text="Слот: 300,00 ₽\n341681811\nЗаказы\n10:00\n10:30\n20:340\n100,00 ₽\n100,00 ₽\n100,00 ₽";
+        String hocr="<div class='ocr_page' title='image \"screen.png\"; bbox 0 0 720 1608; ppageno 0'>"
+            +hocrWord("10:00",15,260,87,282)+hocrWord("100,00",546,261,633,285)
+            +hocrWord("10:30",15,384,87,406)+hocrWord("100,00",546,385,633,409)
+            +hocrWord("20:340",15,508,124,532)+hocrWord("100,00",546,509,633,533)
+            +"</div>";
+        YandexScreenParser.Result result=YandexScreenParser.parse(text,hocr);
+        assertEquals(3,count(result,"ORDER_LIST_ROW"));
+        java.util.List<YandexScreenParser.Candidate> rows=byType(result,"ORDER_LIST_ROW");
+        assertEquals("10:00",field(rows.get(0),"order_time"));
+        assertEquals("10:30",field(rows.get(1),"order_time"));
+        assertEquals("20:34",field(rows.get(2),"order_time"));
+        for(YandexScreenParser.Candidate row:rows) assertEquals("10000",field(row,"amount_kopecks"));
+    }
+
     @Test public void resolvesOneFrameMoneyMisreadByRepeatedFrameEvidence() {
         String slot="Слот: 3300,00 ₽\n341681811\n33 заказа · 34,43 км\n"
             +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00";
@@ -208,6 +224,26 @@ public final class YandexScreenParserTest {
         assertEquals(2,video.uniqueCandidateCount("ORDER_LIST_ROW"));
     }
 
+    @Test public void dropsOneWeakExtraRowOnlyWhenSlotCountAndTotalBothMatch() {
+        String slot="Слот: 300,00 ₽\n341681811\n3 заказа · 3 км\n"
+            +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00";
+        String stable="Яндекс Про\nЗаказы\n10:00 100,00 ₽ >\n10:30 100,00 ₽ >\n10:50 100,00 ₽ >";
+        String noisy="Яндекс Про\nЗаказы\n10:00 100,00 ₽ >\n10:30 100,00 ₽ >\n"
+            +"10:49 100,00 ₽ >\n10:50 100,00 ₽ >";
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        observations.add(observation(0,"slot",slot));
+        for(int i=0;i<3;i++) observations.add(observation(i+1,"stable-"+i,stable));
+        observations.add(observation(4,"one-frame-ocr-variant",noisy));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,3000,observations,4);
+        assertEquals(3,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        java.util.Set<String> times=new java.util.HashSet<>(); long amount=0;
+        for(YandexScreenParser.Candidate row:video.uniqueCandidates()) if("ORDER_LIST_ROW".equals(row.candidateType)) {
+            times.add(field(row,"order_time"));amount+=Long.parseLong(field(row,"amount_kopecks"));
+        }
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("10:00","10:30","10:50")),times);
+        assertEquals(30000,amount);
+    }
+
     @Test public void parsesInlineIncomeLabelsAndOcrCurrencyVariants() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "Yandex Pro\nДоход\n2 459,36 P\n"
@@ -278,6 +314,16 @@ public final class YandexScreenParserTest {
         for(YandexScreenParser.Candidate candidate:candidates)
             if(type.equals(candidate.candidateType)) return candidate;
         return null;
+    }
+
+    private static java.util.List<YandexScreenParser.Candidate> byType(YandexScreenParser.Result result,String type) {
+        java.util.List<YandexScreenParser.Candidate> found=new java.util.ArrayList<>();
+        for(YandexScreenParser.Candidate candidate:result.candidates) if(type.equals(candidate.candidateType)) found.add(candidate);
+        return found;
+    }
+
+    private static String hocrWord(String text,int left,int top,int right,int bottom) {
+        return "<span class='ocrx_word' title='bbox "+left+" "+top+" "+right+" "+bottom+"; x_wconf 95'>"+text+"</span>";
     }
 
     private static int count(YandexScreenParser.Result result,String type) {

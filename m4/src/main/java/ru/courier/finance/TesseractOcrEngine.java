@@ -12,7 +12,7 @@ import java.io.InputStream;
 
 /** Bundled, network-free Russian + English OCR. All methods run off the UI thread. */
 public final class TesseractOcrEngine implements AutoCloseable {
-    public static final String VERSION = "tesseract4android-4.9.0-tessdata-fast-87416418-native-1608";
+    public static final String VERSION = "tesseract4android-4.9.0-tessdata-fast-87416418-native-1608-hocr";
     private final TessBaseAPI engine;
 
     public TesseractOcrEngine(Context context) throws Exception {
@@ -50,8 +50,9 @@ public final class TesseractOcrEngine implements AutoCloseable {
     public synchronized Recognition recognize(Bitmap bitmap) {
         engine.setImage(bitmap);
         String text = engine.getUTF8Text();
+        String hocr = engine.getHOCRText(0);
         float confidence = Math.max(0f, Math.min(1f, engine.meanConfidence() / 100f));
-        return new Recognition(text == null ? "" : text.trim(), confidence);
+        return new Recognition(text == null ? "" : text.trim(), confidence, hocr == null ? "" : hocr);
     }
 
     @Override public void close() { engine.recycle(); }
@@ -59,6 +60,9 @@ public final class TesseractOcrEngine implements AutoCloseable {
     public static final class Recognition {
         public final String text;
         public final float confidence;
-        Recognition(String text, float confidence) { this.text = text; this.confidence = confidence; }
+        public final String hocrText;
+        Recognition(String text, float confidence, String hocrText) {
+            this.text = text; this.confidence = confidence; this.hocrText = hocrText;
+        }
     }
 }

@@ -78,11 +78,13 @@ public final class VideoImportProcessor {
         private static final class SupportedCandidate {
             YandexScreenParser.Candidate candidate;
             int frames;
+            final Set<String> frameHashes=new HashSet<>();
             final Map<String,Integer> amountVotes=new HashMap<>();
-            SupportedCandidate(YandexScreenParser.Candidate candidate) {
-                this.candidate=candidate; frames=1; recordAmount(candidate);
+            SupportedCandidate(YandexScreenParser.Candidate candidate,String frameHash) {
+                this.candidate=candidate; frameHashes.add(frameHash); frames=1; recordAmount(candidate);
             }
-            void add(YandexScreenParser.Candidate next) {
+            void add(YandexScreenParser.Candidate next,String frameHash) {
+                if(!frameHashes.add(frameHash)) return;
                 candidate=candidate.mergeMissingFields(next); frames++; recordAmount(next);
             }
             private void recordAmount(YandexScreenParser.Candidate value) {
@@ -120,9 +122,10 @@ public final class VideoImportProcessor {
             LinkedHashMap<String,SupportedCandidate> unique=new LinkedHashMap<>();
             for(Observation observation:observations) for(YandexScreenParser.Candidate candidate:observation.candidates) {
                 String key=mergeKey(candidate,slotHint);
+                String frameHash=observation.frameSha256==null?"frame-index:"+observation.frameIndex:observation.frameSha256;
                 SupportedCandidate previous=unique.get(key);
-                if(previous==null) unique.put(key,new SupportedCandidate(candidate));
-                else previous.add(candidate);
+                if(previous==null) unique.put(key,new SupportedCandidate(candidate,frameHash));
+                else previous.add(candidate,frameHash);
             }
             for(SupportedCandidate supported:unique.values()) supported.resolveAmountConsensus();
 
@@ -211,7 +214,61 @@ public final class VideoImportProcessor {
                         &&!eligibleRow(candidate,singleSlot,slotStart,slotEnd,hasSlotRange)) continue;
                 result.add(candidate);
             }
+            reconcileSingleWeakOrderOutlier(result,unique);
             return Collections.unmodifiableList(result);
+        }
+
+        /**
+         * A one-frame OCR variant may add a false row even when all other rows
+         * are stable. Drop it only when the other rows independently repeat and
+         * removing exactly that candidate makes both the slot count and total match.
+         */
+        private static void reconcileSingleWeakOrderOutlier(List<YandexScreenParser.Candidate> candidates,
+                                                              Map<String,SupportedCandidate> evidence) {
+            YandexScreenParser.Candidate slot=null;
+            Set<String> slotIds=new HashSet<>();
+            for(SupportedCandidate supported:evidence.values()) {
+                YandexScreenParser.Candidate candidate=supported.candidate;
+                if(!"SLOT_DETAIL".equals(candidate.candidateType)||value(candidate,"slot_id")==null) continue;
+                slotIds.add(value(candidate,"slot_id")); slot=candidate;
+            }
+            if(slotIds.size()!=1||slot==null) return;
+            Integer declared=parseInteger(value(slot,"slot_order_count"));
+            Long total=parseLong(value(slot,"slot_total_kopecks"));
+            if(declared==null||declared<1||total==null||total<0) return;
+
+            List<YandexScreenParser.Candidate> rows=new ArrayList<>();
+            long sum=0;
+            for(YandexScreenParser.Candidate candidate:candidates) if("ORDER_LIST_ROW".equals(candidate.candidateType)) {
+                Long amount=parseLong(value(candidate,"amount_kopecks"));
+                if(amount==null||amount<0) return;
+                rows.add(candidate); sum+=amount;
+            }
+            if(rows.size()!=declared+1) return;
+
+            YandexScreenParser.Candidate removable=null;int matches=0;
+            for(int i=0;i<rows.size();i++) {
+                YandexScreenParser.Candidate row=rows.get(i);
+                SupportedCandidate support=null;
+                for(SupportedCandidate possible:evidence.values()) if(possible.candidate==row) { support=possible; break; }
+                if(support==null||support.frames>1) continue;
+                boolean allOtherRowsRepeat=true;
+                long amount=parseLong(value(row,"amount_kopecks"));
+                for(int j=0;j<rows.size();j++) if(j!=i) {
+                    YandexScreenParser.Candidate other=rows.get(j); SupportedCandidate otherSupport=null;
+                    for(SupportedCandidate possible:evidence.values()) if(possible.candidate==other) { otherSupport=possible; break; }
+                    if(otherSupport==null||otherSupport.frames<3) { allOtherRowsRepeat=false; break; }
+                }
+                if(allOtherRowsRepeat&&rows.size()-1==declared&&sum-amount==total) { removable=row; matches++; }
+            }
+            if(matches==1) candidates.remove(removable);
+        }
+
+        private static Integer parseInteger(String value) {
+            try { return value==null?null:Integer.valueOf(value); } catch(Exception invalid) { return null; }
+        }
+        private static Long parseLong(String value) {
+            try { return value==null?null:Long.valueOf(value); } catch(Exception invalid) { return null; }
         }
 
         private static boolean eligibleRow(YandexScreenParser.Candidate candidate,String slotId,
@@ -299,7 +356,7 @@ public final class VideoImportProcessor {
                     CachedRecognition cached=uniqueFrames.get(frameHash);
                     if(cached==null) {
                         TesseractOcrEngine.Recognition recognized=ocr.recognize(frame);
-                        YandexScreenParser.Result parsed=YandexScreenParser.parse(recognized.text);
+                        YandexScreenParser.Result parsed=YandexScreenParser.parse(recognized.text,recognized.hocrText);
                         String reviewPath=parsed.reviewRequired?saveUnknownFrame(context,sourceHash,timestamp,frame):null;
                         if(reviewPath!=null) previewFiles.add(new File(context.getFilesDir(),reviewPath));
                         cached=new CachedRecognition(recognized.text,recognized.confidence,parsed,reviewPath);

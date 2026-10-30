@@ -8,12 +8,13 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v7";
+    public static final String VERSION = "yandex-pro-video-extract-v8";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -132,10 +133,20 @@ public final class YandexScreenParser {
     private static final Pattern TIME_PREFIX=Pattern.compile("^\\s*[•·|>›]*\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)(?!\\d)(.*)$");
     private static final Pattern DATE_TIME=Pattern.compile("(?<!\\d)(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
     private static final Pattern DAY_FIRST_DATE_TIME=Pattern.compile("(?<!\\d)(\\d{1,2})[./-](\\d{1,2})[./-](20\\d{2})\\s+([0-2]?\\d):([0-5]\\d)(?!\\d)");
+    private static final Pattern HOCR_START_TAG=Pattern.compile("<(?:div|span)\\b([^>]*)>",Pattern.CASE_INSENSITIVE);
+    private static final Pattern HOCR_WORD_SPAN=Pattern.compile("<span\\b([^>]*)>(.*?)</span>",Pattern.CASE_INSENSITIVE|Pattern.DOTALL);
+    private static final Pattern HOCR_ATTRIBUTE=Pattern.compile("(?i)(?:^|\\s)([a-z_:][-a-z0-9_:]*)\\s*=\\s*(['\"])(.*?)\\2");
+    private static final Pattern HOCR_BBOX=Pattern.compile("(?:^|\\s)bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)(?:[;\\s]|$)");
+    private static final Pattern HOCR_TIME_WORD=Pattern.compile("^((?:[01]?\\d|2[0-3])[:.]([0-5]\\d))\\d?$");
 
     private YandexScreenParser() { }
 
     public static Result parse(String ocrText) {
+        return parse(ocrText,null);
+    }
+
+    /** Parses regular OCR text plus optional Tesseract hOCR word coordinates. */
+    public static Result parse(String ocrText,String hocrText) {
         String[] lines=lines(ocrText);
         String text=normalize(ocrText);
         if(text.isEmpty()) return result(ScreenType.UNKNOWN,true,"empty_ocr",lines);
@@ -176,7 +187,9 @@ public final class YandexScreenParser {
         if(screen==ScreenType.ORDERS) {
             addOrderDetail(lines,candidates);
             String slotId=addSlotDetail(lines,candidates);
-            addOrderRows(lines,slotId,candidates);
+            int before=candidates.size();
+            addOrderRowsFromHocr(hocrText,slotId,candidates);
+            if(candidates.size()==before) addOrderRows(lines,slotId,candidates);
         } else if(screen==ScreenType.INCOME) {
             addIncomeSummary(lines,candidates);
             addIncomeRows(lines,candidates);
@@ -185,6 +198,132 @@ public final class YandexScreenParser {
             reason=screen==ScreenType.ORDERS?"order_screen_no_fields":"income_screen_no_fields";
         else if(!candidates.isEmpty()) reason=screen==ScreenType.ORDERS?"order_fields_extracted":"income_fields_extracted";
         return new Result(screen,screen==ScreenType.UNKNOWN||screen==ScreenType.YANDEX_UNKNOWN,reason,candidates);
+    }
+
+    private static final class HocrPage {
+        final int left,top,right,bottom;
+        HocrPage(int left,int top,int right,int bottom) { this.left=left;this.top=top;this.right=right;this.bottom=bottom; }
+        int width() { return right-left; }
+        int height() { return bottom-top; }
+    }
+
+    private static final class HocrWord {
+        final String text;
+        final int left,top,right,bottom,confidence;
+        HocrWord(String text,int left,int top,int right,int bottom,int confidence) {
+            this.text=text;this.left=left;this.top=top;this.right=right;this.bottom=bottom;this.confidence=confidence;
+        }
+        int centerX() { return (left+right)/2; }
+        int centerY() { return (top+bottom)/2; }
+        int height() { return bottom-top; }
+    }
+
+    /**
+     * Tesseract sometimes emits the left time column and right money column as separate
+     * text blocks. hOCR retains word boxes, so pair values on the same visible row.
+     */
+    private static int addOrderRowsFromHocr(String hocr,String slotId,List<Candidate> out) {
+        if(hocr==null||hocr.trim().isEmpty()) return 0;
+        HocrPage page=null;
+        Matcher tags=HOCR_START_TAG.matcher(hocr);
+        while(tags.find()) {
+            String classes=attribute(tags.group(1),"class");
+            if(classes==null||!classes.matches(".*\\bocr_page\\b.*")) continue;
+            Matcher bbox=HOCR_BBOX.matcher(attribute(tags.group(1),"title")==null?"":attribute(tags.group(1),"title"));
+            if(bbox.find()) {
+                page=new HocrPage(parseInt(bbox.group(1)),parseInt(bbox.group(2)),parseInt(bbox.group(3)),parseInt(bbox.group(4)));
+                break;
+            }
+        }
+        if(page==null||page.width()<=0||page.height()<=0) return 0;
+
+        List<HocrWord> words=new ArrayList<>();
+        Matcher spans=HOCR_WORD_SPAN.matcher(hocr);
+        while(spans.find()) {
+            String classes=attribute(spans.group(1),"class");
+            if(classes==null||!classes.matches(".*\\bocrx_word\\b.*")) continue;
+            String title=attribute(spans.group(1),"title");
+            Matcher bbox=HOCR_BBOX.matcher(title==null?"":title);
+            if(!bbox.find()) continue;
+            int confidence=0;
+            Matcher confidenceMatcher=Pattern.compile("(?:^|\\s)x_wconf\\s+(\\d+)(?:\\s|$)").matcher(title);
+            if(confidenceMatcher.find()) confidence=parseInt(confidenceMatcher.group(1));
+            String word=decodeHocrText(spans.group(2).replaceAll("<[^>]*>"," ")).trim();
+            if(word.isEmpty()) continue;
+            words.add(new HocrWord(word,parseInt(bbox.group(1)),parseInt(bbox.group(2)),
+                parseInt(bbox.group(3)),parseInt(bbox.group(4)),confidence));
+        }
+
+        int width=page.width(),height=page.height();
+        List<HocrWord> times=new ArrayList<>(),amounts=new ArrayList<>();
+        for(HocrWord word:words) {
+            int x=word.centerX()-page.left,y=word.centerY()-page.top;
+            if(x<width*0.40&&y>height*0.12&&y<height*0.91) {
+                String token=word.text.replaceAll("[^0-9:.]","");
+                Matcher time=HOCR_TIME_WORD.matcher(token);
+                if(time.matches()) times.add(word);
+            }
+            if(x>width*0.60&&y>height*0.12&&y<height*0.91&&parseRowMoney(word.text)!=null) amounts.add(word);
+        }
+        Collections.sort(times,(a,b)->Integer.compare(a.centerY(),b.centerY()));
+        Map<String,Integer> occurrences=new java.util.HashMap<>();
+        int added=0;
+        for(HocrWord time:times) {
+            String token=time.text.replaceAll("[^0-9:.]","");
+            Matcher match=HOCR_TIME_WORD.matcher(token);
+            if(!match.matches()) continue;
+            HocrWord nearest=null;int nearestDistance=Integer.MAX_VALUE;
+            for(HocrWord amount:amounts) {
+                int distance=Math.abs(time.centerY()-amount.centerY());
+                int tolerance=Math.max(8,(time.height()+amount.height())/2+4);
+                if(distance<=tolerance&&distance<nearestDistance) { nearest=amount;nearestDistance=distance; }
+            }
+            if(nearest==null) continue;
+            Long kopecks=parseRowMoney(nearest.text);
+            if(kopecks==null) continue;
+            String normalizedTime=match.group(1).replace('.',':');
+            String occurrenceKey=String.valueOf(slotId)+"\n"+normalizedTime;
+            int occurrence=occurrences.containsKey(occurrenceKey)?occurrences.get(occurrenceKey)+1:1;
+            occurrences.put(occurrenceKey,occurrence);
+            CandidateBuilder candidate=new CandidateBuilder("ORDER_LIST_ROW",0.90f);
+            candidate.add("order_time","time",normalizedTime);
+            addMoney(candidate,"amount_kopecks",kopecks);
+            addText(candidate,"slot_id",slotId);
+            candidate.add("occurrence","integer",String.valueOf(occurrence));
+            addIfPresent(out,candidate);added++;
+        }
+        return added;
+    }
+
+    private static String attribute(String attributes,String name) {
+        if(attributes==null) return null;
+        Matcher matcher=HOCR_ATTRIBUTE.matcher(attributes);
+        while(matcher.find()) if(name.equalsIgnoreCase(matcher.group(1))) return matcher.group(3);
+        return null;
+    }
+
+    private static String decodeHocrText(String value) {
+        StringBuilder output=new StringBuilder();
+        Matcher entities=Pattern.compile("&(#(?:x[0-9a-f]+|\\d+)|amp|quot|apos|lt|gt);",Pattern.CASE_INSENSITIVE).matcher(value);
+        int position=0;
+        while(entities.find()) {
+            output.append(value,position,entities.start());
+            String entity=entities.group(1);
+            try {
+                if(entity.charAt(0)=='#') {
+                    String number=entity.substring(1);
+                    int codePoint=number.startsWith("x")||number.startsWith("X")
+                        ?Integer.parseInt(number.substring(1),16):Integer.parseInt(number);
+                    output.appendCodePoint(codePoint);
+                } else if("amp".equalsIgnoreCase(entity)) output.append('&');
+                else if("quot".equalsIgnoreCase(entity)) output.append('"');
+                else if("apos".equalsIgnoreCase(entity)) output.append('\'');
+                else if("lt".equalsIgnoreCase(entity)) output.append('<');
+                else if("gt".equalsIgnoreCase(entity)) output.append('>');
+            } catch(Exception ignored) { output.append(entities.group()); }
+            position=entities.end();
+        }
+        return output.append(value.substring(position)).toString();
     }
 
     private static Result result(ScreenType type,boolean review,String reason,String[] lines) {
@@ -530,6 +669,9 @@ public final class YandexScreenParser {
 
     private static void addMoney(CandidateBuilder candidate,String name,Long value) {
         if(value!=null) candidate.add(name,"integer",String.valueOf(value));
+    }
+    private static int parseInt(String value) {
+        try { return Integer.parseInt(value); } catch(Exception invalid) { return 0; }
     }
     private static void addInteger(CandidateBuilder candidate,String name,String value) {
         if(value!=null) candidate.add(name,"integer",value);
