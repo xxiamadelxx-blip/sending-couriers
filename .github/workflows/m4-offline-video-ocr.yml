@@ -98,6 +98,12 @@ jobs:
           unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"
+      - name: Publish installable M4 APK for local Android import
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-user-testable-apk-${{ github.sha }}
+          path: app/build/outputs/apk/m4Qa/app-m4Qa.apk
+          retention-days: 1
       - name: Publish exact-SHA synthetic probe APK to isolated QA branch
         run: |
           set -euo pipefail
