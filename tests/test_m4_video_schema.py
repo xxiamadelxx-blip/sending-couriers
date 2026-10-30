@@ -34,6 +34,12 @@ class M4VideoSchemaTest(unittest.TestCase):
         self.assertIn("Импортировать видео", forecast_ui)
         self.assertIn("Native.importVideo()", forecast_ui)
 
+    def test_export_provider_authority_is_unique_for_each_qa_package(self):
+        manifest = (ROOT / "android/AndroidManifest.xml").read_text(encoding="utf8")
+        provider = (ROOT / "android/src/ru/courier/finance/ExportProvider.java").read_text(encoding="utf8")
+        self.assertIn('android:authorities="${applicationId}.exports"', manifest)
+        self.assertIn('getContext().getPackageName()+".exports"', provider)
+
     def test_private_evidence_is_not_added_to_android_backup_allowlist(self):
         backup = (ROOT / "android/res/xml/backup_rules.xml").read_text(encoding="utf8")
         extraction = (ROOT / "android/res/xml/data_extraction_rules.xml").read_text(encoding="utf8")
