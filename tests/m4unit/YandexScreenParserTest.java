@@ -140,7 +140,7 @@ public final class YandexScreenParserTest {
         observations.add(observation(4,"right-3",right));
         VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,2000,observations,2);
         assertEquals(1,video.uniqueCandidateCount("ORDER_LIST_ROW"));
-        assertEquals("10000",field(video.uniqueCandidates().get(0),"amount_kopecks"));
+        assertEquals("10000",field(find(video.uniqueCandidates(),"ORDER_LIST_ROW"),"amount_kopecks"));
     }
 
     @Test public void recognizesSlotListWhenRussianLabelsAreTransliteratedByOcr() {
@@ -270,6 +270,12 @@ public final class YandexScreenParserTest {
 
     private static YandexScreenParser.Candidate find(YandexScreenParser.Result result,String type) {
         for(YandexScreenParser.Candidate candidate:result.candidates)
+            if(type.equals(candidate.candidateType)) return candidate;
+        return null;
+    }
+
+    private static YandexScreenParser.Candidate find(java.util.List<YandexScreenParser.Candidate> candidates,String type) {
+        for(YandexScreenParser.Candidate candidate:candidates)
             if(type.equals(candidate.candidateType)) return candidate;
         return null;
     }
