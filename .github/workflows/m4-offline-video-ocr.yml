@@ -11,9 +11,61 @@ concurrency:
 jobs:
   verify-build-probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+      - name: Create one-time key for real-video QA
+        if: contains(github.event.head_commit.message, '[real-video]')
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
+            -out "$RUNNER_TEMP/m4-private.pem" 2>/dev/null
+          openssl pkey -in "$RUNNER_TEMP/m4-private.pem" -pubout \
+            -out "$RUNNER_TEMP/m4-public.pem"
+      - name: Publish one-time public key
+        if: contains(github.event.head_commit.message, '[real-video]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-real-video-public-key-${{ github.sha }}
+          path: ${{ runner.temp }}/m4-public.pem
+          retention-days: 1
+          if-no-files-found: error
+      - name: Fetch encrypted private video links
+        if: contains(github.event.head_commit.message, '[real-video]')
+        run: |
+          set -euo pipefail
+          branch="m4-real-payload-${GITHUB_SHA:0:12}"
+          for attempt in $(seq 1 120); do
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then break; fi
+            sleep 3
+          done
+          git fetch --quiet origin "refs/heads/$branch:refs/remotes/origin/$branch"
+          git show "origin/$branch:payload-key.enc" > "$RUNNER_TEMP/m4-key.enc"
+          git show "origin/$branch:payload-links.enc" > "$RUNNER_TEMP/m4-links.enc"
+          openssl pkeyutl -decrypt -inkey "$RUNNER_TEMP/m4-private.pem" \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in "$RUNNER_TEMP/m4-key.enc" -out "$RUNNER_TEMP/m4-key.bin"
+          openssl enc -d -aes-256-cbc -pbkdf2 -salt \
+            -pass file:"$RUNNER_TEMP/m4-key.bin" \
+            -in "$RUNNER_TEMP/m4-links.enc" -out "$RUNNER_TEMP/m4-links.json"
+          mkdir -p "$RUNNER_TEMP/m4-real"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil, urllib.request
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          urls=json.loads((root/'m4-links.json').read_text())
+          expected={
+              'one': ('fff402d7c2a1d7fe577080b3e73cd2a0bb7e72a8af32d27df8b8bc34ad9070b0',21965599),
+              'two': ('d0aa7a4e206891d4315f02a2e09b31058f73001bbbcad306bfeb0866de9ed82c',9039027),
+          }
+          for name,(digest,size) in expected.items():
+              target=root/'m4-real'/f'{name}.mp4'
+              with urllib.request.urlopen(urls[name],timeout=60) as source,target.open('wb') as output:
+                  shutil.copyfileobj(source,output)
+              if target.stat().st_size!=size or hashlib.sha256(target.read_bytes()).hexdigest()!=digest:
+                  raise SystemExit('Private video transfer verification failed')
+          (root/'m4-links.json').unlink()
+          PY
+          echo 'Two private MP4s fetched into runner temp storage'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

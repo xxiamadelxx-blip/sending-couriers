@@ -25,7 +25,8 @@ public final class M4DeviceProbeActivity extends Activity {
         label=new TextView(this);label.setTextColor(Color.WHITE);label.setBackgroundColor(Color.rgb(18,24,29));
         label.setTextSize(22);label.setGravity(Gravity.CENTER);label.setPadding(32,32,32,32);
         setContentView(label);label.setText("M4 synthetic offline video probe…");
-        if(getIntent().getBooleanExtra("m4.verifyRestart",false)) worker.execute(this::verifyForecastAfterRestart);
+        if(getIntent().getBooleanExtra("m4.verifyReal",false)) worker.execute(this::verifyRealAfterRestart);
+        else if(getIntent().getBooleanExtra("m4.verifyRestart",false)) worker.execute(this::verifyForecastAfterRestart);
         else worker.execute(this::runProbe);
     }
 
@@ -115,6 +116,46 @@ public final class M4DeviceProbeActivity extends Activity {
         } catch(Throwable error) {
             show("M4 FORECAST RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(store!=null) store.close(); }
+    }
+
+    private void verifyRealAfterRestart() {
+        CourierDatabase store=null;
+        VideoImportDatabase evidence=null;
+        try {
+            String first=getIntent().getStringExtra("m4.sourceOne");
+            String second=getIntent().getStringExtra("m4.sourceTwo");
+            if(first==null||second==null||!first.matches("[0-9a-f]{64}")||!second.matches("[0-9a-f]{64}"))
+                throw new AssertionError("real video source ids are missing");
+            store=new CourierDatabase(this);
+            evidence=new VideoImportDatabase(this);
+            verifyRealSource(store.getReadableDatabase(),evidence.getReadableDatabase(),first,28,280000);
+            verifyRealSource(store.getReadableDatabase(),evidence.getReadableDatabase(),second,9,90000);
+            show("M4 REAL VIDEO RESTART PASS\n28 orders · 280000 kopecks\n9 orders · 90000 kopecks\nForecast facts survived force-stop and restart.");
+        } catch(Throwable error) {
+            show("M4 REAL VIDEO RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+        } finally {
+            if(evidence!=null) evidence.close();
+            if(store!=null) store.close();
+        }
+    }
+
+    private static void verifyRealSource(SQLiteDatabase facts,SQLiteDatabase evidence,String hash,int expectedCount,long expectedTotal) {
+        String source="video:"+hash;
+        long[] orders=counts(facts,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders "
+            +"WHERE source_id=? AND source_kind='video_import'",source);
+        long[] aggregates=counts(facts,"SELECT COUNT(*),COALESCE(SUM(order_count),0) FROM active_aggregate_order_counts "
+            +"WHERE source_id=? AND source_kind='video_import'",source);
+        long[] imported=counts(evidence,"SELECT COUNT(*),COALESCE(SUM(duration_ms),0) FROM m4_video_imports "
+            +"WHERE source_sha256=? AND parser_version=?",hash,YandexScreenParser.VERSION);
+        String status=null;
+        try(Cursor cursor=facts.rawQuery("SELECT status FROM import_sources WHERE id=?",new String[]{source})) {
+            if(cursor.moveToFirst()) status=cursor.getString(0);
+        }
+        if(orders[0]!=expectedCount||orders[1]!=expectedTotal||aggregates[0]!=1
+                ||aggregates[1]!=expectedCount||imported[0]!=1||imported[1]<=0||!"mirrored".equals(status))
+            throw new AssertionError("persisted source mismatch: orders="+orders[0]+", reward="+orders[1]
+                +", aggregates="+aggregates[0]+", aggregateCount="+aggregates[1]
+                +", evidence="+imported[0]+", sourceStatus="+status);
     }
 
     private static long[] counts(SQLiteDatabase db,String sql,String... args) {

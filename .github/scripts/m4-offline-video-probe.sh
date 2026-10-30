@@ -51,3 +51,66 @@ adb shell am force-stop "$package"
 adb shell am start -W -n "$package/$activity" --ez m4.verifyRestart true
 wait_for_marker "M4 FORECAST RESTART PASS" "M4 FORECAST RESTART FAIL" 30
 capture_screen m4-forecast-restart.png
+
+if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4" ]]; then
+  import_real_video() {
+    local name="$1" file="$2" expected="$3" id="" rows="" screen=""
+    adb push "$file" "/sdcard/Movies/$name" >/dev/null
+    adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+      -d "file:///sdcard/Movies/$name" >/dev/null
+    for ((scan=0; scan<20; scan++)); do
+      rows=$(adb shell content query --uri content://media/external/video/media \
+        --projection _id:_display_name --where "_display_name='$name'" 2>/dev/null || true)
+      id=$(sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' <<<"$rows" | head -1)
+      [[ -n "$id" ]] && break
+      sleep 2
+    done
+    [[ -n "$id" ]] || { echo "M4 REAL FAIL: MediaStore did not index the video"; return 1; }
+    adb shell am start -W -a android.intent.action.SEND -t video/mp4 \
+      --eu android.intent.extra.STREAM "content://media/external/video/media/$id" \
+      -f 0x1 -n "$package/ru.courier.finance.M4VideoImportActivity" >/dev/null
+    for ((attempt=0; attempt<240; attempt++)); do
+      adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
+      screen=$(adb shell cat "$window" 2>/dev/null || true)
+      if grep -Fq "Распознано и сверено строк заказов: $expected из $expected" <<<"$screen"; then
+        echo "M4 REAL IMPORT PASS: $expected orders"
+        return 0
+      fi
+      if grep -Fq 'Извлечено строк заказов:' <<<"$screen" \
+          || grep -Fq 'Неполные данные оставлены кандидатами' <<<"$screen" \
+          || grep -Fq 'Не удалось обработать видео' <<<"$screen"; then
+        echo "M4 REAL FAIL: import rejected by app"
+        return 1
+      fi
+      sleep 3
+    done
+    echo "M4 REAL FAIL: import timed out"
+    return 1
+  }
+
+  real_package=ru.courier.finance.m4probe
+  package="$real_package"
+  adb shell am force-stop "$package"
+  real_source_one=$(sha256sum "${RUNNER_TEMP}/m4-real/one.mp4" | cut -d' ' -f1)
+  real_source_two=$(sha256sum "${RUNNER_TEMP}/m4-real/two.mp4" | cut -d' ' -f1)
+  import_real_video m4-real-one.mp4 "${RUNNER_TEMP}/m4-real/one.mp4" 28
+  import_real_video m4-real-two.mp4 "${RUNNER_TEMP}/m4-real/two.mp4" 9
+  adb shell am force-stop "$package"
+  adb shell am start -W -n "$package/$activity" --ez m4.verifyReal true \
+    --es m4.sourceOne "$real_source_one" --es m4.sourceTwo "$real_source_two" >/dev/null
+  for ((attempt=0; attempt<30; attempt++)); do
+    adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
+    screen=$(adb shell cat "$window" 2>/dev/null || true)
+    if grep -Fq 'M4 REAL VIDEO RESTART PASS' <<<"$screen"; then
+      echo 'M4 REAL VIDEO RESTART PASS'
+      exit 0
+    fi
+    if grep -Fq 'M4 REAL VIDEO RESTART FAIL' <<<"$screen"; then
+      echo 'M4 REAL VIDEO RESTART FAIL'
+      exit 1
+    fi
+    sleep 2
+  done
+  echo 'M4 REAL VIDEO RESTART TIMEOUT'
+  exit 1
+fi
