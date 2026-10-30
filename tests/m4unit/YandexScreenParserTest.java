@@ -113,6 +113,71 @@ public final class YandexScreenParserTest {
         assertEquals("10000",field(find(result,"ORDER_LIST_ROW"),"amount_kopecks"));
     }
 
+    @Test public void recognizesSlotListWhenRussianLabelsAreTransliteratedByOcr() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "€ Cnor: 600,00P\n341681811\n© 07:30 — 22:00\n6 3aka3a + 10,0 KM\n"
+                +"Utoro 600,00P\n10:38 100,00 P >\n10:49 100,00 P >\n11:05 100,00 P >\n"
+                +"11:10 100,00 P >\n11:23 100,00 P >\n11:36 100,00 P >\n");
+        assertEquals(YandexScreenParser.ScreenType.ORDERS,result.screenType);
+        assertEquals(6,count(result,"ORDER_LIST_ROW"));
+        YandexScreenParser.Candidate slot=find(result,"SLOT_DETAIL");
+        assertNotNull(slot);
+        assertEquals("341681811",field(slot,"slot_id"));
+        assertEquals("6",field(slot,"slot_order_count"));
+        assertEquals("60000",field(slot,"slot_total_kopecks"));
+        assertEquals("10.0",field(slot,"distance_km"));
+    }
+
+    @Test public void consensusRemovesOneFrameTimeErrorsAndKeepsTwoSameMinuteOrders() {
+        String slotScreen="Слот: 900,00 ₽\n341681811\n9 заказов · 10 км\n"
+            +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00\n";
+        String prefix="Яндекс Про\nЗаказы\n";
+        String stable=prefix+"13:08 100,00 ₽ >\n13:16 100,00 ₽ >\n13:27 100,00 ₽ >\n"
+            +"18:57 100,00 ₽ >\n18:57 100,00 ₽ >\n21:11 100,00 ₽ >\n21:23 100,00 ₽ >\n"
+            +"21:37 100,00 ₽ >\n21:57 100,00 ₽ >\n";
+        String noisy=prefix+"13:08 100,00 ₽ >\n13:16 100,00 ₽ >\n12:27 100,00 ₽ >\n"
+            +"18:57 100,00 ₽ >\n18:57 100,00 ₽ >\n21:11 100,00 ₽ >\n21:25 100,00 ₽ >\n"
+            +"21:37 100,00 ₽ >\n21:57 100,00 ₽ >\n";
+        YandexScreenParser.Result stableResult=YandexScreenParser.parse(stable);
+        YandexScreenParser.Result noisyResult=YandexScreenParser.parse(noisy);
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        YandexScreenParser.Result slotResult=YandexScreenParser.parse(slotScreen);
+        observations.add(new VideoImportProcessor.Observation(0,0,"slot",slotScreen,1f,slotResult,null));
+        for(int i=0;i<4;i++) observations.add(new VideoImportProcessor.Observation(
+            i+1,(i+1)*500,"stable-"+i,stable,1f,stableResult,null));
+        observations.add(new VideoImportProcessor.Observation(5,2500,"noisy",noisy,0.6f,noisyResult,null));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,3000,observations,2);
+
+        assertEquals(9,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        java.util.Set<String> times=new java.util.HashSet<>();
+        java.util.Map<String,Integer> sameMinute=new java.util.HashMap<>();
+        long sum=0;
+        for(YandexScreenParser.Candidate row:video.uniqueCandidates()) if("ORDER_LIST_ROW".equals(row.candidateType)) {
+            times.add(field(row,"order_time"));
+            sum+=Long.parseLong(field(row,"amount_kopecks"));
+            if("18:57".equals(field(row,"order_time")))
+                sameMinute.put(field(row,"occurrence"),1);
+        }
+        assertFalse(times.contains("12:27"));
+        assertFalse(times.contains("21:25"));
+        assertTrue(times.contains("13:27"));
+        assertTrue(times.contains("21:23"));
+        assertEquals(2,sameMinute.size());
+        assertEquals(90000,sum);
+    }
+
+    @Test public void twoCloseRowsSeenTogetherAreNotMergedAsAnOcrError() {
+        String screen="Слот: 200,00 ₽\n341681811\n2 заказа · 10 км\n"
+            +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00\nЗаказы\n"
+            +"18:57 100,00 ₽ >\n18:59 100,00 ₽ >\n";
+        YandexScreenParser.Result parsed=YandexScreenParser.parse(screen);
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        for(int i=0;i<4;i++) observations.add(new VideoImportProcessor.Observation(
+            i,i*500,"near-"+i,screen,1f,parsed,null));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,2000,observations,1);
+        assertEquals(2,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+    }
+
     @Test public void parsesInlineIncomeLabelsAndOcrCurrencyVariants() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "Yandex Pro\nДоход\n2 459,36 P\n"

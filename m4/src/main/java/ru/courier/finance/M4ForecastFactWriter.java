@@ -182,7 +182,7 @@ public final class M4ForecastFactWriter {
             .put("source",facts.sourceId).put("note","Все "+facts.declaredCount+" строк совпали с числом заказов и суммой слота."));
         if(!facts.deliveries.isEmpty()) fieldSources.put("workingMin",new JSONObject().put("status","CONFIRMED").put("kind","FACT")
             .put("source",facts.sourceId).put("note","Только явно показанные интервалы завершённых заказов; промежутки между ними неизвестны."));
-        JSONArray notes=new JSONArray().put("33 строки списка проверены по счётчику и сумме слота.")
+        JSONArray notes=new JSONArray().put("Проверено строк списка: "+facts.declaredCount+"; число и сумма совпали с итогом слота.")
             .put("Время полного слота "+facts.startedAt+"–"+facts.completedAt+" сохранено как слот и не засчитано рабочим временем.")
             .put("В WORK записаны только распознанные интервалы завершённых заказов; время ожидания и пауз между заказами осталось неизвестным.");
         day.put("date",facts.date).put("timezone",TIME_ZONE).put("zone",TIME_ZONE)

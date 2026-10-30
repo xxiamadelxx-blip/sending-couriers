@@ -61,12 +61,13 @@ public final class YandexScreenParser {
         /** Stable identity for combining partial observations of the same order or slot. */
         String mergeKey() {
             if("ORDER_LIST_ROW".equals(candidateType)) {
-                String time=null,occurrence="1";
+                String time=null,occurrence="1",slot=null;
                 for(Field field:fields) {
                     if("order_time".equals(field.name)) time=field.value;
                     else if("occurrence".equals(field.name)) occurrence=field.value;
+                    else if("slot_id".equals(field.name)) slot=field.value;
                 }
-                if(time!=null) return candidateType+"\n"+time+"\n"+occurrence;
+                if(time!=null) return candidateType+"\n"+String.valueOf(slot)+"\n"+time+"\n"+occurrence;
             }
             String identityField="SLOT_DETAIL".equals(candidateType)?"slot_id":
                 ("ORDER_DETAIL".equals(candidateType)?"order_number":null);
@@ -148,13 +149,18 @@ public final class YandexScreenParser {
         boolean incomeBreakdown=containsAny(text,"вознаграждение")&&containsAny(text,"комиссия партнера");
         boolean activity=containsAny(text,"на линии","активность","смена","online","activity");
         boolean repeatedOrderRows=countTimedMoneyRows(lines)>=3;
+        boolean slotLedger=repeatedOrderRows&&!income&&hasStandaloneNumericId(lines);
 
         ScreenType screen;
         String reason;
         if(orderDetails
             ||(orders&&(yandex||containsAny(text,"на линии","заказы сегодня")||slot))
             ||(slot&&(demandCoefficient||containsAny(text,"информация по слоту","тип слота")))
-            ||(!income&&demandCoefficient&&repeatedOrderRows)) {
+            ||(!income&&demandCoefficient&&repeatedOrderRows)
+            // Russian screen labels are often transliterated by OCR (for example
+            // "Слот" -> "Cnor", "заказы" -> "3aka3bl"). A slot id plus at
+            // least three time-and-money rows is a strong structural signature.
+            ||slotLedger) {
             screen=ScreenType.ORDERS; reason="order_screen_signature";
         } else if(income&&(yandex||incomeBreakdown)) {
             screen=ScreenType.INCOME; reason="income_screen_signature";
@@ -205,8 +211,9 @@ public final class YandexScreenParser {
     }
 
     private static String addSlotDetail(String[] lines,List<Candidate> out) {
-        if(!containsLine(lines,"слот")) return null;
-        String header=valueAfter(lines,"слот");
+        int headerIndex=slotHeaderIndex(lines);
+        if(!containsLine(lines,"слот")&&headerIndex<0) return null;
+        String header=headerIndex>=0?lines[headerIndex]:valueAfter(lines,"слот");
         String type=valueAfter(lines,"тип\\s+слота");
         String status=valueAfter(lines,"статус");
         String started=valueAfter(lines,"начало|время\\s+начала");
@@ -391,7 +398,21 @@ public final class YandexScreenParser {
             Matcher sameLine=Pattern.compile("(?<!\\d)(\\d{6,12})(?!\\d)").matcher(lines[i]);
             if(sameLine.find()) return sameLine.group(1);
         }
+        int header=slotHeaderIndex(lines);
+        if(header>=0&&header+1<lines.length&&lines[header+1].matches("\\s*\\d{6,12}\\s*"))
+            return lines[header+1].trim();
         return null;
+    }
+
+    private static int slotHeaderIndex(String[] lines) {
+        for(int i=0;i+1<lines.length;i++)
+            if(lines[i+1].matches("\\s*\\d{6,12}\\s*")&&parseLabeledMoney(lines[i])!=null) return i;
+        return -1;
+    }
+
+    private static boolean hasStandaloneNumericId(String[] lines) {
+        for(String line:lines) if(line.matches("\\s*\\d{6,12}\\s*")) return true;
+        return false;
     }
 
     private static String parseSlotOrderCount(String[] lines) {
@@ -400,6 +421,15 @@ public final class YandexScreenParser {
         for(String line:lines) {
             Matcher matcher=count.matcher(line);
             if(matcher.find()) return matcher.group(1);
+        }
+        // When the order word is unreadable, the slot summary still places the
+        // count before its distance (for example "33 3aka3a + 34,43 KM").
+        Pattern distance=Pattern.compile("(?<!\\d)\\d{1,4}(?:[.,]\\d{1,2})?\\s*(?:км|km)(?![\\p{L}])",
+            Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+        Pattern leadingCount=Pattern.compile("^\\s*(\\d{1,4})\\s+");
+        for(String line:lines) if(distance.matcher(line).find()) {
+            Matcher first=leadingCount.matcher(line);
+            if(first.find()) return first.group(1);
         }
         return null;
     }
