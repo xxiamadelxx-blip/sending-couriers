@@ -98,6 +98,11 @@ jobs:
           unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"
+      - name: Enable KVM group permissions for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Run offline video OCR probe in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -114,11 +119,31 @@ jobs:
             for attempt in $(seq 1 90); do
               adb shell uiautomator dump /sdcard/m4-window.xml >/dev/null 2>&1 || true
               screen=$(adb shell cat /sdcard/m4-window.xml 2>/dev/null || true)
-              if printf '%s' "$screen" | grep -q "M4 OFFLINE VIDEO OCR QA PASS"; then
+              if printf '%s' "$screen" | grep -q "M4 FORECAST WRITE PASS"; then
+                printf '%s\n' "$screen"
+                break
+              fi
+              if printf '%s' "$screen" | grep -q "M4 FORECAST QA FAIL"; then
+                printf '%s\n' "$screen"
+                exit 1
+              fi
+              sleep 2
+            done
+            if ! printf '%s' "$(adb shell cat /sdcard/m4-window.xml 2>/dev/null || true)" | grep -q "M4 FORECAST WRITE PASS"; then
+              adb shell cat /sdcard/m4-window.xml || true
+              adb logcat -d -s AndroidRuntime:E
+              exit 1
+            fi
+            adb shell am force-stop ru.courier.finance.m4probe
+            adb shell am start -W -n ru.courier.finance.m4probe/ru.courier.finance.M4DeviceProbeActivity --ez m4.verifyRestart true
+            for attempt in $(seq 1 30); do
+              adb shell uiautomator dump /sdcard/m4-window.xml >/dev/null 2>&1 || true
+              screen=$(adb shell cat /sdcard/m4-window.xml 2>/dev/null || true)
+              if printf '%s' "$screen" | grep -q "M4 FORECAST RESTART PASS"; then
                 printf '%s\n' "$screen"
                 exit 0
               fi
-              if printf '%s' "$screen" | grep -q "M4 OFFLINE VIDEO OCR QA FAIL"; then
+              if printf '%s' "$screen" | grep -q "M4 FORECAST RESTART FAIL"; then
                 printf '%s\n' "$screen"
                 exit 1
               fi

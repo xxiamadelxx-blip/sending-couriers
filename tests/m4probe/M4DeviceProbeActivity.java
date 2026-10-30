@@ -1,6 +1,8 @@
 package ru.courier.finance;
 
 import android.app.Activity;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -23,7 +25,8 @@ public final class M4DeviceProbeActivity extends Activity {
         label=new TextView(this);label.setTextColor(Color.WHITE);label.setBackgroundColor(Color.rgb(18,24,29));
         label.setTextSize(22);label.setGravity(Gravity.CENTER);label.setPadding(32,32,32,32);
         setContentView(label);label.setText("M4 synthetic offline video probe…");
-        worker.execute(this::runProbe);
+        if(getIntent().getBooleanExtra("m4.verifyRestart",false)) worker.execute(this::verifyForecastAfterRestart);
+        else worker.execute(this::runProbe);
     }
 
     private void runProbe() {
@@ -47,7 +50,7 @@ public final class M4DeviceProbeActivity extends Activity {
             boolean cyrillic=false,numbers=false,orders=false;
             for(VideoImportProcessor.Observation row:result.observations) {
                 cyrillic |= row.ocrText.toLowerCase(java.util.Locale.ROOT).contains("заказ");
-                numbers |= row.ocrText.contains("900") || row.ocrText.contains("12:34");
+                numbers |= row.ocrText.contains("100") || row.ocrText.contains("12:34");
                 orders |= row.screenType==YandexScreenParser.ScreenType.ORDERS;
             }
             boolean slotCandidate=result.uniqueCandidateCount("SLOT_DETAIL")>0;
@@ -61,11 +64,47 @@ public final class M4DeviceProbeActivity extends Activity {
             VideoImportDatabase.PersistResult stored=database.persist(result,"video/mp4");
             if(stored.duplicate || stored.frameCount<1 || stored.insertedCandidateCount<1)
                 throw new AssertionError("local evidence/candidate persistence failed");
-            show("M4 OFFLINE VIDEO OCR QA PASS\nSynthetic fixture only\n"+stored.frameCount
-                +" timed frames · "+stored.insertedCandidateCount+" parsed rows persisted\nNo order or payment fact created.");
+            M4ForecastFactWriter.ImportResult forecast=M4ForecastFactWriter.importFacts(this,result);
+            if(!forecast.accepted || forecast.duplicate || forecast.orderCount!=1 || forecast.forecastDay==null
+                    || forecast.forecastDay.getInt("orders")!=1)
+                throw new AssertionError("forecast writer did not accept the exact synthetic order: "+forecast.message);
+            String date=forecast.forecastDay.getString("date");
+            boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
+                .putString("source",forecast.source).putString("date",date).commit();
+            if(!saved) throw new AssertionError("restart verification marker could not be saved");
+            show("M4 FORECAST WRITE PASS\nSynthetic fixture only\n1 order · 10000 kopecks\nForecast facts saved; restart check pending.");
         } catch(Throwable error) {
-            show("M4 OFFLINE VIDEO OCR QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+            show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
+    }
+
+    private void verifyForecastAfterRestart() {
+        CourierDatabase store=null;
+        try {
+            String source=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).getString("source",null);
+            String date=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).getString("date",null);
+            if(source==null||date==null) throw new AssertionError("forecast restart marker is missing");
+            store=new CourierDatabase(this);SQLiteDatabase db=store.getReadableDatabase();
+            long[] orders=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders WHERE source_id=? AND date=? AND source_kind='video_import'",source,date);
+            long[] forecast=counts(db,"SELECT COUNT(*),COALESCE(SUM(order_count),0) FROM active_aggregate_order_counts WHERE source_id=? AND date=? AND source_kind='video_import'",source,date);
+            String status=null;
+            try(Cursor cursor=db.rawQuery("SELECT status FROM import_sources WHERE id=?",new String[]{source})) {
+                if(cursor.moveToFirst()) status=cursor.getString(0);
+            }
+            if(orders[0]!=1||orders[1]!=10000||forecast[0]!=1||forecast[1]!=1||!"mirrored".equals(status))
+                throw new AssertionError("persisted forecast mismatch: orderRows="+orders[0]+", reward="+orders[1]
+                    +", forecastRows="+forecast[0]+", forecastOrders="+forecast[1]+", sourceStatus="+status);
+            show("M4 FORECAST RESTART PASS\nSQLite survived force-stop\n1 order · ₽100 · forecast count 1\nSource status: mirrored");
+        } catch(Throwable error) {
+            show("M4 FORECAST RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+        } finally { if(store!=null) store.close(); }
+    }
+
+    private static long[] counts(SQLiteDatabase db,String sql,String... args) {
+        try(Cursor cursor=db.rawQuery(sql,args)) {
+            if(!cursor.moveToFirst()) return new long[]{-1,-1};
+            return new long[]{cursor.getLong(0),cursor.getLong(1)};
+        }
     }
 
     private void show(String text) { runOnUiThread(()->label.setText(text)); }
