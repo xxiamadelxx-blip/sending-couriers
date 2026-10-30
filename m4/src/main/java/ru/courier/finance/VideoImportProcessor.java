@@ -329,11 +329,18 @@ public final class VideoImportProcessor {
     }
 
     private static Bitmap scale(Bitmap bitmap,int maxSide) {
-        int max=Math.max(bitmap.getWidth(),bitmap.getHeight());
-        if(max<=maxSide) return bitmap;
+        Bitmap source=bitmap;
+        if(bitmap.getConfig()!=Bitmap.Config.ARGB_8888) {
+            source=bitmap.copy(Bitmap.Config.ARGB_8888,false);
+            if(source==null) throw new IllegalStateException("Video frame could not be converted to ARGB_8888");
+        }
+        int max=Math.max(source.getWidth(),source.getHeight());
+        if(max<=maxSide) return source;
         float ratio=maxSide/(float)max;
-        return Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*ratio)),
-            Math.max(1,Math.round(bitmap.getHeight()*ratio)),true);
+        Bitmap scaled=Bitmap.createScaledBitmap(source,Math.max(1,Math.round(source.getWidth()*ratio)),
+            Math.max(1,Math.round(source.getHeight()*ratio)),true);
+        if(source!=bitmap) source.recycle();
+        return scaled;
     }
 
     private static String saveUnknownFrame(Context context,String videoHash,long timestamp,Bitmap bitmap) throws Exception {
