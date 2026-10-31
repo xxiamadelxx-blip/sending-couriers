@@ -16,7 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -177,7 +176,6 @@ public final class M7GoogleSheetsSync {
             M7SyncStore.Record current=item.getValue();M7SyncStore.Event pending=store.pendingFor(current.type,current.id);M7SyncStore.Head previous=known.get(item.getKey());
             if(pending!=null)continue;
             if(previous==null)store.enqueue(current.type,current.id,current.action,current.payload,null);
-            else if(previous.payloadHash.equals(current.hash))continue;
             else store.createConflict(current.type,current.id,current.action,current.payload,M7SyncStore.REMOTE_MISSING,null,null);
         }
 
