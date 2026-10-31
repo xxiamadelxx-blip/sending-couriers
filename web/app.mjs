@@ -81,6 +81,7 @@ function openForecast(initial = 'today') {
   warmForecast();
 }
 window.receiveForecastImport = text => { if(view!=='forecast')openForecast(); forecastScreen.receiveImport(text); };
+window.receiveNativeForecast = (requestId, payload) => { if(view==='forecast') forecastScreen?.receiveNativeForecast?.(requestId, payload); };
 window.receiveVideoImport = raw => {
   try {
     const result = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
@@ -89,6 +90,7 @@ window.receiveVideoImport = raw => {
       const source=result.forecastSource||'video_import';
       const forecast=importDays(state.forecast,[result.forecastDay],source,new Date().toISOString());
       persist({...state,forecast},true);
+      forecastScreen?.invalidateNativeForecasts?.();
       forecastScreen?.refresh?.();
       notify(`Видео импортировано: ${result.importedOrderCount} заказов записаны в историю прогноза.`);
     } else if (result.duplicate) notify(result.forecastFactMessage||'Это видео уже обработано.');

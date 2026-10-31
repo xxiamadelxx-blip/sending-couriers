@@ -11,7 +11,14 @@ const num=n=>n==null?'—':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:
 const hours=m=>m==null?'—':`${num(m/60)} ч`;
 const range=p=>p?.central==null?'Нет оценки':`${p.central} заказов · ${p.lower}–${p.upper}`;
 const confidence=p=>({rest:'Отдых',insufficient:'Недостаточно истории',low:'Низкая уверенность',limited:'Ограниченная уверенность',moderate:'Личная история'}[p?.confidence]??'Нет оценки');
-export const forecastModelLabel=p=>p?.central==null?'':p.selectedModel==='weighted-count-baseline'?(p.timeKind?'Почасовые события учтены · выбран базовый расчёт':'Оценка по дневным итогам · почасовая модель не обучена'):['poisson-offset','negative-binomial'].includes(p.selectedModel)?'Почасовая модель по подтверждённым рабочим окнам':'';
+export const forecastModelLabel=p=>{
+  if(p?.central==null)return '';
+  if(p.nativeModel){
+    const model={ 'weighted-count-baseline':'базовый расчёт','poisson-offset-daily':'Пуассон','negative-binomial-daily':'отрицательная биномиальная модель' }[p.selectedModel]??'личная история';
+    return `На устройстве · ${model}`;
+  }
+  return p.selectedModel==='weighted-count-baseline'?(p.timeKind?'Почасовые события учтены · выбран базовый расчёт':'Оценка по дневным итогам · почасовая модель не обучена'):['poisson-offset','poisson-offset-daily','negative-binomial','negative-binomial-daily'].includes(p.selectedModel)?'Почасовая модель по подтверждённым рабочим окнам':'';
+};
 const errorHTML='<p class="error" id="forecastError" role="alert" hidden></p>';
 const textField=(id,label,value='',type='text',extra='')=>`<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" aria-label="${esc(label)}" value="${esc(value)}" ${extra}></div>`;
 const metric=(name,value)=>`<div><span>${name}</span><strong>${esc(value)}</strong></div>`;
@@ -21,12 +28,68 @@ export function forecastTeaser(state) {
 }
 export function mountForecast({root,getState,commit,heading,nav,leave,notify,Native,initial='today'}) {
   const $=s=>root.querySelector(s),data=()=>getState().forecast??emptyForecast();
-  let updateModel=()=>{},flushPlan=()=>true,modelFailure=false,screen=initial,start=forecastClock(data()).date,overrides={},dayDate=start,pending=null,weekConfig=data().weekConfig??null,weekConfigDraftValid=true;
+  let updateModel=()=>{},flushPlan=()=>true,modelFailure=false,screen=initial,start=forecastClock(data()).date,overrides={},dayDate=start,pending=null,weekConfig=data().weekConfig??null,weekConfigDraftValid=true,nativeEpoch=0,nativeCounter=0,nativeSession=Math.random().toString(36).slice(2,10),nativeRequestTimer=null;
+  const nativeCache=new Map(),nativePending=new Set(),nativeRequests=new Map(),nativeQueue=new Map();
+  const nativeZone=(f,date,plan={})=>String(plan.timezone||profileFor(f,date)?.timezone||f.days?.[date]?.timezone||f.location?.timezone||f.typicalPlan?.timezone||'Europe/Moscow');
+  const nativeTarget=(f,date,workingMin,plan={})=>Number.isInteger(workingMin)&&workingMin>0&&workingMin<=1440?{date,targetWorkMinutes:workingMin,zone:nativeZone(f,date,plan)}:null;
+  const nativeKey=target=>`${nativeEpoch}|${target.date}|${target.targetWorkMinutes}|${target.zone}`;
+  const flushNativeQueue=()=>{
+    nativeRequestTimer=null;
+    if(typeof Native?.requestNativeForecastBatch!=='function'){nativeQueue.clear();nativePending.clear();return;}
+    const batch=[...nativeQueue.values()].slice(0,7);
+    for(const item of batch)nativeQueue.delete(item.target.date);
+    if(!batch.length)return;
+    const requestId=`m5-${nativeSession}-${++nativeCounter}`,expected=new Set(batch.map(item=>item.key));
+    nativeRequests.set(requestId,expected);
+    try{Native.requestNativeForecastBatch(requestId,JSON.stringify(batch.map(item=>item.target)));}
+    catch{nativeRequests.delete(requestId);for(const key of expected){nativePending.delete(key);nativeCache.set(key,null);}updateModel();}
+    if(nativeQueue.size)nativeRequestTimer=setTimeout(flushNativeQueue,0);
+  };
+  const requestNativeForecasts=targets=>{
+    if(typeof Native?.requestNativeForecastBatch!=='function')return;
+    for(const target of targets??[]){
+      if(!target||!target.date||!target.zone||target.zone.length>128)continue;
+      const key=nativeKey(target);
+      if(nativeCache.has(key)||nativePending.has(key))continue;
+      const queued=nativeQueue.get(target.date);
+      if(queued&&queued.key!==key)nativePending.delete(queued.key);
+      nativePending.add(key);nativeQueue.set(target.date,{key,target});
+    }
+    if(nativeQueue.size){clearTimeout(nativeRequestTimer);nativeRequestTimer=setTimeout(flushNativeQueue,180);}
+  };
+  const receiveNativeForecast=(requestId,raw)=>{
+    const expected=nativeRequests.get(requestId);if(!expected)return false;
+    nativeRequests.delete(requestId);
+    try{
+      const payload=typeof raw==='string'?JSON.parse(raw):raw,rows=Array.isArray(payload)?payload:payload?.predictions??[],received=new Set();
+      for(const row of rows){
+        const target={date:row?.date,targetWorkMinutes:row?.targetWorkMinutes,zone:row?.zone};
+        if(!target.date||!Number.isInteger(target.targetWorkMinutes)||!target.zone)continue;
+        const key=nativeKey(target);if(!expected.has(key))continue;
+        nativePending.delete(key);received.add(key);
+        nativeCache.set(key,row.available===true&&Number.isInteger(row.central)&&Number.isInteger(row.lower)&&Number.isInteger(row.upper)?row:null);
+      }
+      for(const key of expected){nativePending.delete(key);if(!received.has(key))nativeCache.set(key,null);}
+    }catch{
+      for(const key of expected){nativePending.delete(key);nativeCache.set(key,null);}
+    }
+    updateModel();return true;
+  };
+  const invalidateNativeForecasts=()=>{
+    nativeEpoch++;clearTimeout(nativeRequestTimer);nativeRequestTimer=null;
+    nativeCache.clear();nativePending.clear();nativeRequests.clear();nativeQueue.clear();
+  };
+  const effectiveForecast=(target,fallback)=>{
+    const result=target&&nativeCache.get(nativeKey(target));
+    return !result?fallback:{...fallback,...result,nativeModel:true,timeKind:false,intervalForecasts:[],modelVersion:result.modelVersion??'native-count-1',reasons:[]};
+  };
   const useWeekConfig=(force=false)=>{if(!weekConfig)return;for(let i=0;i<7;i++){const date=addDays(start,i),base=planDay(data(),date),fact=data().days[date];if(fact?.completed&&fact.ordersConfirmed&&date<=forecastClock(data()).date||!force&&data().plans[date])continue;const rest=base.rest&&(base.slotMin??base.accountedMin)===0,workingMin=rest?0:weekConfig.workingMin,same=base.workingMin===workingMin;overrides[date]={workingMin,slotMin:rest?0:weekConfig.slotMin,accountedMin:null,intervals:rest?[]:weekConfig.intervals??(same?base.intervals.filter(i=>i.state==='WORK'):[]),precision:rest?'total':weekConfig.precision??(same&&base.intervals.length?'intervals':'total'),accountingAssumption:true};}};useWeekConfig();
   const current=()=>forecastClock(data());
   const write=(next,{nowcast=true}={})=>{
+    const previousDays=JSON.stringify(data().days);
     let f=evaluateForecasts(next);f=ensureForecast(f);
     if(nowcast)f=ensureForecast(f,new Date(),'NOWCAST');
+    if(JSON.stringify(f.days)!==previousDays)invalidateNativeForecasts();
     commit({...getState(),forecast:f});
   };
   const showError=error=>{const e=$('#forecastError');if(e){e.textContent=error.message;e.hidden=false;}else notify(error.message);};
@@ -53,7 +116,9 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     let saveTimer,dirty=false;
     const read=()=>{const pair=readPair('todayWorkHours','todaySlotHours');if(pair.slotMin==null||pair.workingMin==null)throw new Error('Укажите длительность слота и рабочее время.');return {...pair,intervals:[],precision:'total',mode:'simple'};};
     const preview=()=>{
-      const pair=read(),result=predict(data(),date,planDay(data(),date,{[date]:pair}));
+      const pair=read(),plan=planDay(data(),date,{[date]:pair}),target=nativeTarget(data(),date,pair.workingMin,plan);
+      requestNativeForecasts([target]);
+      const result=effectiveForecast(target,predict(data(),date,plan));
       const count=$('#simpleCount'),band=$('#simpleRange');
       const unknown=result.central==null;
       count.hidden=unknown;
@@ -66,7 +131,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
         const title=result.preparing?'Готовим прогноз…':modelFailure?'Нет прогноза':'Пока мало данных';
         const detail=result.preparing?'Расчёт по истории смен':modelFailure?'Не удалось рассчитать прогноз. Откройте экран ещё раз.':'Прогноз появится после накопления истории смен';
         band.innerHTML=`<span class="forecast-insufficient-mark" aria-hidden="true"></span><span class="forecast-insufficient-copy"><strong>${esc(title)}</strong><small>${esc(detail)}</small></span>`;
-      }else band.textContent=`Возможный диапазон: ${result.lower}–${result.upper}`;
+      }else band.textContent=`Возможный диапазон: ${result.lower}–${result.upper}${result.nativeModel?' · Нативная модель Android':''}`;
       $('#forecastError').hidden=true;
       return pair;
     };
@@ -152,11 +217,23 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
   function weekView() {
     const conditional={};
     const rebuild=()=>{const w=weekPlan(data(),start,overrides);for(const d of w.days)conditional[d.date]={...d,slotMin:d.slotMin??d.accountedMin,accountedMin:d.accountedMin??d.slotMin,accountingAssumption:d.accountedMin==null};return w;};
-    const base=rebuild(),result=forecastFinances(getState(),start,conditional,current().date),week={...base,days:base.days.map(displayWeekDay)};
+    const withNativeForecasts=w=>{
+      const days=w.days.map(d=>{
+        const shown=displayWeekDay(d);
+        const target=shown.isFact?null:nativeTarget(data(),d.date,d.workingMin,d);
+        const forecast=shown.isFact?shown.forecast:effectiveForecast(target,d.forecast);
+        conditional[d.date]={...conditional[d.date],forecast};
+        return {...shown,forecast};
+      });
+      return {...w,days};
+    };
+    const base=rebuild();
+    requestNativeForecasts(base.days.filter(d=>!displayWeekDay(d).isFact).map(d=>nativeTarget(data(),d.date,d.workingMin,d)));
+    const week=withNativeForecasts(base),result=forecastFinances(getState(),start,conditional,current().date);
     const daySlot=d=>d.isFact?(data().days[d.date].accountedConfirmed?data().days[d.date].appAccountedMin:null):conditional[d.date].slotMin;
     const dayNote=d=>d.isFact?'Завершённый факт':`Вне работы: ${d.workingMin!=null&&daySlot(d)!=null?hours(Math.max(0,daySlot(d)-d.workingMin)):'—'}`;
     const totals=r=>`<div class="forecast-metrics duration-totals">${metric('Работа на неделю',hours(r.week.workingMin))}${metric('Слоты на неделю',hours(r.week.accountedMin))}${metric('Вне работы',r.week.workingMin!=null&&r.week.accountedMin!=null?hours(Math.max(0,r.week.accountedMin-r.week.workingMin)):'—')}</div>`;
-    const weekModel=()=>week.days.find(d=>!d.isFact&&d.forecast.central!=null)?.forecast;
+    const weekModel=()=>week.days.find(d=>!d.isFact&&d.forecast.nativeModel)?.forecast??week.days.find(d=>!d.isFact&&d.forecast.central!=null)?.forecast;
     shell('План на 7 дней',`<div class="forecast-datebar">${textField('weekStart','С даты',start,'date')}<button class="button quiet" id="resetWeek" type="button">Сбросить</button></div><p class="forecast-model-label" id="weekModelStatus" role="status">${esc(forecastModelLabel(weekModel()))}</p>
       <section class="detail-card week-config"><h2>По умолчанию на день</h2><div class="week-presets"><button type="button" data-slot-preset="9" aria-pressed="${weekConfig?.slotMin===540}">Слот 9 ч</button><button type="button" data-slot-preset="14" aria-pressed="${weekConfig?.slotMin===840}">Слот 14 ч</button></div>${durationField('weekSlotHours','Номинальный слот',weekConfig?.slotMin??null)}${intervalField('weekActiveHours',weekConfig?.intervals??(weekConfig?[]:week.days.find(d=>!d.isFact)?.intervals??[]),weekConfig?weekConfig.workingMin:week.days.find(d=>!d.isFact)?.workingMin??null)}<p class="duration-step-hint">Шаг 15 минут · точнее кнопками −/+</p></section><p class="hint">Риск выплаты — если весь слот учитывается Яндексом.</p>
       <details class="week-editor" open><summary>Настроить отдельные дни</summary><section class="week-planner">${week.days.map((d,i)=>`<details class="detail-card week-day"><summary><span>${short[(new Date(d.date+'T00:00:00Z').getUTCDay()+6)%7]} · ${esc(formatDate(d.date))}</span><strong id="dayEstimate${i}">${d.forecast.central??'—'} заказов</strong></summary>${durationField(`weekSlot${i}`,'Номинальный слот',daySlot(d),`data-week-slot="${i}" ${d.isFact?'disabled':''}`)}${intervalField(`weekWork${i}`,overrides[d.date]?.intervals??data().plans[d.date]?.intervals??d.intervals,d.workingMin,d.isFact)}<p class="hint" id="weekBand${i}">${d.isFact?'Завершённый факт · ':''}${esc(range(d.forecast))}</p><p class="hint" id="weekAssumption${i}">${esc(dayNote(d))}</p><div id="weekRisk${i}">${d.isFact?'':planResult(d.date,{workingMin:d.workingMin,slotMin:daySlot(d)},d.forecast)}</div></details>`).join('')}</section></details>
@@ -165,8 +242,12 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
       <div class="forecast-actions"><button id="saveWeek" class="button primary" type="button">Сохранить сценарий</button><button id="compareWeek" class="button outline" type="button">Сравнить с моим графиком</button></div><div id="scenarioComparison"></div>${data().scenarios.length?`<details class="calculation"><summary>Сохранённые сценарии</summary>${data().scenarios.slice(-5).reverse().map(s=>`<button class="button quiet" type="button" data-load-scenario="${esc(s.id)}">${esc(s.name)} · ${esc(formatDate(s.start))}</button>`).join('')}</details>`:''}${errorHTML}`);
     $('#weekStart').onchange=()=>run(()=>{start=$('#weekStart').value;overrides={};useWeekConfig();weekView();});$('#resetWeek').onclick=()=>{overrides={};weekConfig=null;weekConfigDraftValid=true;weekView();};
     const refresh=()=>{
-      const w=rebuild(),r=forecastFinances(getState(),start,conditional,current().date);$('#weekTotals').innerHTML=periodResult(r.weekFinancial);$('#periodForecast').innerHTML=periodResult(r.fortnight);$('#weekDurationTotals').innerHTML=totals(r);$('#weekModelStatus').textContent=forecastModelLabel(w.days.map(displayWeekDay).find(d=>!d.isFact&&d.forecast.central!=null)?.forecast);
-      w.days.map(displayWeekDay).forEach((d,i)=>{$(`#dayEstimate${i}`).textContent=`${d.forecast.central??'—'} заказов`;$(`#weekBand${i}`).textContent=(d.isFact?'Завершённый факт · ':'')+range(d.forecast);$(`#weekAssumption${i}`).textContent=dayNote(d);$(`#weekRisk${i}`).innerHTML=d.isFact?'':planResult(d.date,{workingMin:d.workingMin,slotMin:daySlot(d)},d.forecast);});$('#forecastError').hidden=true;
+      const w=rebuild();
+      requestNativeForecasts(w.days.filter(d=>!displayWeekDay(d).isFact).map(d=>nativeTarget(data(),d.date,d.workingMin,d)));
+      const displayed=withNativeForecasts(w),r=forecastFinances(getState(),start,conditional,current().date);
+      $('#weekTotals').innerHTML=periodResult(r.weekFinancial);$('#periodForecast').innerHTML=periodResult(r.fortnight);$('#weekDurationTotals').innerHTML=totals(r);
+      $('#weekModelStatus').textContent=forecastModelLabel(displayed.days.find(d=>!d.isFact&&d.forecast.nativeModel)?.forecast??displayed.days.find(d=>!d.isFact&&d.forecast.central!=null)?.forecast);
+      displayed.days.forEach((d,i)=>{$(`#dayEstimate${i}`).textContent=`${d.forecast.central??'—'} заказов`;$(`#weekBand${i}`).textContent=(d.isFact?'Завершённый факт · ':'')+range(d.forecast);$(`#weekAssumption${i}`).textContent=dayNote(d);$(`#weekRisk${i}`).innerHTML=d.isFact?'':planResult(d.date,{workingMin:d.workingMin,slotMin:daySlot(d)},d.forecast);});$('#forecastError').hidden=true;
     };
     updateModel=()=>run(refresh);
     const applyCommon=()=>{
@@ -214,5 +295,5 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     run(()=>{const parsed=parseForecastFile(text,name);const merged=applyHistory(data(),parsed);write(merged);simpleView();notify(`История загружена: ${parsed.days.length} дней`);});
   }
   function render(next=screen){if(!flushPlan())return;flushPlan=()=>true;updateModel=()=>{};screen=next;({today:simpleView,day:dayView,week:weekView,accuracy:accuracyView,data:dataView}[screen]??simpleView)();}
-  render();return {receiveImport,refresh:()=>render(screen),flush:()=>flushPlan(),modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(!flushPlan())return true;if(screen!=='today'){render('today');return true;}return false;}};
+  render();return {receiveImport,receiveNativeForecast,invalidateNativeForecasts,refresh:()=>render(screen),flush:()=>flushPlan(),modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(!flushPlan())return true;if(screen!=='today'){render('today');return true;}return false;}};
 }

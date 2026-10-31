@@ -40,7 +40,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import org.json.JSONArray;
 import org.json.JSONObject;
+import java.time.LocalDate;
 
 public final class MainActivity extends Activity {
     private static final String ORIGIN = "https://appassets.androidplatform.net";
@@ -308,6 +310,81 @@ public final class MainActivity extends Activity {
                     startActivityForResult(intent, IMPORT_FORECAST);
                 } catch (Exception e) { error("Не удалось открыть выбор файла."); }
             });
+        }
+        @JavascriptInterface public void requestNativeForecastBatch(String requestId, String targetsJson) {
+            if (requestId == null || !requestId.matches("m5-[A-Za-z0-9_-]{1,48}")
+                    || targetsJson == null || targetsJson.length() > 16_384 || factMirrorDatabase == null) return;
+            final JSONArray targets;
+            try {
+                targets = new JSONArray(targetsJson);
+                if (targets.length() < 1 || targets.length() > 7) return;
+                for (int i = 0; i < targets.length(); i++) {
+                    JSONObject target = targets.getJSONObject(i);
+                    String date = target.getString("date");
+                    if (!date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) return;
+                    LocalDate.parse(date);
+                    int minutes = target.getInt("targetWorkMinutes");
+                    if (minutes < 1 || minutes > 1440) return;
+                    String zone = target.getString("zone");
+                    if (zone.isEmpty() || zone.length() > 128) return;
+                }
+            } catch (Exception ignored) { return; }
+            try {
+                // This queue follows earlier state mirrors, so a just-confirmed
+                // fact is visible before the native model reads its training set.
+                factMirrorExecutor.execute(() -> {
+                    JSONArray predictions = new JSONArray();
+                    try {
+                        android.database.sqlite.SQLiteDatabase db = factMirrorDatabase.getReadableDatabase();
+                        for (int i = 0; i < targets.length(); i++) {
+                            JSONObject target = targets.getJSONObject(i);
+                            String date = target.getString("date");
+                            int minutes = target.getInt("targetWorkMinutes");
+                            String zone = target.getString("zone");
+                            JSONObject result = new JSONObject();
+                            result.put("date", date);
+                            result.put("targetWorkMinutes", minutes);
+                            result.put("zone", zone);
+                            try {
+                                NativeCountModel.Prediction prediction =
+                                        AutonomousForecastStore.predict(db, date, minutes, zone);
+                                result.put("available", prediction.available);
+                                if (prediction.reason != null) result.put("reason", prediction.reason);
+                                result.put("selectedModel", prediction.selectedModel);
+                                result.put("confidence", prediction.confidence);
+                                result.put("comparableN", prediction.comparableN);
+                                result.put("baseline", prediction.baseline == null ? JSONObject.NULL : prediction.baseline);
+                                result.put("central", prediction.central == null ? JSONObject.NULL : prediction.central);
+                                result.put("lower", prediction.lower == null ? JSONObject.NULL : prediction.lower);
+                                result.put("upper", prediction.upper == null ? JSONObject.NULL : prediction.upper);
+                                result.put("trainingCutoff", prediction.trainingCutoff == null ? JSONObject.NULL : prediction.trainingCutoff);
+                                result.put("sourceHash", prediction.sourceHash == null ? JSONObject.NULL : prediction.sourceHash);
+                                result.put("validationN", prediction.validationN);
+                                result.put("modelVersion", NativeCountModel.VERSION);
+                            } catch (Exception ignored) {
+                                result.put("available", false);
+                                result.put("reason", "native prediction unavailable");
+                            }
+                            predictions.put(result);
+                        }
+                    } catch (Exception error) {
+                        Log.e("CourierForecast", "M3 screen prediction failed: " + error.getClass().getSimpleName());
+                    }
+                    JSONObject response = new JSONObject();
+                    try { response.put("predictions", predictions); }
+                    catch (Exception ignored) { }
+                    final String serialized = response.toString();
+                    runOnUiThread(() -> {
+                        if (web == null || isFinishing()) return;
+                        try {
+                            web.evaluateJavascript("window.receiveNativeForecast && window.receiveNativeForecast("
+                                    + JSONObject.quote(requestId) + "," + JSONObject.quote(serialized) + ")", null);
+                        } catch (Exception ignored) { }
+                    });
+                });
+            } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                // Activity is closing; no forecast result is persisted.
+            }
         }
         @JavascriptInterface public void fetchWeather(String city, String timezone) {
             synchronized (MainActivity.this) { if (weatherLoading) return; weatherLoading=true; }
