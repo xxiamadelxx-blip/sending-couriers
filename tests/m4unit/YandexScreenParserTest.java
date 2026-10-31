@@ -329,6 +329,15 @@ public final class YandexScreenParserTest {
             detailCard("261017-1111111","10:55","11:20","100,00 ₽"),
             detailCard("261017-2222222","10:58","11:20","100,00 ₽"),
             detailCard("261017-3333333","11:25","11:40","99,00 ₽"));
+        int observedDetails=0;
+        boolean thirdAmountRead=false;
+        for(YandexScreenParser.Candidate detail:video.uniqueCandidates()) if("ORDER_DETAIL".equals(detail.candidateType)) {
+            observedDetails++;
+            if("261017-3333333".equals(field(detail,"order_number")))
+                thirdAmountRead="9900".equals(field(detail,"total_kopecks"));
+        }
+        assertEquals("all three distinct completed cards should be observed",3,observedDetails);
+        assertTrue("the third card's 99 ₽ payout must be read without rounding",thirdAmountRead);
         try {
             extractFacts(video);
             throw new AssertionError("expected strict detail subtotal rejection");
@@ -354,6 +363,21 @@ public final class YandexScreenParserTest {
             assertTrue(expected.getCause() instanceof IllegalArgumentException);
             assertTrue(expected.getCause().getMessage().contains("чаевых"));
         }
+    }
+
+    @Test public void derivesOrderSubtotalFromGrossAfterRecognizedTipsWhenOrderLineIsAbsent() throws Exception {
+        String slot="Слот: 120,00 ₽\n341234567\n1 заказ · 1 км\n"
+            +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
+        String hocr="<div class='ocr_page' title='image \"screen.png\"; bbox 0 0 720 1608; ppageno 0'>"
+            +"<span class='ocr_line'>"+hocrWord("Чаевые",31,602,127,626)+hocrWord("20,00",568,602,637,626)+"</span>"
+            +"</div>";
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        observations.add(observation(0,"slot",slot,hocr));
+        observations.add(observation(1,"list","Яндекс Про\nЗаказы\n18:00 100,00 ₽ >"));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("a".repeat(64),1,5000,observations,2);
+        Object facts=extractFacts(video);
+        assertEquals(1,((java.util.List<?>)fact(facts,"orders")).size());
+        assertEquals(10000,((Long)fact(facts,"rowAmountKopecks")).longValue());
     }
 
     @Test public void removesOneFrameTimeReversalWhenAnotherRealRowHasOnlyTwoFrames() {

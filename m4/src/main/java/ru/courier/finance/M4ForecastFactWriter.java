@@ -189,6 +189,16 @@ public final class M4ForecastFactWriter {
                 throw new IllegalArgumentException("Сумма заказов и чаевых не совпала с итогом карточки слота; факты не записаны.");
         }
 
+        Long orderTotal=facts.slotOrderAmountKopecks;
+        if(orderTotal==null) {
+            if(facts.slotTipsKopecks!=null) {
+                try { orderTotal=Math.subtractExact(facts.slotAmountKopecks,facts.slotTipsKopecks); }
+                catch(ArithmeticException overflow) { throw new IllegalArgumentException("Сумма заказа и чаевых не прошла проверку; факты не записаны."); }
+                if(orderTotal<0) throw new IllegalArgumentException("Чаевые превышают итог карточки слота; факты не записаны.");
+            } else orderTotal=facts.slotAmountKopecks;
+        }
+        reconcileCompleteOrderDetails(facts,details,orderTotal);
+
         for(YandexScreenParser.Candidate row:rows) {
             String rowSlot=field(row,"slot_id");
             if(rowSlot!=null&&!facts.slotId.equals(rowSlot)) continue;
@@ -202,7 +212,6 @@ public final class M4ForecastFactWriter {
             catch(ArithmeticException overflow) { throw new IllegalArgumentException("Сумма строк списка не прошла проверку."); }
         }
         Collections.sort(facts.orders,Comparator.comparingInt((OrderFact o)->o.visibleMinute).thenComparingInt(o->o.occurrence));
-        Long orderTotal=facts.slotOrderAmountKopecks!=null?facts.slotOrderAmountKopecks:facts.slotAmountKopecks;
         if(facts.orders.size()>facts.declaredCount)
             throw new IllegalArgumentException("Извлечено уникальных строк заказов: "+facts.orders.size()+"; в слоте указано "+facts.declaredCount+". Проверьте повторы или карточку слота.");
         if(facts.orders.size()<facts.declaredCount) recoverObservedDetailRows(facts,details,orderTotal);
@@ -216,6 +225,42 @@ public final class M4ForecastFactWriter {
         for(int i=0;i<facts.orders.size();i++) facts.orders.get(i).id="video-"+facts.sourceHash.substring(0,24)+"-"+facts.slotId+"-"+(i+1);
         attachOrderDetails(facts,details);
         return facts;
+    }
+
+    /**
+     * When the video contains one complete, uniquely identified card for every
+     * order in the slot, reconcile those observed payouts even if one card could
+     * not be joined to the scrolling list by its OCR amount. A complete set of
+     * cards with a conflicting subtotal is an import error, not a partial RAW list.
+     */
+    private static void reconcileCompleteOrderDetails(Facts facts,List<YandexScreenParser.Candidate> details,
+                                                       Long expectedOrderTotal) {
+        if(expectedOrderTotal==null) return;
+        Map<String,Long> totals=new HashMap<>();
+        java.util.Set<String> cardsWithUnknownAmount=new java.util.HashSet<>();
+        for(YandexScreenParser.Candidate detail:details) {
+            if(!"COMPLETED".equals(field(detail,"status"))) continue;
+            String number=field(detail,"order_number");
+            LocalDateTime start=parseLocal(field(detail,"started_at")),end=parseLocal(field(detail,"completed_at"));
+            if(number==null||start==null||end==null||!end.isAfter(start)
+                    ||!facts.date.equals(start.toLocalDate().toString())
+                    ||!facts.date.equals(end.toLocalDate().toString())) continue;
+            int startMinute=start.getHour()*60+start.getMinute(),endMinute=end.getHour()*60+end.getMinute();
+            if(startMinute<facts.slotStartMinute||endMinute>facts.slotEndMinute) continue;
+            Long amount=parseLong(field(detail,"total_kopecks"));
+            if(amount==null||amount<0) cardsWithUnknownAmount.add(number);
+            else totals.put(number,amount);
+        }
+        java.util.Set<String> completeIds=new java.util.HashSet<>(totals.keySet());
+        completeIds.addAll(cardsWithUnknownAmount);
+        if(completeIds.size()!=facts.declaredCount) return;
+        if(!cardsWithUnknownAmount.isEmpty())
+            throw new IllegalArgumentException("Карточки подтверждают все заказы слота, но сумма одной или нескольких карточек не распознана; факты не записаны.");
+        long subtotal=0;
+        try { for(Long amount:totals.values()) subtotal=Math.addExact(subtotal,amount); }
+        catch(ArithmeticException overflow) { throw new IllegalArgumentException("Итог карточек заказов не прошёл проверку; факты не записаны."); }
+        if(subtotal!=expectedOrderTotal)
+            throw new IllegalArgumentException("Сумма карточек завершённых заказов не совпала с итогом карточки слота; факты не записаны.");
     }
 
     /**
