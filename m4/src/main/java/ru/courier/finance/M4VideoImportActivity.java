@@ -191,12 +191,6 @@ public final class M4VideoImportActivity extends Activity {
         });
     }
 
-    @Override protected void onDestroy() {
-        if(workPoll!=null) mainHandler.removeCallbacks(workPoll);
-        executor.shutdown();
-        super.onDestroy();
-    }
-
     private void deliverResult(String path) {
         try {
             if(path==null) throw new IllegalStateException("Не найден сохранённый отчёт импорта.");
@@ -403,5 +397,9 @@ public final class M4VideoImportActivity extends Activity {
         super.onSaveInstanceState(out); if(activeWorkId!=null) out.putString("m4.workId",activeWorkId.toString());
     }
 
-    @Override protected void onDestroy() { executor.shutdown(); super.onDestroy(); }
+    @Override protected void onDestroy() {
+        if(workPoll!=null) mainHandler.removeCallbacks(workPoll);
+        executor.shutdown();
+        super.onDestroy();
+    }
 }
