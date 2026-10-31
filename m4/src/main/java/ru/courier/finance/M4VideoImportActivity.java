@@ -7,6 +7,8 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.content.pm.ApplicationInfo;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.Gravity;
@@ -15,7 +17,6 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import androidx.lifecycle.Observer;
 import androidx.work.Data;
 import androidx.work.ExistingWorkPolicy;
 import androidx.work.OneTimeWorkRequest;
@@ -43,11 +44,12 @@ public final class M4VideoImportActivity extends Activity {
     private static final int PICK_VIDEO=410;
     private static final int MAX_RETURNED_CANDIDATES=100;
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
+    private final Handler mainHandler=new Handler(Looper.getMainLooper());
     private TextView status;
     private ProgressBar progress;
     private boolean launchedForResult;
     private UUID activeWorkId;
-    private Observer<WorkInfo> workObserver;
+    private Runnable workPoll;
     private boolean resultDelivered;
 
     @Override protected void onCreate(Bundle state) {
@@ -144,31 +146,55 @@ public final class M4VideoImportActivity extends Activity {
     private void observeWork(UUID id) {
         if(isFinishing()||isDestroyed()) return;
         activeWorkId=id;
-        if(workObserver!=null) WorkManager.getInstance(getApplicationContext()).getWorkInfoByIdLiveData(id).removeObserver(workObserver);
-        workObserver=info->{
-            if(info==null||status==null||isFinishing()||resultDelivered) return;
-            if(info.getState()==WorkInfo.State.RUNNING) {
-                int done=info.getProgress().getInt(VideoImportWorker.KEY_DONE,0);
-                int total=info.getProgress().getInt(VideoImportWorker.KEY_TOTAL,0);
-                if(total>0) { progress.setIndeterminate(false); progress.setMax(total); progress.setProgress(done); }
-                status.setText(total>0?"Кадров обработано: "+done+" из "+total+"…":"Извлекаю кадры и распознаю текст на устройстве…");
-            } else if(info.getState()==WorkInfo.State.SUCCEEDED) {
-                resultDelivered=true;
-                String path=info.getOutputData().getString(VideoImportWorker.KEY_RESULT_FILE);
-                deleteCompletedInput(info);
-                executor.execute(()->deliverResult(path));
-            } else if(info.getState()==WorkInfo.State.FAILED) {
-                resultDelivered=true;
-                deleteCompletedInput(info);
-                String message=info.getOutputData().getString(VideoImportWorker.KEY_ERROR);
-                String error=message==null?"Не удалось обработать видео.":message;
-                try { finishWith(new JSONObject().put("ok",false).put("error",error).toString(),error); }
-                catch(Exception ignored) { finishError(error); }
-            } else if(info.getState()==WorkInfo.State.CANCELLED) {
-                resultDelivered=true;deleteCompletedInput(info);finishError("Обработка видео отменена.");
-            }
-        };
-        WorkManager.getInstance(getApplicationContext()).getWorkInfoByIdLiveData(id).observe(this,workObserver);
+        if(workPoll!=null) mainHandler.removeCallbacks(workPoll);
+        workPoll=()->pollWork(id);
+        pollWork(id);
+    }
+
+    private void pollWork(UUID id) {
+        if(activeWorkId==null||!activeWorkId.equals(id)||isFinishing()||isDestroyed()||resultDelivered)return;
+        executor.execute(()->{
+            WorkInfo info=null;
+            try { info=WorkManager.getInstance(getApplicationContext()).getWorkInfoById(id).get(); }
+            catch(Exception ignored) { }
+            WorkInfo observed=info;
+            runOnUiThread(()->{
+                if(activeWorkId==null||!activeWorkId.equals(id)||status==null||isFinishing()||isDestroyed()||resultDelivered)return;
+                if(observed==null) {
+                    mainHandler.postDelayed(workPoll,1000);
+                    return;
+                }
+                WorkInfo.State state=observed.getState();
+                if(state==WorkInfo.State.RUNNING) {
+                    int done=observed.getProgress().getInt(VideoImportWorker.KEY_DONE,0);
+                    int total=observed.getProgress().getInt(VideoImportWorker.KEY_TOTAL,0);
+                    if(total>0) { progress.setIndeterminate(false); progress.setMax(total); progress.setProgress(done); }
+                    status.setText(total>0?"Кадров обработано: "+done+" из "+total+"…":"Извлекаю кадры и распознаю текст на устройстве…");
+                } else if(state==WorkInfo.State.SUCCEEDED) {
+                    resultDelivered=true;
+                    String path=observed.getOutputData().getString(VideoImportWorker.KEY_RESULT_FILE);
+                    executor.execute(()->deliverResult(path));
+                    return;
+                } else if(state==WorkInfo.State.FAILED) {
+                    resultDelivered=true;
+                    String message=observed.getOutputData().getString(VideoImportWorker.KEY_ERROR);
+                    String error=message==null?"Не удалось обработать видео.":message;
+                    try { finishWith(new JSONObject().put("ok",false).put("error",error).toString(),error); }
+                    catch(Exception ignored) { finishError(error); }
+                    return;
+                } else if(state==WorkInfo.State.CANCELLED) {
+                    resultDelivered=true;finishError("Обработка видео отменена.");return;
+                }
+                if(state==WorkInfo.State.ENQUEUED||state==WorkInfo.State.BLOCKED||state==WorkInfo.State.RUNNING)
+                    mainHandler.postDelayed(workPoll,1000);
+            });
+        });
+    }
+
+    @Override protected void onDestroy() {
+        if(workPoll!=null) mainHandler.removeCallbacks(workPoll);
+        executor.shutdown();
+        super.onDestroy();
     }
 
     private void deliverResult(String path) {
@@ -203,17 +229,6 @@ public final class M4VideoImportActivity extends Activity {
             output.getFD().sync();
         } catch(Exception failure) { temp.delete(); throw failure; }
         return temp;
-    }
-
-    private void deleteCompletedInput(WorkInfo info) {
-        if(info==null)return;
-        try {
-            String raw=info.getInputData().getString(VideoImportWorker.KEY_FILE);
-            if(raw==null)return;
-            File root=new File(getFilesDir(),"video-import-queue").getCanonicalFile();
-            File file=new File(raw).getCanonicalFile();
-            if(file.getPath().startsWith(root.getPath()+File.separator))file.delete();
-        } catch(Exception ignored) { }
     }
 
     private static String sha256(File file) throws Exception {
