@@ -295,6 +295,17 @@ public final class YandexScreenParserTest {
         assertEquals("7000",field(slot,"slot_tips_kopecks"));
     }
 
+    @Test public void doesNotTreatFirstListRowBelowOrdersHeadingAsSlotSubtotal() {
+        String text="Слот: 3300,00 ₽\n341234567\n33 заказа · 0 км\nЗаказы\n12:01 100,00 ₽";
+        String hocr="<div class='ocr_page' title='image \"screen.png\"; bbox 0 0 720 1608; ppageno 0'>"
+            +"<span class='ocr_line'>"+hocrWord("Заказы",31,300,124,330)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("12:01",31,339,110,369)+hocrWord("100,00",503,339,638,369)+"</span>"
+            +"</div>";
+        YandexScreenParser.Candidate slot=find(YandexScreenParser.parse(text,hocr),"SLOT_DETAIL");
+        assertNotNull(slot);
+        assertNull("a list row is not a labeled slot subtotal",field(slot,"slot_order_total_kopecks"));
+    }
+
     @Test public void extractsOrderDetailAmountWhenOcrAddsCurrencyDigitAndLabelNoise() {
         String text="Заказ\nИтого 100,002 м\nДетали\nСтатус Завершён\nКоэффициент спроса 1.0\n"
             +"Номер заказа 261017-1234567\nНачало 2026.10.17 11:12\nЗавершение 2026.10.17 11:20";

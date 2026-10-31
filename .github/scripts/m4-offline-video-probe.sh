@@ -52,6 +52,15 @@ adb shell am start -W -n "$package/$activity" --ez m4.verifyRestart true
 wait_for_marker "M4 FORECAST RESTART PASS" "M4 FORECAST RESTART FAIL" 30
 capture_screen m4-forecast-restart.png
 
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/$activity" --ez m6.verifyWorker true
+wait_for_marker "M6 WORKER PASS" "M6 WORKER FAIL" 120
+capture_screen m6-worker.png
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/$activity" --ez m6.verifyRestart true
+wait_for_marker "M6 RESTART PASS" "M6 RESTART FAIL" 30
+capture_screen m6-restart.png
+
 if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4" ]]; then
   import_real_video() {
     local name="$1" file="$2" expected="$3" screen="" progress="" observed_progress=""

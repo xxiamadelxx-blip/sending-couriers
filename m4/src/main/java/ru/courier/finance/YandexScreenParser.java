@@ -375,7 +375,9 @@ public final class YandexScreenParser {
         String slotId=slotId(lines);
         Long amount=parseLabeledMoney(header);
         if(amount==null) amount=parseLabeledMoney(slotTitleAmount(header));
-        String orderTotalText=valueAfterAnywhere(lines,"заказы");
+        // A bare "Заказы" list heading is followed by a delivery row. Do not
+        // borrow that next line's amount as if it were the slot subtotal.
+        String orderTotalText=valueOnSameLine(lines,"заказы");
         Long orderTotal=parseLabeledMoney(orderTotalText);
         if(orderTotal==null) orderTotal=hocrMoneyAlignedToLabel(hocr,"заказы");
         Long tips=hocrMoneyAlignedToLabel(hocr,"чаевые");
@@ -437,7 +439,10 @@ public final class YandexScreenParser {
             int x=word.centerX()-page.left,y=word.centerY()-page.top;
             if(x<page.width()*0.55||word.centerX()<=labelWord.right) continue;
             int distance=Math.abs(word.centerY()-labelWord.centerY());
-            int tolerance=Math.max(10,(word.height()+labelWord.height())/2+8);
+            // Recover a summary amount only when the value shares the label's
+            // visual row. A first order-row amount directly below the "Заказы"
+            // heading is not the slot subtotal.
+            int tolerance=Math.max(12,Math.min(28,(word.height()+labelWord.height())/2+3));
             Long amount=parseHocrMoneyToken(word.text);
             if(amount==null||distance>tolerance) continue;
             if(distance<bestDistance) { best=word;bestAmount=amount;bestDistance=distance; }
@@ -640,6 +645,19 @@ public final class YandexScreenParser {
             String value=matcher.group(1).trim();
             if(!value.isEmpty()) return value;
             if(i+1<lines.length) return lines[i+1].trim();
+        }
+        return null;
+    }
+
+    private static String valueOnSameLine(String[] lines,String labelRegex) {
+        Pattern label=Pattern.compile("(?:^|\\s)(?:"+labelRegex+")\\s*[:：]?\\s*(.*?)\\s*$",
+            Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+        for(String line:lines) {
+            Matcher matcher=label.matcher(line);
+            if(matcher.find()) {
+                String value=matcher.group(1).trim();
+                if(!value.isEmpty()) return value;
+            }
         }
         return null;
     }

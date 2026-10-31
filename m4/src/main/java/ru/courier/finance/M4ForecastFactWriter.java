@@ -86,9 +86,13 @@ public final class M4ForecastFactWriter {
         boolean rawComplete=facts.orders.size()==facts.declaredCount;
         String detail=facts.recoveredOrderRows==0?"":(" Дополнительно сохранены отдельные карточки завершённых заказов: "
             +facts.recoveredOrderRows+".");
+        String reconciliation=rawComplete
+            ?" Распознано и сверено строк заказов: "+facts.orders.size()+" из "+facts.declaredCount+"."
+            :" Перечень RAW частичный.";
         return new ImportResult(true,duplicate,
             "Подтверждён агрегат слота: "+facts.declaredCount+" заказов; отдельных строк распознано "
-            +facts.orders.size()+" из "+facts.declaredCount+"."+(rawComplete?" Сумма полного списка сверена.":" Перечень RAW частичный.")
+            +facts.orders.size()+" из "+facts.declaredCount+"."+(rawComplete?" Сумма полного списка сверена.":"")
+            +reconciliation
             +detail+" Рабочее время осталось неизвестным.",
             facts.declaredCount,facts.orders.size(),facts.deliveries.size(),rawComplete,toForecastDay(facts),facts.sourceId);
     }

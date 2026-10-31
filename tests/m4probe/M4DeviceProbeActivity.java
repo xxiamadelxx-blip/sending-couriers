@@ -8,10 +8,21 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.TextView;
 import android.media.MediaMetadataRetriever;
+import androidx.work.Data;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.Operation;
+import androidx.work.WorkInfo;
+import androidx.work.WorkManager;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 
@@ -27,6 +38,8 @@ public final class M4DeviceProbeActivity extends Activity {
         setContentView(label);label.setText("M4 synthetic offline video probe…");
         if(getIntent().getBooleanExtra("m4.verifyReal",false)) worker.execute(this::verifyRealAfterRestart);
         else if(getIntent().getBooleanExtra("m4.verifyRestart",false)) worker.execute(this::verifyForecastAfterRestart);
+        else if(getIntent().getBooleanExtra("m6.verifyWorker",false)) worker.execute(this::verifyM6Worker);
+        else if(getIntent().getBooleanExtra("m6.verifyRestart",false)) worker.execute(this::verifyM6Restart);
         else worker.execute(this::runProbe);
     }
 
@@ -93,7 +106,7 @@ public final class M4DeviceProbeActivity extends Activity {
             boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
                 .putString("source",forecast.source).putString("date",date).commit();
             if(!saved) throw new AssertionError("restart verification marker could not be saved");
-            show("M4 FACT WRITER PASS\n33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
+            show("M4 FORECAST WRITE PASS\n33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
         } catch(Throwable error) {
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
@@ -150,6 +163,80 @@ public final class M4DeviceProbeActivity extends Activity {
             if(raw[0]!=12||raw[1]!=120000||aggregate[0]!=1||aggregate[1]!=29||work[0]!=0)
                 throw new AssertionError("partial SQLite rows mismatch: RAW="+raw[0]+", aggregate="+aggregate[1]+", work="+work[0]);
         } finally { db.close(); store.close(); }
+    }
+
+    private void verifyM6Worker() {
+        CourierDatabase store=null;
+        try {
+            String zone="Europe/Moscow";
+            LocalDate target=LocalDate.now(ZoneId.of(zone));
+            JSONArray intervals=new JSONArray().put(new JSONObject().put("start",600).put("end",1080).put("state","WORK"));
+            JSONObject days=new JSONObject();
+            for(int offset=1;offset<=42;offset++) {
+                String date=target.minusDays(offset).toString();
+                int orders=18+(offset%7);
+                JSONObject day=new JSONObject().put("date",date).put("timezone",zone)
+                    .put("orders",orders).put("ordersConfirmed",true).put("completed",true)
+                    .put("workConfirmed",true).put("precision","intervals")
+                    .put("intervals",new JSONArray().put(new JSONObject().put("start",600).put("end",1080).put("state","WORK")));
+                days.put(date,day);
+            }
+            JSONObject forecast=new JSONObject().put("location",new JSONObject().put("timezone",zone))
+                .put("typicalPlan",new JSONObject().put("timezone",zone).put("intervals",intervals).put("precision","intervals"))
+                .put("days",days);
+            JSONObject state=new JSONObject().put("schemaVersion",6).put("entries",new JSONArray()).put("forecast",forecast);
+            if(!getSharedPreferences("courier_finance",MODE_PRIVATE).edit().putString("state",state.toString())
+                    .putBoolean("m2_sqlite_primary",false).commit())
+                throw new AssertionError("forecast test history was not committed");
+
+            OneTimeWorkRequest request=new OneTimeWorkRequest.Builder(ForecastAutomationWorker.class)
+                .setInputData(new Data.Builder().putString(ForecastAutomationWorker.KEY_MODE,
+                    ForecastAutomationWorker.MODE_DAILY).build()).build();
+            UUID id=request.getId();WorkManager manager=WorkManager.getInstance(getApplicationContext());
+            Operation operation=manager.enqueue(request);operation.getResult().get(15,TimeUnit.SECONDS);
+            WorkInfo finished=null;
+            for(int attempt=0;attempt<120;attempt++) {
+                WorkInfo current=manager.getWorkInfoById(id).get(10,TimeUnit.SECONDS);
+                if(current!=null&&current.getState().isFinished()) { finished=current;break; }
+                Thread.sleep(500);
+            }
+            if(finished==null||finished.getState()!=WorkInfo.State.SUCCEEDED)
+                throw new AssertionError("daily WorkManager forecast did not succeed: "+(finished==null?"no WorkInfo":finished.getState()));
+
+            store=new CourierDatabase(this);SQLiteDatabase db=store.getReadableDatabase();
+            try(Cursor cursor=db.rawQuery("SELECT COUNT(*),MIN(target_date),MIN(training_cutoff),MIN(center_orders),"
+                    +"MIN(lower_orders),MIN(upper_orders),MIN(model_version) FROM forecast_snapshots WHERE id=?",
+                    new String[]{"native-MORNING-"+target})) {
+                if(!cursor.moveToFirst()||cursor.getInt(0)!=1||!target.toString().equals(cursor.getString(1))
+                        ||cursor.isNull(2)||cursor.getString(2).compareTo(target.toString())>=0
+                        ||cursor.isNull(3)||cursor.isNull(4)||cursor.isNull(5)||cursor.getInt(4)>cursor.getInt(3)
+                        ||cursor.getInt(3)>cursor.getInt(5)||!cursor.getString(6).startsWith(NativeCountModel.VERSION+":"))
+                    throw new AssertionError("native daily forecast snapshot is incomplete or used future data");
+            }
+            if(!getSharedPreferences("m6-forecast-qa",MODE_PRIVATE).edit().putString("target",target.toString()).commit())
+                throw new AssertionError("forecast restart marker was not committed");
+            show("M6 WORKER PASS\nOffline daily WorkManager forecast saved to SQLite.");
+        } catch(Throwable error) {
+            show("M6 WORKER FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+        } finally { if(store!=null)store.close(); }
+    }
+
+    private void verifyM6Restart() {
+        CourierDatabase store=null;
+        try {
+            String target=getSharedPreferences("m6-forecast-qa",MODE_PRIVATE).getString("target",null);
+            if(target==null)throw new AssertionError("WorkManager forecast restart marker is missing");
+            store=new CourierDatabase(this);SQLiteDatabase db=store.getReadableDatabase();
+            try(Cursor cursor=db.rawQuery("SELECT COUNT(*),MIN(training_cutoff),MIN(center_orders) FROM forecast_snapshots WHERE id=?",
+                    new String[]{"native-MORNING-"+target})) {
+                if(!cursor.moveToFirst()||cursor.getInt(0)!=1||cursor.isNull(1)
+                        ||cursor.getString(1).compareTo(target)>=0||cursor.isNull(2))
+                    throw new AssertionError("published forecast did not survive process restart");
+            }
+            show("M6 RESTART PASS\nAppend-only forecast survived force-stop and restart.");
+        } catch(Throwable error) {
+            show("M6 RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+        } finally { if(store!=null)store.close(); }
     }
 
     private void verifyRealAfterRestart() {
