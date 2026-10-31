@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - m6/local-only-20261031
+  pull_request:
+    branches:
+      - m6/process-recovery-20261031
 
 permissions:
   contents: read
