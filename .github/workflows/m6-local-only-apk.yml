@@ -1,0 +1,58 @@
+name: M6 local-only APK
+
+on:
+  push:
+    branches:
+      - m6/local-only-20261031
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m6-local-only-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android 35 build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Download pinned offline OCR models
+        run: |
+          set -euo pipefail
+          mkdir -p m4-models/tessdata
+          base='https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd'
+          curl -fL "$base/rus.traineddata" -o m4-models/tessdata/rus.traineddata
+          curl -fL "$base/eng.traineddata" -o m4-models/tessdata/eng.traineddata
+          test "$(git hash-object m4-models/tessdata/rus.traineddata)" = b146cb2263acbc6383f8e92ea0ce759537687bb8
+          test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
+      - name: Build M6 local-only APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Verify package, version, and APK signature
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='ru.courier.finance.m4probe' versionCode='29' versionName='1.7.15'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          sha256sum "$apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m6-local-only-apk-${{ github.sha }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error
