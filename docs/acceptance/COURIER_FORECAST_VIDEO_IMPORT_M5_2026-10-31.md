@@ -1,10 +1,10 @@
 # M5 source reconciliation — 2026-10-31
 
-Status: implementation committed for review; exact-SHA verification pending.
+Status: implementation and automated acceptance checks pass on code SHA e637cf5abab812ffe14b280345f106ae63148f23. PR #8 is open for review; no merge or release APK is included.
 
 ## Context and boundary
 
-The approved M1–M9 plan is being continued from the latest M4 branch, m4/forecast-video-result-screen-20261031 at base SHA c7f3b3211bb9c50ed3f900e2a702541d8d123e8b. M4 is already closed on the two accepted user MP4 files. M5 is the first unimplemented milestone in this plan; the separate m5/native-forecast-ui-20261031 branch is an interface integration task and does not implement this milestone.
+The approved M1–M9 plan is being continued from the latest M4 branch, m4/forecast-video-result-screen-20261031 at base SHA c7f3b3211bb9c50ed3f900e2a702541d8d123e8b. M4 was accepted on the two user MP4 files at its recorded SHA. M5 is the first unimplemented milestone in this plan; the separate m5/native-forecast-ui-20261031 branch is an interface integration task and does not implement this milestone.
 
 This change preserves the existing Java/WebView UI and uses the project's native SQLiteOpenHelper. It does not add Room or change financial formulas.
 
@@ -27,7 +27,13 @@ This change preserves the existing Java/WebView UI and uses the project's native
 
 ## Verification
 
-Pending GitHub Actions on this branch's exact commit SHA. Required checks: M2/M3/M4 regressions, the new M5 SQLite contract suite, Java identity unit tests, and the Android API 35 emulator reconciliation probe. No PASS will be recorded until those checks complete.
+The GitHub Actions workflow passed on code SHA e637cf5abab812ffe14b280345f106ae63148f23 in run [#63](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41190665756).
+
+- Existing finance, count, import, native count model, M2/M3/M4, and M5 SQLite contract checks passed. The M5 suite contains 8 SQLite scenarios.
+- Android parser unit tests and isolated probe build passed.
+- QA APK package, signature, and fingerprint checks passed.
+- Android API 35 emulator offline video probe passed with synthetic fixtures, including the M5 reconciliation probe. Screenshots and a QA APK were retained as short-lived run artifacts.
+- This M5 run did not rerun the two private user MP4 files; their M4 acceptance remains recorded at the earlier M4 SHA.
 
 ## Limits
 
