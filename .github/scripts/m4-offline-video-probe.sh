@@ -64,6 +64,7 @@ print_web_state_diagnostic() {
 }
 
 adb install app/build/outputs/apk/debug/app-debug.apk
+adb shell pm clear "$package"
 adb shell am start -W -n "$package/$activity"
 wait_for_marker "M4 FORECAST WRITE PASS" "M4 FORECAST QA FAIL" 90
 capture_screen m4-forecast-write.png
