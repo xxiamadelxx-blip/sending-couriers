@@ -376,7 +376,7 @@ export function evaluateForecasts(data,now=new Date()) {
   return {...data,evaluations};
 }
 export function forecastDay(data,date,overrides={}) {
-  dayStamp(date);const plan=planDay(data,date,overrides);return {...plan,forecast:predict(data,date,plan),status:'SCENARIO'};
+  dayStamp(date);const plan=planDay(data,date,overrides),native=overrides[date]?.forecastOverride,forecast=native?.nativeModel===true&&native.modelVersion==='native-count-1'?native:predict(data,date,plan);return {...plan,forecast,status:'SCENARIO'};
 }
 export function weekPlan(data,start,overrides={}) {
   dayStamp(start);

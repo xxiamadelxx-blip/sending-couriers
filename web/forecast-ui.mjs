@@ -222,7 +222,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
         const shown=displayWeekDay(d);
         const target=shown.isFact?null:nativeTarget(data(),d.date,d.workingMin,d);
         const forecast=shown.isFact?shown.forecast:effectiveForecast(target,d.forecast);
-        conditional[d.date]={...conditional[d.date],forecast};
+        conditional[d.date]={...conditional[d.date],forecast,...(forecast.nativeModel?{forecastOverride:forecast}:{})};
         return {...shown,forecast};
       });
       return {...w,days};
