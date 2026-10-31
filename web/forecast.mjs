@@ -131,6 +131,22 @@ function evidence(input=[]) {
     return {id,visibleMin,acceptedMin,deliveredMin,orderNumber:orderNumber(o.orderNumber),source:String(o.source??'manual').slice(0,200),confidence:String(o.confidence??'').slice(0,100),note:String(o.note??'').slice(0,1000),workingInterval:String(o.workingInterval??'').slice(0,100),fieldSources:Object.fromEntries(['visibleMin','acceptedMin','deliveredMin'].map(k=>{const status=o.fieldSources?.[k]?.status??(o[k]==null?'UNKNOWN':o.confirmed?'CONFIRMED':'RECONSTRUCTED');if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте источник времени заказа.');return [k,{status,source:String(o.fieldSources?.[k]?.source??o.source??'').slice(0,200)}];})),completeness:acceptedMin!=null&&deliveredMin!=null?'FULL':'PARTIAL',confirmed:o.confirmed===true};
   });
 }
+function videoSlotRecords(input=[]) {
+  if(!Array.isArray(input)||input.length>100)fail('Слишком много видео-слотов за день.');
+  const seen=new Set();
+  return input.map(slot=>{
+    const slotId=String(slot.slotId??'').trim().slice(0,120),orderCount=integer(slot.orderCount,1000000);
+    if(!slotId||orderCount==null||seen.has(slotId))fail('Повторяется или повреждён идентификатор видео-слота.');
+    seen.add(slotId);
+    const conflicts=Array.isArray(slot.conflicts)?slot.conflicts.slice(0,10).map(row=>({
+      orderCount:integer(row.orderCount,1000000),sourceHash:String(row.sourceHash??'').slice(0,64),
+      source:String(row.source??'').slice(0,200)
+    })).filter(row=>row.orderCount!=null):[];
+    return {slotId,orderCount,sourceHash:String(slot.sourceHash??'').slice(0,64),
+      source:String(slot.source??'').slice(0,200),startedAt:String(slot.startedAt??'').slice(0,40),
+      completedAt:String(slot.completedAt??'').slice(0,40),conflicts};
+  });
+}
 function day(input) {
   dayStamp(input.date);
   const list=intervals(input.intervals??[]);
@@ -160,6 +176,11 @@ function day(input) {
     if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте статус источника.');
     fieldSources[key]={...fieldSources[key],status,note:String(given?.note??'').slice(0,3000)};
   }
+  const suppliedOrderSource=String(input.fieldSources?.orders?.source??'');
+  const defaultOrdersScope=source.startsWith('video:')&&(!suppliedOrderSource||suppliedOrderSource.startsWith('video:'))?'video_slots':'daily';
+  const ordersScope=input.ordersScope??defaultOrdersScope;
+  if(!['daily','video_slots'].includes(ordersScope))fail('Проверьте область итога заказов.');
+  const videoSlots=videoSlotRecords(input.videoSlots??[]);
   return {date:input.date,timezone,zone:String(input.zone??'').slice(0,120),profileVersion:integer(input.profileVersion,100000),fieldSources,
     orders,ordersConfirmed:input.ordersConfirmed===true,completed:input.completed!==false,asOfMinute:integer(input.asOfMinute,1440),appAccountedMin:number(input.appAccountedMin,1440),accountedConfirmed:input.accountedConfirmed===true,
     intervals:list,precision,workingMin,workConfirmed,unavailableMin:workConfirmed&&precision==='intervals'?duration(pause):null,
@@ -167,7 +188,7 @@ function day(input) {
     countedNonWorkingMin:workConfirmed?duration(list.filter(i=>i.state==='UNAVAILABLE'&&i.paymentCounted==='YES').map(i=>[i.start,i.end])):null,
     unknownMin:precision==='intervals'?1440-duration(list.filter(i=>i.state!=='UNKNOWN').map(i=>[i.start,i.end])):null,
     orderEvidence,evidenceComplete:completeEvidence,rawComplete:orders!=null&&orderEvidence.length===orders,sourceNotes:Array.isArray(input.sourceNotes)?input.sourceNotes.slice(0,20).map(v=>String(v).slice(0,3000)):[],estimatedIntervals:intervals(input.estimatedIntervals??[]),estimatedExposureJustified:input.estimatedExposureJustified===true,exposureBlocks:(input.exposureBlocks??[]).slice(0,100).map(b=>({...intervals([b])[0],orders:integer(b.orders),status:String(b.status),source:String(b.source??'').slice(0,300)})),conflicts,sourceConflicts:(input.sourceConflicts??[]).map(String).slice(0,50),
-    source,sourceHash:String(input.sourceHash??'').slice(0,160),revision:integer(input.revision,100000)??1,
+    source,sourceHash:String(input.sourceHash??'').slice(0,160),ordersScope,videoSlots,revision:integer(input.revision,100000)??1,
     importedAt:String(input.importedAt??''),confirmedAt:String(input.confirmedAt??''),manualTime:input.manualTime===true,
     revisions:Array.isArray(input.revisions)?input.revisions.slice(-100).map(r=>({revision:integer(r.revision,100000),at:String(r.at),precision:String(r.precision),workingMin:number(r.workingMin,1440),intervals:intervals(r.intervals??[]),source:String(r.source??''),manual:r.manual===true})):[]};
 }
@@ -236,13 +257,29 @@ export function mergeForecast(current,incoming) {
   const days={...a.days}; for(const incoming of Object.values(b.days)) {
     const old=days[incoming.date];let d=incoming;if(!old){days[d.date]=d;continue;}
     const sourceConflicts=[...new Set([...old.sourceConflicts,...d.sourceConflicts])];
+    const slots=mergeVideoSlots(old.videoSlots,d.videoSlots);
+    const oldDaily=old.ordersConfirmed&&old.ordersScope!=='video_slots';
+    const incomingDaily=d.ordersConfirmed&&d.ordersScope!=='video_slots';
+    const dailyConflict=oldDaily&&incomingDaily&&old.orders!==d.orders;
+    if(oldDaily||incomingDaily) {
+      for(let i=sourceConflicts.length-1;i>=0;i--)if(sourceConflicts[i].startsWith('Видео-слот '))sourceConflicts.splice(i,1);
+    }
     if(old.manualTime) {
       if(JSON.stringify([old.intervals,old.workingMin,old.precision])!==JSON.stringify([d.intervals,d.workingMin,d.precision]))sourceConflicts.push('В копии другие рабочие часы. Сохранено ручное уточнение; подтвердите время дня.');
       d={...d,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions};
     }
     if(old.accountedConfirmed&&d.accountedConfirmed&&old.appAccountedMin!==d.appAccountedMin) {sourceConflicts.push('В копии другие часы Яндекса. Сохранён подтверждённый знаменатель; уточните день.');d={...d,appAccountedMin:old.appAccountedMin};}
-    if(old.ordersConfirmed&&d.ordersConfirmed&&old.orders!==d.orders) {sourceConflicts.push('В копии другой итог заказов. Сохранён подтверждённый итог; уточните день.');d={...d,orders:old.orders};}
-    days[d.date]=day({...d,sourceConflicts:[...new Set(sourceConflicts)]});
+    if(dailyConflict) {sourceConflicts.push('В копии другой итог заказов. Сохранён подтверждённый итог; уточните день.');d={...d,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...d.fieldSources,orders:old.fieldSources.orders}};}
+    else if(oldDaily) d={...d,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...d.fieldSources,orders:old.fieldSources.orders}};
+    else if(incomingDaily) d={...d,orders:incoming.orders,ordersConfirmed:true,ordersScope:'daily'};
+    else if(slots.length) {
+      const slotConflict=slots.some(slot=>slot.conflicts.length>0);
+      d={...d,orders:slots.reduce((sum,slot)=>sum+slot.orderCount,0),ordersConfirmed:true,ordersScope:'video_slots',
+        fieldSources:{...d.fieldSources,orders:{source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',note:'Сумма отдельных подтверждённых видео-слотов за дату.'}}};
+      if(slotConflict)sourceConflicts.push('Видео-слоты содержат разные итоги для одного идентификатора; проверьте источник.');
+    }
+    d={...d,videoSlots:slots,orderEvidence:mergeVideoEvidence(old.orderEvidence,d.orderEvidence),sourceConflicts:[...new Set(sourceConflicts)]};
+    days[d.date]=day(d);
   }
   return normalizeForecast({...a,days,profiles:keyed(a.profiles,b.profiles,'version',true),snapshots:keyed(a.snapshots,b.snapshots,'id',true),evaluations:keyed(a.evaluations,b.evaluations,'id',true),models:keyed(a.models,b.models,'id',true),scenarios:keyed(a.scenarios,b.scenarios,'id'),imports:keyed(a.imports,b.imports,'id',true),weather:a.weather??b.weather,trainedModel:a.trainedModel??b.trainedModel,plans:{...b.plans,...a.plans},weekConfig:b.weekConfig??a.weekConfig,location:a.location??b.location,typicalPlan:a.typicalPlan??b.typicalPlan,archive:Object.fromEntries(['forecasts','accuracy','models','financialRules'].map(k=>[k,keyed(a.archive[k],b.archive[k],'id',true)]))});
 }
@@ -266,29 +303,123 @@ export function saveTimeline(data,input,now=new Date().toISOString()) {
   }
   return result;
 }
+function mergeVideoEvidence(existing=[],incoming=[]) {
+  const rows=existing.slice();
+  for(const order of incoming) {
+    const index=order.orderNumber?rows.findIndex(row=>row.orderNumber===order.orderNumber):rows.findIndex(row=>row.id===order.id);
+    if(index<0){rows.push(order);continue;}
+    const richness=row=>Number(row.visibleMin!=null)+Number(row.acceptedMin!=null)+Number(row.deliveredMin!=null)+Number(row.confirmed)*2;
+    if(richness(order)>richness(rows[index]))rows[index]=order;
+  }
+  return rows;
+}
+function mergeVideoSlots(existing=[],incoming=[]) {
+  const rows=videoSlotRecords(existing),seen=new Map(rows.map((slot,index)=>[slot.slotId,index]));
+  for(const slot of videoSlotRecords(incoming)) {
+    const index=seen.get(slot.slotId);
+    if(index==null){seen.set(slot.slotId,rows.length);rows.push(slot);continue;}
+    const prior=rows[index],conflicts=[...(prior.conflicts??[]),...(slot.conflicts??[])];
+    if(prior.orderCount!==slot.orderCount)conflicts.push({orderCount:slot.orderCount,sourceHash:slot.sourceHash,source:slot.source});
+    const unique=[];
+    for(const row of conflicts)if(!unique.some(value=>value.orderCount===row.orderCount&&value.sourceHash===row.sourceHash))unique.push(row);
+    rows[index]={...prior,conflicts:unique.slice(-10)};
+  }
+  return rows;
+}
 export function importDays(data,rows,source='history',now=new Date().toISOString()) {
   if(!Array.isArray(rows)||rows.length>5000) fail('Проверьте список дней.');
   const days={...data.days}; let changed=0,conflicts=0;
   for(const input of rows) {
-    const parsed=day({...input,source:input.source??source,importedAt:now});
+    const inputSource=input.source??source;
+    const suppliedSlotId=String(input.slotId??input.videoSlotId??'').trim();
+    const isVideoSlot=Boolean(suppliedSlotId)||String(inputSource).startsWith('video:')&&input.ordersConfirmed===true;
+    const parsed=day({...input,source:inputSource,importedAt:now,...(isVideoSlot?{ordersScope:'video_slots'}:{})});
     const old=days[parsed.date];
-    const incomingHash=fingerprint({...input,source:input.source??source});
-    if(old?.sourceHash===incomingHash) continue;
-    const sourceConflicts=[...parsed.sourceConflicts];
+    const incomingHash=fingerprint({...input,source:inputSource});
+    if(!isVideoSlot&&old?.sourceHash===incomingHash) continue;
+    if(isVideoSlot) {
+      const orderCount=integer(input.slotOrderCount??input.orders,1000000);
+      if(orderCount==null)fail('Видео-слот не содержит подтверждённого количества заказов.');
+      const slotId=suppliedSlotId||`legacy:${String(input.sourceHash??inputSource).slice(-120)}`;
+      const slot={slotId,orderCount,sourceHash:String(input.sourceHash??'').slice(0,64),source:String(inputSource).slice(0,200),
+        startedAt:String(input.startedAt??'').slice(0,40),completedAt:String(input.completedAt??'').slice(0,40),conflicts:[]};
+      const slots=(old?.videoSlots??[]).slice(),slotIndex=slots.findIndex(item=>item.slotId===slotId);
+      let slotAdded=false,slotConflictAdded=false,slotConflict=false;
+      if(slotIndex<0){slots.push(slot);slotAdded=true;}
+      else if(slots[slotIndex].orderCount!==orderCount) {
+        slotConflict=true;
+        const existing=slots[slotIndex],rows=[...(existing.conflicts??[])];
+        if(!rows.some(row=>row.orderCount===orderCount&&row.sourceHash===slot.sourceHash)) {
+          rows.push({orderCount,sourceHash:slot.sourceHash,source:slot.source});
+          slots[slotIndex]={...existing,conflicts:rows.slice(-10)};slotConflictAdded=true;
+        }
+      }
+      const hasDailyTotal=Boolean(old?.ordersConfirmed&&old.ordersScope!=='video_slots');
+      const staleMismatch=`Заказы: сохранено ${old?.orders}, новый источник ${orderCount}. Подтвердите итог дня.`;
+      const repairedLegacyConflict=Boolean(hasDailyTotal&&old?.source?.startsWith('video:')&&old.sourceConflicts?.includes(staleMismatch));
+      let sourceConflicts=[...new Set([...(old?.sourceConflicts??[]),...parsed.sourceConflicts])];
+      if(repairedLegacyConflict)sourceConflicts=sourceConflicts.filter(item=>item!==staleMismatch);
+      if(slotConflict&&!hasDailyTotal)sourceConflicts.push(`Видео-слот ${slotId}: источники расходятся по числу заказов.`);
+      sourceConflicts=[...new Set(sourceConflicts)];
+      const fieldSources={...parsed.fieldSources,...(old?.fieldSources??{})};
+      if(hasDailyTotal) {
+        if(repairedLegacyConflict&&!sourceConflicts.some(item=>item.startsWith('Заказы:'))
+            &&old.fieldSources?.orders?.source&&!old.fieldSources.orders.source.startsWith('video:'))
+          fieldSources.orders={...old.fieldSources.orders,status:'CONFIRMED'};
+      } else {
+        fieldSources.orders={source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',
+          note:'Сумма отдельных подтверждённых видео-слотов за дату.'};
+      }
+      const dailyOrders=hasDailyTotal?old.orders:slots.reduce((sum,item)=>sum+item.orderCount,0);
+      const orderEvidence=hasDailyTotal?(old.orderEvidence??parsed.orderEvidence)
+        :mergeVideoEvidence(old?.ordersScope==='video_slots'?old.orderEvidence??[]:[],slotAdded?parsed.orderEvidence:[]);
+      const merged={...(old??parsed),...parsed,
+        source:hasDailyTotal?old.source:'video_slots',sourceHash:hasDailyTotal?old.sourceHash:fingerprint(slots.map(item=>[item.slotId,item.orderCount,item.sourceHash])),
+        zone:old?.zone||parsed.zone,timezone:old?.timezone||parsed.timezone,
+        orders:dailyOrders,ordersConfirmed:hasDailyTotal?old.ordersConfirmed:slots.length>0,
+        ordersScope:hasDailyTotal?'daily':'video_slots',videoSlots:slots,fieldSources,orderEvidence,
+        completed:old?.completed??parsed.completed,workingMin:old?.workingMin??parsed.workingMin,
+        workConfirmed:old?.workConfirmed??parsed.workConfirmed,precision:old?.precision??parsed.precision,
+        intervals:old?.intervals??parsed.intervals,estimatedIntervals:old?.estimatedIntervals??parsed.estimatedIntervals,
+        estimatedExposureJustified:old?.estimatedExposureJustified||parsed.estimatedExposureJustified,
+        exposureBlocks:old?.exposureBlocks?.length?old.exposureBlocks:parsed.exposureBlocks,
+        appAccountedMin:old?.appAccountedMin??parsed.appAccountedMin,
+        accountedConfirmed:old?.accountedConfirmed??parsed.accountedConfirmed,
+        evidenceComplete:hasDailyTotal?old.evidenceComplete:Boolean(orderEvidence.length===dailyOrders&&parsed.evidenceComplete),
+        rawComplete:hasDailyTotal?old.rawComplete:orderEvidence.length===dailyOrders,
+        sourceNotes:[...new Set([...(old?.sourceNotes??[]),...parsed.sourceNotes])].slice(0,20),
+        manualTime:old?.manualTime??parsed.manualTime,confirmedAt:old?.confirmedAt??parsed.confirmedAt,
+        importedAt:now,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
+      if(!slotAdded&&!slotConflictAdded&&!repairedLegacyConflict)continue;
+      days[parsed.date]=day(merged);changed++;conflicts+=days[parsed.date].conflicts.length;
+      continue;
+    }
+    const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
+    let sourceConflicts=[...parsed.sourceConflicts,...(reconcilesVideoSlots
+      ?(old.sourceConflicts??[]).filter(item=>!item.startsWith('Видео-слот '))
+      :(old?.sourceConflicts??[]))];
+    const oldOrderSource=String(old?.fieldSources?.orders?.source??'');
+    const oldVideoDayConflict=Boolean(old?.source?.startsWith('video:')&&old.ordersConfirmed
+      &&old.fieldSources?.orders?.status==='CONFLICT'&&oldOrderSource&&!oldOrderSource.startsWith('video:')
+      &&parsed.ordersConfirmed&&parsed.orders===old.orders);
+    if(oldVideoDayConflict) {
+      const mismatch=new RegExp(`^Заказы: сохранено ${old.orders}, новый источник \\d+\\. Подтвердите итог дня\\.$`);
+      sourceConflicts=sourceConflicts.filter(item=>!mismatch.test(item));
+    }
     const geographyConflict=old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
     if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
-    if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) sourceConflicts.push(`Заказы: сохранено ${old.orders}, новый источник ${parsed.orders}. Подтвердите итог дня.`);
+    if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders&&!reconcilesVideoSlots) sourceConflicts.push(`Заказы: сохранено ${old.orders}, новый источник ${parsed.orders}. Подтвердите итог дня.`);
     if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin) sourceConflicts.push(`Часы Яндекса: сохранено ${old.appAccountedMin} мин, новый источник ${parsed.appAccountedMin} мин. Подтвердите итог дня.`);
-    let merged={...parsed,zone:geographyConflict?old.zone:input.zone?parsed.zone:old?.zone??parsed.zone,timezone:geographyConflict?old.timezone:input.timezone?parsed.timezone:old?.timezone??profileFor(data,parsed.date)?.timezone??parsed.timezone,sourceHash:incomingHash,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
+    let merged={...parsed,zone:geographyConflict?old.zone:input.zone?parsed.zone:old?.zone??parsed.zone,timezone:geographyConflict?old.timezone:input.timezone?parsed.timezone:old?.timezone??profileFor(data,parsed.date)?.timezone??parsed.timezone,sourceHash:incomingHash,ordersScope:parsed.ordersConfirmed?'daily':old?.ordersScope??parsed.ordersScope,videoSlots:old?.videoSlots?.length?old.videoSlots:parsed.videoSlots,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
     if(old?.manualTime) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions,confirmedAt:old.confirmedAt,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
     else if(old?.workConfirmed&&!parsed.workConfirmed&&!(old.source===parsed.source&&old.source.startsWith('sheets_import:'))) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:true,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
-    if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) merged={...merged,orders:old.orders,ordersConfirmed:old.ordersConfirmed,fieldSources:{...merged.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
+    if(reconcilesVideoSlots)merged={...merged,ordersScope:'daily',sourceConflicts:[...new Set(sourceConflicts)],orderEvidence:parsed.orderEvidence};
+    else if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) merged={...merged,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,fieldSources:{...merged.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
     // A partial capture cannot erase a confirmed total or a fuller order list.
-    if(old?.ordersConfirmed&&!parsed.ordersConfirmed) {merged.orders=old.orders;merged.ordersConfirmed=true;merged.fieldSources.orders=old.fieldSources.orders;}
+    if(old?.ordersConfirmed&&!parsed.ordersConfirmed) {merged.orders=old.orders;merged.ordersConfirmed=true;merged.ordersScope=old.ordersScope;merged.fieldSources.orders=old.fieldSources.orders;}
     if(old?.accountedConfirmed&&!parsed.accountedConfirmed) {merged.appAccountedMin=old.appAccountedMin;merged.accountedConfirmed=true;merged.fieldSources.appAccountedMin=old.fieldSources.appAccountedMin;}
     if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin){merged.appAccountedMin=old.appAccountedMin;merged.fieldSources.appAccountedMin={...old.fieldSources.appAccountedMin,status:'CONFLICT'};}
-    const orders=new Map((old?.orderEvidence??[]).map(o=>[o.id,o])); for(const o of parsed.orderEvidence) orders.set(o.id,o);
-    merged.orderEvidence=[...orders.values()];
+    if(!reconcilesVideoSlots){const orders=new Map((old?.orderEvidence??[]).map(o=>[o.id,o])); for(const o of parsed.orderEvidence) orders.set(o.id,o);merged.orderEvidence=[...orders.values()];}
     merged.evidenceComplete=(old?.evidenceComplete||parsed.evidenceComplete) && merged.orderEvidence.length===merged.orders;
     days[parsed.date]=day(merged); changed++; conflicts+=days[parsed.date].conflicts.length;
   }

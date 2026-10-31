@@ -86,9 +86,10 @@ window.receiveVideoImport = raw => {
     const result = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
     const acknowledge=()=>{if(result.sourceSha256)Native?.acknowledgeVideoImport?.(result.sourceSha256);};
     if (!result.ok) { notify(result.error || 'Не удалось обработать видео.'); acknowledge(); }
-    else if (result.forecastFactsAccepted && result.forecastDay) {
+    else if (result.forecastFactsAccepted && (Array.isArray(result.forecastDays) ? result.forecastDays.length : result.forecastDay)) {
       const source=result.forecastSource||'video_import';
-      const forecast=importDays(state.forecast,[result.forecastDay],source,new Date().toISOString());
+      const importedDays=Array.isArray(result.forecastDays)?result.forecastDays:[result.forecastDay];
+      const forecast=importDays(state.forecast,importedDays,source,new Date().toISOString());
       persist({...state,forecast},true);
       acknowledge();
       if (view === 'forecast') forecastScreen?.refresh?.();
