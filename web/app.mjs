@@ -15,6 +15,7 @@ import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertFor
 import { weatherCache, weatherParts, weatherSymbol, weatherDescription, weatherLocation } from './weather.mjs';
 import { intervalField, bindIntervals, intervalValue } from './interval-control.mjs';
 import { withSlotWorkingTime } from './slot-work.mjs';
+import { syncBundle, syncCsv, parseSyncCsv } from './sync-transfer.mjs';
 
 const $ = selector => document.querySelector(selector);
 const app = $('#app');
@@ -32,7 +33,7 @@ document.addEventListener('click', event => {
   if (button && !button.disabled && button.type !== 'submit' && !button.matches('#themeToggle,#feedbackTest,#confirmImport,#deleteDay,#reopenPeriod,[data-calc="="]')) feedback('tap');
 }, true);
 let state, selectedPeriod = periodFor(today()).id, view = 'summary', editingId = null, pendingImport = null;
-let toastTimer, forecastScreen, weatherAttempt = 0, requestedModel = null;
+let toastTimer, forecastScreen, weatherAttempt = 0, requestedModel = null, settingsDraftDirty = false;
 const icons = { back: icon['arrow-left'], plus: icon.plus, share: icon['file-export'], chevron: icon['chevron-right'], down: icon['chevron-down'] };
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const amount = (value, major = false) => `<span class="${major ? 'major-amount' : 'amount'}${value == null ? ' empty' : ''}">${esc(money(value))}</span>`;
@@ -377,6 +378,7 @@ function periodDetails() {
 }
 function settings() {
   if(!leaveForecast())return;
+  settingsDraftDirty=false;
   app.className = 'settings-page'; view = 'settings'; editingId = null;
   const chosenDate = selectedPeriod === periodFor(today()).id ? today() : selectedPeriod;
   const initial = paymentTermsFor(state, chosenDate);
@@ -392,6 +394,7 @@ function settings() {
     ${field('cycleBonusPercent','Премия за 12 недель',initial.cycleBonusPercent,{unit:'%'})}</div></details>
     <p class="payment-effective-date" id="paymentEffectiveDate" aria-live="polite">Выбрана дата: ${esc(formatDate(chosenDate))}</p><div class="error" id="paymentError" role="alert" hidden></div><button class="button primary" id="savePaymentTerms" type="submit">Сохранить условия</button></form><div id="paymentHistory">${ruleHistory()}</div></section>
     <section class="detail-card appearance-card"><h2>Тема интерфейса</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная</option></select></div></section>
+    <section class="detail-card sync-settings" id="syncSettings"><h2>Синхронизация</h2><p class="hint" id="syncStatus" aria-live="polite">Синхронизация выключена.</p><div class="sync-primary-actions"><button class="button primary" id="googleSync" type="button">${Native ? 'Подключить Google' : 'Доступно в Android'}</button><button class="button quiet" id="disconnectSync" type="button" ${Native ? '' : 'hidden'}>Отключить</button></div><div class="sync-fallback-actions"><button class="button outline" id="syncExportJson" type="button">Сохранить JSON</button><button class="button outline" id="syncExportCsv" type="button">Сохранить CSV</button><button class="button quiet" id="syncImport" type="button">Импорт JSON/CSV</button></div><input id="syncImportInput" type="file" accept=".json,.csv,application/json,text/csv" hidden><div class="sync-conflicts" id="syncConflicts" hidden></div></section>
     <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
   const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
   bottomNav('settings'); $('#goBack').addEventListener('click', summary);
@@ -426,18 +429,93 @@ function settings() {
         catch(error) { if(key!=='hourlyRate')$('.payment-more').open=true;$('#'+key).focus();throw error; }
       });
       persist(setPaymentTerms(state,rule));
-      $('#paymentError').hidden = true; $('#paymentHistory').innerHTML = ruleHistory();
+      settingsDraftDirty=false;$('#paymentError').hidden = true; $('#paymentHistory').innerHTML = ruleHistory();
       notify(`Условия сохранены с ${formatDate(rule.effectivePeriodStart)}`);
     } catch (error) { $('#paymentError').textContent = error.message; $('#paymentError').hidden = false; feedback('error'); }
   });
+  $('#paymentForm').addEventListener('input',()=>{settingsDraftDirty=true;});
   for (const key of ['soundEnabled', 'hapticsEnabled']) {
     $('#' + key).addEventListener('change', event => {
       try { persist(updateSettings(state, { [key]: event.target.checked })); $('#preferencesError').hidden = true; }
       catch (error) { event.target.checked = state.settings[key]; $('#preferencesError').textContent = error.message; $('#preferencesError').hidden = false; feedback('error'); }
     });
   }
+  bindSyncSettings();
   $('#feedbackTest').addEventListener('click', () => feedback('success')); resetScroll();
 }
+
+function bindSyncSettings() {
+  const button=$('#googleSync');if(!button)return;
+  const readStatus=()=>{try{return JSON.parse(Native?.syncStatus?.()??'{"enabled":false}');}catch{return {enabled:false};}};
+  const readConflicts=()=>{try{return JSON.parse(Native?.syncConflicts?.()??'[]');}catch{return [];}};
+  const valueSummary=(type,action,payload)=>{
+    if(action==='DELETE'||action==='MISSING')return action==='MISSING'?'отсутствует':'удаление';
+    let value;try{value=JSON.parse(payload??'{}');}catch{return 'версия данных';}
+    if(type==='entry')return `${value.date??'дата не указана'} · заказы ${value.dailyOrders??'—'} · часы ${value.dailyHours??'—'} · вознаграждение ${value.reward??'—'} ₽ · чаевые ${value.tips??'—'} ₽ · доплата ${value.finalAdjustment??'—'} ₽`;
+    if(type==='closure')return `Закрытие периода · доплата ${value.finalAdjustment??'—'} ₽`;
+    return 'Настройки и условия оплаты';
+  };
+  const detailPayload=payload=>{try{return JSON.stringify(JSON.parse(payload??'null'),null,2);}catch{return 'Нет данных';}};
+  const refresh=(status=readStatus(),conflicts=readConflicts(),notice='')=>{
+    const statusEl=$('#syncStatus'),conflictsEl=$('#syncConflicts');if(!statusEl||!conflictsEl)return;
+    button.textContent=status.enabled?'Синхронизировать':Native?'Подключить Google':'Доступно в Android';
+    button.disabled=!Native||Boolean(status.inProgress);
+    $('#disconnectSync').hidden=!status.enabled||!Native;
+    const last=status.lastSyncAt?` · последняя ${new Date(status.lastSyncAt).toLocaleString('ru-RU')}`:'';
+    const error=status.lastError?` ${esc(status.lastError)}`:'';
+    const progress=status.inProgress?'Синхронизация выполняется.':status.enabled?`Подключена · в очереди ${status.pending??0}${last}.`:'Выключена. Записи остаются на устройстве.';
+    statusEl.textContent=notice||`${progress}${error}`;
+    $('#paymentForm')?.querySelectorAll('input,button').forEach(field=>{field.disabled=Boolean(status.inProgress);});
+    if(!conflicts.length){conflictsEl.hidden=true;conflictsEl.innerHTML='';return;}
+    conflictsEl.hidden=false;
+    conflictsEl.innerHTML=`<h3>Нужно выбрать версию</h3>${conflicts.map(conflict=>`<article class="sync-conflict"><strong>${esc(conflict.type==='entry'?'Запись '+conflict.recordId:conflict.type==='closure'?'Закрытие периода '+conflict.recordId:'Настройки')}</strong><p>На устройстве: ${esc(valueSummary(conflict.type,conflict.localAction,conflict.localPayload))}<br>В Google: ${esc(valueSummary(conflict.type,conflict.remoteAction,conflict.remotePayload))}</p><details><summary>Данные версий</summary><pre>На устройстве\n${esc(detailPayload(conflict.localPayload))}\nGoogle\n${esc(detailPayload(conflict.remotePayload))}</pre></details><div class="sync-conflict-actions"><button class="button outline" type="button" data-sync-conflict="${esc(conflict.id)}" data-sync-choice="local">Оставить здесь</button><button class="button quiet" type="button" data-sync-conflict="${esc(conflict.id)}" data-sync-choice="remote">Взять из Google</button></div></article>`).join('')}`;
+    conflictsEl.querySelectorAll('[data-sync-conflict]').forEach(action=>action.addEventListener('click',()=>Native?.resolveSyncConflict?.(action.dataset.syncConflict,action.dataset.syncChoice)));
+  };
+  $('#syncSettings').addEventListener('sync-update',event=>refresh(event.detail.status,event.detail.conflicts,event.detail.notice));
+  button.addEventListener('click',()=>{
+    if(!Native){notify('Подключение Google доступно в Android-приложении.');return;}
+    if(settingsDraftDirty){notify('Сначала сохраните или отмените изменения условий оплаты.');return;}
+    const status=readStatus();if(status.enabled)Native.syncGoogleNow();else Native.connectGoogleSync();
+  });
+  $('#disconnectSync').addEventListener('click',()=>Native?.disconnectGoogleSync?.());
+  $('#syncExportJson').addEventListener('click',()=>exportSyncBundle('json'));
+  $('#syncExportCsv').addEventListener('click',()=>exportSyncBundle('csv'));
+  $('#syncImport').addEventListener('click',()=>{if(Native)Native.importSyncFile();else $('#syncImportInput').click();});
+  $('#syncImportInput').addEventListener('change',async event=>{
+    const file=event.target.files?.[0];if(!file)return;
+    try{if(file.size>8_000_000)throw new Error('Файл больше 8 МБ.');window.receiveSyncImport(await file.text());}
+    catch(error){notify(`Не удалось прочитать файл: ${error.message}`);}
+    event.target.value='';
+  });
+  refresh();
+}
+
+function exportSyncBundle(format) {
+  const stamp=today(),json=format==='json',filename=`courier-sync-${stamp}.${json?'json':'csv'}`;
+  const mime=json?'application/json':'text/csv';
+  const content=json?JSON.stringify(syncBundle(state)):syncCsv(state);
+  if(Native){Native.exportFile(filename,content,mime,'save');return;}
+  const file=new File([content],filename,{type:mime}),url=URL.createObjectURL(file),link=document.createElement('a');
+  link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+window.receiveSyncUpdate=(statusText,conflictsText,notice='')=>{
+  const panel=$('#syncSettings');if(!panel)return;
+  try {
+    const status=JSON.parse(statusText||'{}'),conflicts=JSON.parse(conflictsText||'[]');
+    panel.dispatchEvent(new CustomEvent('sync-update',{detail:{status,conflicts,notice}}));
+  } catch { const statusNode=$('#syncStatus');if(statusNode)statusNode.textContent=notice||'Не удалось обновить состояние синхронизации.'; }
+};
+
+window.receiveSyncedState=raw=>{
+  try{
+    const draftTheme=$('#themeSelect')?.value,oldTheme=state?.settings?.theme;
+    state=normalizeState(JSON.parse(raw));applyAppearance();
+    if(settingsDraftDirty&&draftTheme&&draftTheme!==oldTheme&&$('#themeSelect'))$('#themeSelect').value=draftTheme;
+    else if(view==='settings')settings();
+  }
+  catch(error){notify('Google: данные сохранены на устройстве, но экран не обновлён.');}
+};
 function field(key, label, value = '', { unit = '₽', full = false, integer = false, labelClass = '', note = '', signed = false, validation = false } = {}) {
   return `<div class="field${full ? ' full' : ''}"><label for="${key}" class="${labelClass}">${label}</label><div class="field-box"><input id="${key}" name="${key}" type="text" aria-label="${esc(label)}" inputmode="${integer ? 'numeric' : 'decimal'}" autocomplete="off" maxlength="${integer ? 7 : 14}" class="with-unit${key === 'dailyOrders' ? ' orders-input' : ''}" value="${esc(value)}" aria-describedby="${key}-note${validation ? ` ${key}-error` : ''}" ${validation ? 'aria-invalid="false"' : ''} ${signed ? '' : ''}><span class="field-unit${key === 'dailyOrders' ? ' orders' : ''}" aria-hidden="true">${unit}</span></div>${note ? `<span class="field-note" id="${key}-note">${note}</span>` : `<span id="${key}-note" hidden></span>`}${validation ? `<span class="field-error" id="${key}-error" role="status" hidden></span>` : ''}</div>`;
 }
@@ -770,6 +848,21 @@ window.receiveImport = text => {
     $('#importError').hidden = true;
     $('#importDialog').showModal();
   } catch (error) { notify(`Не удалось импортировать: ${error.message}`); }
+};
+window.receiveSyncImport = text => {
+  try {
+    const source=String(text??'').trimStart();
+    if(source.startsWith('{')) {
+      const raw=JSON.parse(source);
+      if(raw?.type==='courier-sync-v1') {
+        delete raw.type;
+        // A sync bundle deliberately excludes forecast data. It cannot replace
+        // local plans, facts, snapshots, models, or evaluations.
+        delete raw.forecast;
+      }
+      window.receiveImport(JSON.stringify(raw));
+    } else window.receiveImport(JSON.stringify(parseSyncCsv(text)));
+  } catch(error) { notify(`Не удалось импортировать синхронизацию: ${error.message}`); }
 };
 $('#cancelImport').addEventListener('click', () => { pendingImport = null; $('#importDialog').close(); });
 $('#confirmImport').addEventListener('click', () => {
