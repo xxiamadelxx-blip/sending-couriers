@@ -5,6 +5,10 @@ plugins {
 def generatedAssets = layout.buildDirectory.dir('generated/m4/assets')
 def generatedManifest = layout.buildDirectory.file('generated/m4/AndroidManifest.xml')
 def m4QaBuildId = (System.getenv('GITHUB_SHA') ?: 'local').take(8)
+def m7SpreadsheetId = providers.gradleProperty('m7SheetsSpreadsheetId')
+    .getOrElse('1SJZ1MfVtkga9ihq2C0FrXIOQoQu3jtYRQn5wHd6CRCM').trim()
+if (!(m7SpreadsheetId ==~ /^[A-Za-z0-9_-]{10,200}$/))
+    throw new GradleException('m7SheetsSpreadsheetId must be a valid Google spreadsheet ID')
 
 tasks.register('stageCourierAssets') {
     inputs.dir(rootProject.file('web'))
@@ -53,6 +57,7 @@ tasks.register('stageCourierManifest') {
 android {
     namespace 'ru.courier.finance'
     compileSdk 35
+    buildFeatures { buildConfig true }
 
     defaultConfig {
         applicationId 'ru.courier.finance'
@@ -60,6 +65,7 @@ android {
         targetSdk 35
         versionCode 29
         versionName '1.7.15'
+        buildConfigField 'String', 'M7_SPREADSHEET_ID', "\"${m7SpreadsheetId}\""
     }
     buildTypes {
         debug { applicationIdSuffix '.m4probe' }

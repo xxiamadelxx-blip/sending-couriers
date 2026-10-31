@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
 
 /** Foreground, user-triggered append-only sync transport for the M7 event log. */
 public final class M7GoogleSheetsSync {
-    public static final String SPREADSHEET_ID="1SJZ1MfVtkga9ihq2C0FrXIOQoQu3jtYRQn5wHd6CRCM";
+    public static final String SPREADSHEET_ID=BuildConfig.M7_SPREADSHEET_ID;
     public static final String SHEET_TITLE="__CourierSync";
     public static final String OAUTH_SCOPE="https://www.googleapis.com/auth/spreadsheets";
     private static final String API="https://sheets.googleapis.com/v4/spreadsheets/";

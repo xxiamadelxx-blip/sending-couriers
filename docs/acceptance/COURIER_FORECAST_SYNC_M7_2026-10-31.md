@@ -23,11 +23,13 @@ The Android WebView still blocks network loads. Google authorization and Sheets 
 
 Google's Android authorization requires the Sheets API enabled in the Cloud project and an OAuth Android client registered for package `ru.courier.finance` and the SHA-1 certificate fingerprint used by the installable app. The repository does not contain that OAuth registration or the private release signer. The CI QA application uses a package suffix and debug signing, so it cannot prove authorization for the owner's production installation. The requested Sheets scope is sensitive and may require Google's app verification before public distribution. Do not put a client secret or signing key in source control.
 
+The default spreadsheet ID remains the canonical `Courier Forecast` workbook. For isolated QA, build with `-Pm7SheetsSpreadsheetId=<test-copy-id>`; the value is validated and compiled into that build. Register the exact QA package name and signing SHA-1 for the QA authorization check. Never use the production ID for two-device conflict or retry exercises.
+
 ## Still required before M7 acceptance
 
 1. Build the M7 branch and install it with the same package and signing certificate as the target app.
 2. Register the production OAuth client and verify connect, cancel, disconnect, and re-consent on Android.
-3. Use two devices against a test copy of the spreadsheet: first sync, pull-only, push-only, offline edits, same-record edits on both devices, deletion conflicts, and repeat/idempotent sync.
+3. Build with the test copy's ID using `-Pm7SheetsSpreadsheetId=<test-copy-id>` and use two devices against that copy: first sync, pull-only, push-only, offline edits, same-record edits on both devices, deletion conflicts, and repeat/idempotent sync.
 4. Trigger or simulate 429 and expired/revoked authorization; confirm the queue survives and manual JSON/CSV transfer leaves forecast state untouched.
 
 M7 is not marked accepted until those checks have concrete Android and Sheets evidence. The branch does not merge or publish an APK.
