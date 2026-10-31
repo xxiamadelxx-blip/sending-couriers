@@ -75,6 +75,8 @@ public final class VideoImportWorker extends Worker {
             response.put("extractedCandidateCount",analysis.uniqueCandidateCount())
                 .put("extractionsTruncated",candidates.size()>100).put("extractions",extractions)
                 .put("forecastFactsAccepted",facts.accepted).put("forecastFactsDuplicate",facts.duplicate)
+                .put("forecastFactsNeedsReview",facts.needsReview)
+                .put("duplicateOrderRowsSuppressed",facts.suppressedOrderRows)
                 .put("forecastFactMessage",facts.message);
             if(facts.accepted) response.put("forecastSource",facts.source).put("forecastDay",facts.forecastDay)
                 .put("importedOrderCount",facts.orderCount).put("visibleOrderRows",facts.visibleOrderRows)

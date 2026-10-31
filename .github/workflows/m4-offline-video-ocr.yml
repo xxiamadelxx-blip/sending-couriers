@@ -1,7 +1,7 @@
 name: M4 offline video OCR
 on:
   push:
-    branches: [m4/offline-video-ocr-20261029, m4/forecast-video-result-screen-20261031]
+    branches: [m4/offline-video-ocr-20261029, m4/forecast-video-result-screen-20261031, m5/cross-source-reconciliation-20261031]
   workflow_dispatch:
 permissions:
   contents: read
@@ -89,6 +89,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_m2_*.py' -v
           python3 -m unittest discover -s tests -p 'test_m3_*.py' -v
           python3 -m unittest discover -s tests -p 'test_m4_*.py' -v
+          python3 -m unittest discover -s tests -p 'test_m5_*.py' -v
       - name: Install pinned Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

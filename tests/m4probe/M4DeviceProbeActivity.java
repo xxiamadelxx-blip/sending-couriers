@@ -1,6 +1,7 @@
 package ru.courier.finance;
 
 import android.app.Activity;
+import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
@@ -102,11 +103,12 @@ public final class M4DeviceProbeActivity extends Activity {
                     || forecast.forecastDay.getJSONArray("intervals").length()!=0)
                 throw new AssertionError("forecast writer did not accept the exact synthetic order: "+forecast.message);
             verifyPartialAggregate();
+            verifyM5CrossSourceDeduplication();
             String date=forecast.forecastDay.getString("date");
             boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
                 .putString("source",forecast.source).putString("date",date).commit();
             if(!saved) throw new AssertionError("restart verification marker could not be saved");
-            show("M4 FORECAST WRITE PASS\n33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
+            show("M4 FORECAST WRITE PASS\nM5 CROSS-SOURCE RECONCILIATION PASS\n33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
         } catch(Throwable error) {
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
@@ -163,6 +165,95 @@ public final class M4DeviceProbeActivity extends Activity {
             if(raw[0]!=12||raw[1]!=120000||aggregate[0]!=1||aggregate[1]!=29||work[0]!=0)
                 throw new AssertionError("partial SQLite rows mismatch: RAW="+raw[0]+", aggregate="+aggregate[1]+", work="+work[0]);
         } finally { db.close(); store.close(); }
+    }
+
+    private void verifyM5CrossSourceDeduplication() throws Exception {
+        CourierDatabase store=new CourierDatabase(this);
+        SQLiteDatabase db=store.getWritableDatabase();
+        try {
+            String xlsx28="m5-xlsx-20261028",dailyHash=repeatHex('e');
+            seedSource(db,xlsx28,dailyHash,"xlsx");
+            String[] times28={"12:46","12:57","13:26","13:48","17:57","18:41",
+                "19:53","20:09","20:38","21:24","23:09"};
+            seedDailyAggregate(db,"m5-day-20261028",xlsx28,"2026-10-28",11);
+            seedRawRows(db,xlsx28,"2026-10-28",times28,10000);
+
+            VideoImportProcessor.Result first=syntheticVideo(repeatHex('a'),"2026-10-28","341234567",
+                "09:59","23:15",times28,10000);
+            M4ForecastFactWriter.ImportResult imported=M4ForecastFactWriter.importFacts(this,first);
+            if(!imported.accepted||imported.needsReview||imported.suppressedOrderRows!=11)
+                throw new AssertionError("complete 11/1100 RAW day was not reconciled: "+imported.message);
+            VideoImportProcessor.Result second=syntheticVideo(repeatHex('b'),"2026-10-28","341234567",
+                "09:59","23:15",times28,10000);
+            M4ForecastFactWriter.ImportResult repeated=M4ForecastFactWriter.importFacts(this,second);
+            if(!repeated.accepted||repeated.needsReview||repeated.suppressedOrderRows!=11)
+                throw new AssertionError("second video source duplicated the same 11/1100 day: "+repeated.message);
+            long[] raw28=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders "
+                +"WHERE date='2026-10-28'");
+            long[] aggregate28=counts(db,"SELECT COUNT(*),COALESCE(SUM(order_count),0) "
+                +"FROM active_aggregate_order_counts WHERE date='2026-10-28'");
+            long baseAggregates=counts(db,"SELECT COUNT(*),0 FROM aggregate_order_counts WHERE date='2026-10-28'")[0];
+            if(raw28[0]!=11||raw28[1]!=110000||aggregate28[0]!=1||aggregate28[1]!=11||baseAggregates!=3)
+                throw new AssertionError("M5 11/1100 reconciliation mismatch: RAW="+raw28[0]+"/"+raw28[1]
+                    +", activeAggregate="+aggregate28[0]+"/"+aggregate28[1]+", retainedSources="+baseAggregates);
+
+            String xlsx18="m5-xlsx-20261018";
+            seedSource(db,xlsx18,repeatHex('c'),"xlsx");
+            seedDailyAggregate(db,"m5-day-20261018",xlsx18,"2026-10-18",2);
+            seedRawRows(db,xlsx18,"2026-10-18",new String[]{"18:57","18:57"},10000);
+            VideoImportProcessor.Result sameMinute=syntheticVideo(repeatHex('d'),"2026-10-18","778899001",
+                "09:00","23:00",new String[]{"18:57","18:57"},10000);
+            M4ForecastFactWriter.ImportResult two=M4ForecastFactWriter.importFacts(this,sameMinute);
+            long rawSameMinute=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders "
+                +"WHERE date='2026-10-18' AND source_id=?",xlsx18)[0];
+            if(!two.accepted||two.suppressedOrderRows!=2||rawSameMinute!=2)
+                throw new AssertionError("two distinct 18:57 orders were collapsed or copied");
+        } finally { db.close(); store.close(); }
+    }
+
+    private static void seedSource(SQLiteDatabase db,String id,String hash,String kind) {
+        ContentValues source=new ContentValues(); source.put("id",id); source.put("sha256",hash);
+        source.put("source_kind",kind); source.put("parser_version","m5-fixture");
+        source.put("status","mirrored"); source.put("created_at","2026-10-31T00:00:00Z");
+        source.put("updated_at","2026-10-31T00:00:00Z"); db.insertOrThrow("import_sources",null,source);
+    }
+
+    private static void seedDailyAggregate(SQLiteDatabase db,String id,String source,String date,int count) {
+        ContentValues value=new ContentValues(); value.put("id",id); value.put("date",date);
+        value.putNull("slot_id"); value.put("order_count",count); value.put("source_id",source);
+        value.put("source_kind","xlsx"); value.put("confidence","reported_sheet");
+        value.put("created_at","2026-10-31T00:00:00Z"); value.put("updated_at","2026-10-31T00:00:00Z");
+        db.insertOrThrow("aggregate_order_counts",null,value);
+    }
+
+    private static void seedRawRows(SQLiteDatabase db,String source,String date,String[] times,long amount) {
+        for(int i=0;i<times.length;i++) {
+            ContentValues row=new ContentValues(); row.put("id",source+":raw:"+i); row.put("date",date);
+            row.put("completed_at",date+"T"+times[i]+":00+03:00"); row.put("reward_kopecks",amount);
+            row.put("source_id",source); row.put("source_kind","xlsx"); row.put("confidence","reported_high");
+            row.put("precision","reported_times_partial"); row.put("created_at","2026-10-31T00:00:00Z");
+            row.put("updated_at","2026-10-31T00:00:00Z"); db.insertOrThrow("orders",null,row);
+        }
+    }
+
+    private static VideoImportProcessor.Result syntheticVideo(String hash,String date,String slotId,
+            String start,String end,String[] times,long amount) {
+        long total=amount*times.length;
+        String noun=times.length==2?"заказа":"заказов";
+        String slot="Слот: "+(total/100)+",00 ₽\n"+slotId+"\n"+times.length+" "+noun+" · 0 км\n"
+            +"Начало\n"+date.replace('-','.')+" "+start+"\nЗавершение\n"+date.replace('-','.')+" "+end;
+        StringBuilder list=new StringBuilder("Яндекс Про\nЗаказы\n");
+        for(String time:times) list.append(time).append(" 100,00 ₽ >\n");
+        YandexScreenParser.Result parsedSlot=YandexScreenParser.parse(slot);
+        YandexScreenParser.Result parsedRows=YandexScreenParser.parse(list.toString());
+        java.util.List<VideoImportProcessor.Observation> observations=java.util.Arrays.asList(
+            new VideoImportProcessor.Observation(0,0,"m5-slot",slot,1f,parsedSlot,null),
+            new VideoImportProcessor.Observation(1,1000,"m5-rows",list.toString(),1f,parsedRows,null));
+        return new VideoImportProcessor.Result(hash,1000,2000,observations,2);
+    }
+
+    private static String repeatHex(char ch) {
+        StringBuilder value=new StringBuilder(64); for(int i=0;i<64;i++) value.append(ch); return value.toString();
     }
 
     private void verifyM6Worker() {
