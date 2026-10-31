@@ -1,0 +1,75 @@
+name: M7 QA debug APK
+on:
+  push:
+    branches:
+      - m7/opt-in-sheets-sync-20261031
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m7-qa-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-qa-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      M7_QA_SHEETS_ID: "1QczfH5LZUq62U1h5HN9fONaN9AAZMSKcawpbFDYDspA"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android platform and build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Reuse QA debug signing certificate
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: m7-qa-debug-keystore-v1
+      - name: Download pinned offline OCR models
+        run: |
+          set -euo pipefail
+          mkdir -p m4-models/tessdata
+          base='https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd'
+          curl -fL "$base/rus.traineddata" -o m4-models/tessdata/rus.traineddata
+          curl -fL "$base/eng.traineddata" -o m4-models/tessdata/eng.traineddata
+          test "$(git hash-object m4-models/tessdata/rus.traineddata)" = b146cb2263acbc6383f8e92ea0ce759537687bb8
+          test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
+      - name: Build M7 debug APK for the isolated QA spreadsheet
+        run: gradle --no-daemon :app:assembleDebug "-Pm7SheetsSpreadsheetId=$M7_QA_SHEETS_ID"
+      - name: Verify package and report OAuth fingerprint
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.m4probe'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/m7-cert.txt"
+          SHA1="$(awk -F': ' '/SHA-1 digest/ {print $2; exit}' "$RUNNER_TEMP/m7-cert.txt")"
+          test -n "$SHA1"
+          {
+            echo "applicationId=ru.courier.finance.m4probe"
+            echo "sha1=$SHA1"
+            echo "spreadsheetId=$M7_QA_SHEETS_ID"
+          } > qa-results-m7-oauth.txt
+          cat qa-results-m7-oauth.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m7-qa-apk-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            qa-results-m7-oauth.txt
+          retention-days: 30
+          if-no-files-found: error
