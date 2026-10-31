@@ -29,7 +29,7 @@ public final class M7GoogleSheetsSync {
     public static final String SHEET_TITLE="__CourierSync";
     public static final String OAUTH_SCOPE="https://www.googleapis.com/auth/spreadsheets";
     private static final String API="https://sheets.googleapis.com/v4/spreadsheets/";
-    private static final int PAGE_ROWS=250, MAX_REMOTE_ROWS=50000, MAX_BODY_BYTES=12_000_000, MAX_ATTEMPTS=4;
+    private static final int PAGE_ROWS=1000, MAX_REMOTE_ROWS=50000, MAX_BODY_BYTES=12_000_000, MAX_BATCH_BYTES=1_500_000, MAX_BATCH_EVENTS=100, MAX_ATTEMPTS=4;
     private static final JSONArray HEADER=new JSONArray().put("event_id").put("record_type").put("record_id").put("action")
         .put("base_hash").put("payload_hash").put("created_at").put("payload_json");
     private static final Pattern ROW_START=Pattern.compile("![A-Z]+([0-9]+):");
@@ -203,15 +203,29 @@ public final class M7GoogleSheetsSync {
             else {store.createConflict(event.type,event.recordId,event.action,event.payload,remoteHead.action,remoteHead.payload,remoteHead.id);result.conflicts++;}
         }
         if(!pushable.isEmpty()) {
-            JSONArray rows=new JSONArray();for(M7SyncStore.Event event:pushable)rows.put(event.sheetRow());
-            long firstRow=appendValues(token,rows);
-            for(int i=0;i<pushable.size();i++) {
-                M7SyncStore.Event event=pushable.get(i);M7SyncStore.RemoteEvent uploaded=new M7SyncStore.RemoteEvent(event.id,event.type,event.recordId,event.action,event.baseHash,event.payloadHash,event.payload,firstRow+i);
-                store.markDelivered(event.id);store.saveHead(uploaded);latest.put(key(event.type,event.recordId),uploaded);result.pushed++;
-                store.rebasePending(event.type,event.recordId,event.baseHash,event.payloadHash);
+            List<M7SyncStore.Event> batch=new ArrayList<>();JSONArray rows=new JSONArray();int batchBytes=2;
+            for(M7SyncStore.Event event:pushable) {
+                JSONArray row=event.sheetRow();int rowBytes=row.toString().getBytes(StandardCharsets.UTF_8).length+1;
+                if(rowBytes>MAX_BATCH_BYTES)throw new SyncFailure("Одна запись слишком велика для безопасной синхронизации. Используйте JSON-перенос.",413,0);
+                if(!batch.isEmpty()&&(batch.size()>=MAX_BATCH_EVENTS||batchBytes+rowBytes>MAX_BATCH_BYTES)) {
+                    result.pushed+=appendBatch(token,rows,batch,store,latest);batch=new ArrayList<>();rows=new JSONArray();batchBytes=2;
+                }
+                batch.add(event);rows.put(row);batchBytes+=rowBytes;
             }
+            if(!batch.isEmpty())result.pushed+=appendBatch(token,rows,batch,store,latest);
         }
         result.pulled=result.incoming.size();return result;
+    }
+
+    private static int appendBatch(String token,JSONArray rows,List<M7SyncStore.Event> batch,M7SyncStore store,
+                                   Map<String,M7SyncStore.RemoteEvent> latest) throws Exception {
+        long firstRow=appendValues(token,rows);
+        for(int i=0;i<batch.size();i++) {
+            M7SyncStore.Event event=batch.get(i);M7SyncStore.RemoteEvent uploaded=new M7SyncStore.RemoteEvent(event.id,event.type,event.recordId,event.action,event.baseHash,event.payloadHash,event.payload,firstRow+i);
+            store.markDelivered(event.id);store.saveHead(uploaded);latest.put(key(event.type,event.recordId),uploaded);
+            store.rebasePending(event.type,event.recordId,event.baseHash,event.payloadHash);
+        }
+        return batch.size();
     }
 
     private static void queueCurrent(M7SyncStore store,String type,String id,M7SyncStore.Record current,String baseHash) throws Exception {
