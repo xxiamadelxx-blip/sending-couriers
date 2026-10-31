@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <application>
     <activity android:name=".M4DeviceProbeActivity" android:exported="true" android:configChanges="orientation|screenSize|screenLayout|uiMode">
       <intent-filter>

@@ -43,6 +43,20 @@ wait_for_marker() {
   fail_with_diagnostics
 }
 
+disable_network() {
+  adb shell svc wifi disable >/dev/null 2>&1 || true
+  adb shell svc data disable >/dev/null 2>&1 || true
+  adb shell settings put global airplane_mode_on 1 >/dev/null 2>&1 || true
+  adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true >/dev/null 2>&1 || true
+  sleep 3
+}
+
+assert_web_morning_catchup() {
+  local target="$1"
+  adb shell run-as "$package" cat shared_prefs/courier_finance.xml 2>/dev/null \
+    | python3 -c 'import json,sys,xml.etree.ElementTree as ET; root=ET.fromstring(sys.stdin.read()); raw=root.find("./string[@name=\"state\"]").text; state=json.loads(raw); rows=state.get("forecast",{}).get("snapshots",[]); found=[row for row in rows if row.get("date")==sys.argv[1] and row.get("kind")=="MORNING" and str(row.get("id","")).startswith("MORNING-"+sys.argv[1]+"-")]; sys.exit(0 if len(found)==1 else 1)' "$target"
+}
+
 adb install app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -W -n "$package/$activity"
 wait_for_marker "M4 FORECAST WRITE PASS" "M4 FORECAST QA FAIL" 90
@@ -52,6 +66,11 @@ adb shell am start -W -n "$package/$activity" --ez m4.verifyRestart true
 wait_for_marker "M4 FORECAST RESTART PASS" "M4 FORECAST RESTART FAIL" 30
 capture_screen m4-forecast-restart.png
 
+adb shell am force-stop "$package"
+disable_network
+adb shell am start -W -n "$package/$activity" --ez m6.checkOffline true
+wait_for_marker "M6 OFFLINE PASS" "M6 OFFLINE FAIL" 30
+capture_screen m6-offline-before.png
 adb shell am force-stop "$package"
 adb shell am start -W -n "$package/$activity" --ez m6.verifyWorker true
 wait_for_marker "M6 ENQUEUED" "M6 WORKER FAIL" 30
@@ -90,6 +109,52 @@ fi
 adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.verifyRestart true
 wait_for_marker "M6 RESTART PASS" "M6 RESTART FAIL" 120
 capture_screen m6-restart.png
+
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.queueReboot true
+wait_for_marker "M6 REBOOT ENQUEUED" "M6 REBOOT QUEUE FAIL" 30
+capture_screen m6-reboot-enqueued.png
+adb reboot
+timeout 180s adb wait-for-device
+booted=0
+for attempt in $(seq 1 120); do
+  if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" == "1" ]]; then
+    booted=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$booted" -ne 1 ]]; then
+  echo "M6 emulator did not finish rebooting"
+  adb logcat -d -s AndroidRuntime:E || true
+  exit 1
+fi
+disable_network
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.checkOffline true
+wait_for_marker "M6 OFFLINE PASS" "M6 OFFLINE FAIL" 30
+capture_screen m6-offline-after-reboot.png
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.verifyReboot true
+wait_for_marker "M6 REBOOT PASS" "M6 REBOOT FAIL" 180
+capture_screen m6-reboot.png
+
+target=$(adb shell run-as "$package" cat shared_prefs/m6-forecast-qa.xml \
+  | python3 -c 'import sys,xml.etree.ElementTree as ET; print(ET.fromstring(sys.stdin.read()).find("./string[@name=\"target\"]").text)')
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/ru.courier.finance.MainActivity" -f 0x10008000
+catchup=0
+for attempt in $(seq 1 60); do
+  if assert_web_morning_catchup "$target"; then
+    catchup=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$catchup" -ne 1 ]]; then
+  echo "M6 app opening did not persist the current-day Web morning forecast"
+  fail_with_diagnostics
+fi
+echo "M6 APP-OPEN CATCH-UP PASS: $target"
+capture_screen m6-app-open-catchup.png
 
 if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4" ]]; then
   import_real_video() {
