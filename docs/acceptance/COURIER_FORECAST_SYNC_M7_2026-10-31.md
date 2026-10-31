@@ -1,6 +1,6 @@
 # M7 — opt-in Google Sheets sync
 
-**Status: implementation in code; Android build, OAuth consent, and real Sheets round trip not verified.**
+**Status: M7 debug APK build passed in GitHub Actions (run 41223227069). OAuth consent, real Sheets round trip, and two-device acceptance remain unverified.**
 
 ## Scope
 
@@ -21,13 +21,13 @@ The Android WebView still blocks network loads. Google authorization and Sheets 
 
 ## External setup required
 
-Google's Android authorization requires the Sheets API enabled in the Cloud project and an OAuth Android client registered for package `ru.courier.finance` and the SHA-1 certificate fingerprint used by the installable app. The repository does not contain that OAuth registration or the private release signer. The CI QA application uses a package suffix and debug signing, so it cannot prove authorization for the owner's production installation. The requested Sheets scope is sensitive and may require Google's app verification before public distribution. Do not put a client secret or signing key in source control.
+Google's Android authorization requires the Sheets API enabled in the Cloud project and an OAuth Android client registered for package `ru.courier.finance` and the SHA-1 certificate fingerprint used by the installable app. The repository does not contain that OAuth registration or the private release signer. The current QA APK uses package `ru.courier.finance.m4probe` and QA signing SHA-1 `3a2933340beb050ba930e75ddc63f6b6a2afcc2c`. GitHub Actions reuses its QA debug keystore between builds. Production package `ru.courier.finance` and its release signer still need separate OAuth registration. The requested Sheets scope is sensitive and may require Google's app verification before public distribution. Do not put a client secret or signing key in source control.
 
 The default spreadsheet ID remains the canonical `Courier Forecast` workbook. For isolated QA, build with `-Pm7SheetsSpreadsheetId=<test-copy-id>`; the value is validated and compiled into that build. Register the exact QA package name and signing SHA-1 for the QA authorization check. Never use the production ID for two-device conflict or retry exercises.
 
 ## Still required before M7 acceptance
 
-1. Build the M7 branch and install it with the same package and signing certificate as the target app.
+1. Install the M7 QA APK from the successful GitHub Actions artifact on both test devices; keep package `ru.courier.finance.m4probe` and the QA signing certificate unchanged.
 2. Register the production OAuth client and verify connect, cancel, disconnect, and re-consent on Android.
 3. Build with the test copy's ID using `-Pm7SheetsSpreadsheetId=<test-copy-id>` and use two devices against that copy: first sync, pull-only, push-only, offline edits, same-record edits on both devices, deletion conflicts, and repeat/idempotent sync.
 4. Trigger or simulate 429 and expired/revoked authorization; confirm the queue survives and manual JSON/CSV transfer leaves forecast state untouched.
