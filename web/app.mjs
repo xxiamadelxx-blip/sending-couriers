@@ -89,8 +89,9 @@ window.receiveVideoImport = raw => {
       const source=result.forecastSource||'video_import';
       const forecast=importDays(state.forecast,[result.forecastDay],source,new Date().toISOString());
       persist({...state,forecast},true);
-      forecastScreen?.refresh?.();
-      notify(`Видео импортировано: ${result.importedOrderCount} заказов записаны в историю прогноза.`);
+      if (view === 'forecast') forecastScreen?.refresh?.();
+      else openForecast('today');
+      notify(`Видео импортировано: ${result.importedOrderCount} заказов. Прогноз открыт, данные сохранены.`);
     } else if (result.duplicate) notify(result.forecastFactMessage||'Это видео уже обработано.');
     else notify(result.forecastFactMessage||`Разобрано кадров: ${result.frames}; извлечённые факты не прошли сверку и не записаны в прогноз.`);
   } catch { notify('Импорт видео завершился без читаемого результата.'); }
