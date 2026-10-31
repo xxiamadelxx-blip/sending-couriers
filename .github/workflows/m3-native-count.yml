@@ -1,4 +1,5 @@
 name: M3 native offline count engine
+# Runtime acceptance on this branch uses a disposable Android 35 emulator.
 on:
   push:
     branches:
