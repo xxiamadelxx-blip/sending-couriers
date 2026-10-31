@@ -598,7 +598,10 @@ public final class YandexScreenParserTest {
     private static Object extractFacts(VideoImportProcessor.Result video) throws Exception {
         java.lang.reflect.Method method=M4ForecastFactWriter.class.getDeclaredMethod("extract",VideoImportProcessor.Result.class);
         method.setAccessible(true);
-        return method.invoke(null,video);
+        Object extracted=method.invoke(null,video);
+        if(!(extracted instanceof java.util.List)||((java.util.List<?>)extracted).size()!=1)
+            throw new AssertionError("expected one slot fact for a single-slot test video");
+        return ((java.util.List<?>)extracted).get(0);
     }
 
     private static Object fact(Object facts,String name) throws Exception {
