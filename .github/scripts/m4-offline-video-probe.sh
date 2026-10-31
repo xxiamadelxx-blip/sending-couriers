@@ -51,10 +51,10 @@ disable_network() {
   sleep 3
 }
 
-assert_web_morning_catchup() {
+assert_app_open_forecast_catchup() {
   local target="$1"
   adb shell run-as "$package" cat shared_prefs/courier_finance.xml 2>/dev/null \
-    | python3 -c 'import json,sys,xml.etree.ElementTree as ET; root=ET.fromstring(sys.stdin.read()); raw=root.find("./string[@name=\"state\"]").text; state=json.loads(raw); rows=state.get("forecast",{}).get("snapshots",[]); found=[row for row in rows if row.get("date")==sys.argv[1] and row.get("kind")=="MORNING" and str(row.get("id","")).startswith("MORNING-"+sys.argv[1]+"-")]; sys.exit(0 if len(found)==1 else 1)' "$target"
+    | python3 -c 'import json,sys,xml.etree.ElementTree as ET; root=ET.fromstring(sys.stdin.read()); raw=root.find("./string[@name=\"state\"]").text; state=json.loads(raw); rows=state.get("forecast",{}).get("snapshots",[]); morning=[row for row in rows if row.get("date")==sys.argv[1] and row.get("kind")=="MORNING"]; nowcast=[row for row in rows if row.get("date")==sys.argv[1] and row.get("kind")=="NOWCAST" and str(row.get("id","")).startswith("NOWCAST-"+sys.argv[1]+"-")]; sys.exit(0 if len(morning)==1 and len(nowcast)==1 else 1)' "$target"
 }
 
 print_web_state_diagnostic() {
@@ -149,14 +149,14 @@ adb shell am force-stop "$package"
 adb shell am start -W -n "$package/ru.courier.finance.MainActivity" -f 0x10008000
 catchup=0
 for attempt in $(seq 1 60); do
-  if assert_web_morning_catchup "$target"; then
+  if assert_app_open_forecast_catchup "$target"; then
     catchup=1
     break
   fi
   sleep 2
 done
 if [[ "$catchup" -ne 1 ]]; then
-  echo "M6 app opening did not persist the current-day Web morning forecast"
+  echo "M6 app opening did not persist exactly one current-day morning forecast and nowcast"
   echo "M6 persisted state summary:"
   print_web_state_diagnostic "$target" || true
   adb logcat -d -v brief 2>/dev/null | grep -E 'chromium|WebView|CourierSQLite|CourierForecast|M6' | tail -60 || true
