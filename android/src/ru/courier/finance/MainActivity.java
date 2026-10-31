@@ -444,8 +444,8 @@ public final class MainActivity extends Activity {
                     syncStore.setEnabled(false);syncStore.setRetryAt(0);syncStore.setLastError("");
                     RevokeAccessRequest revoke=RevokeAccessRequest.builder().setScopes(Collections.singletonList(new Scope(M7GoogleSheetsSync.OAUTH_SCOPE))).build();
                     Identity.getAuthorizationClient(MainActivity.this).revokeAccess(revoke)
-                        .addOnSuccessListener(this,unused->publishSyncState("Синхронизация отключена. Локальные данные и очередь сохранены."))
-                        .addOnFailureListener(this,error->publishSyncState("Синхронизация отключена на устройстве. Разрешение Google можно отозвать в настройках аккаунта."));
+                        .addOnSuccessListener(MainActivity.this,unused->publishSyncState("Синхронизация отключена. Локальные данные и очередь сохранены."))
+                        .addOnFailureListener(MainActivity.this,error->publishSyncState("Синхронизация отключена на устройстве. Разрешение Google можно отозвать в настройках аккаунта."));
                 }).show());
         }
         @JavascriptInterface public void resolveSyncConflict(String id,String choice) {
