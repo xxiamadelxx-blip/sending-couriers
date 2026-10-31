@@ -38,6 +38,20 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: m7-qa-debug-keystore-v1
+      - name: Create QA-only debug signer when cache is empty
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -noprompt \
+              -alias androiddebugkey \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          keytool -list -keystore "$HOME/.android/debug.keystore" \
+            -alias androiddebugkey -storepass android >/dev/null
       - name: Download pinned offline OCR models
         run: |
           set -euo pipefail
