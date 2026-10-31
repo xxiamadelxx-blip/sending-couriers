@@ -11,7 +11,7 @@ const num=n=>n==null?'—':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:
 const hours=m=>m==null?'—':`${num(m/60)} ч`;
 const range=p=>p?.central==null?'Нет оценки':`${p.central} заказов · ${p.lower}–${p.upper}`;
 const confidence=p=>({rest:'Отдых',insufficient:'Недостаточно истории',low:'Низкая уверенность',limited:'Ограниченная уверенность',moderate:'Личная история'}[p?.confidence]??'Нет оценки');
-export const forecastModelLabel=p=>p?.central==null?'':p.selectedModel==='weighted-count-baseline'?(p.timeKind?'Почасовые события учтены · выбран базовый расчёт':'Оценка по дневным итогам · почасовая модель не обучена'):['poisson-offset','negative-binomial'].includes(p.selectedModel)?'Почасовая модель по подтверждённым рабочим окнам':'';
+export const forecastModelLabel=p=>p?.central==null?'':p.selectedModel==='weighted-count-baseline'?(p.timeKind?'Почасовые события учтены · выбран базовый расчёт':'Оценка по дневным итогам · почасовая модель не обучена'):['poisson-offset','negative-binomial','poisson-offset-daily','negative-binomial-daily'].includes(p.selectedModel)?'Почасовая модель по подтверждённым рабочим окнам':'';
 const errorHTML='<p class="error" id="forecastError" role="alert" hidden></p>';
 const textField=(id,label,value='',type='text',extra='')=>`<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" aria-label="${esc(label)}" value="${esc(value)}" ${extra}></div>`;
 const metric=(name,value)=>`<div><span>${name}</span><strong>${esc(value)}</strong></div>`;
@@ -45,7 +45,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     const work=own?.workingMin??f.weekConfig?.workingMin??plan.workingMin??480;
     shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><div class="forecast-band forecast-insufficient" id="simpleRange" role="status"></div></section>
       <section class="detail-card forecast-simple-plan"><h2>Моё время</h2>${durationField('todaySlotHours','Слот',slot)}${durationField('todayWorkHours','Из них буду работать',work)}<p class="forecast-work-note">Время простоя не считается активной работой.</p><p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
-      <button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
+      <div class="forecast-import-actions"><button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><button class="button outline forecast-import-button" id="importForecastVideo" type="button">Импортировать видео</button></div><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
     // Approved visual text only. Keep both inputs, their original IDs and
     // accessible control names, the 15-minute steps and persistence unchanged.
     const slotCaption=$('label[for="todaySlotHours"]');
@@ -86,6 +86,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     $('#todaySlotHours').addEventListener('input',changed);
     updateModel=()=>{modelFailure=false;run(preview);};run(preview);
     $('#importForecast').onclick=()=>{if(!flushPlan())return;if(Native?.importForecast)Native.importForecast();else $('#forecastFile').click();};
+    $('#importForecastVideo').onclick=()=>{if(!flushPlan())return;if(typeof Native?.importVideo==='function')Native.importVideo();else notify('Импорт видео доступен в Android-приложении.');};
     $('#forecastFile').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>8000000)throw new Error('Файл больше 8 МБ.');if(file.name.toLowerCase().endsWith('.xlsx'))throw new Error('Откройте XLSX в Android-приложении.');receiveImport(await file.text(),file.name);}catch(error){showError(error);}};
   }
   function readPair(workId,slotId) {
@@ -213,5 +214,5 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     run(()=>{const parsed=parseForecastFile(text,name);const merged=applyHistory(data(),parsed);write(merged);simpleView();notify(`История загружена: ${parsed.days.length} дней`);});
   }
   function render(next=screen){if(!flushPlan())return;flushPlan=()=>true;updateModel=()=>{};screen=next;({today:simpleView,day:dayView,week:weekView,accuracy:accuracyView,data:dataView}[screen]??simpleView)();}
-  render();return {receiveImport,flush:()=>flushPlan(),modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(!flushPlan())return true;if(screen!=='today'){render('today');return true;}return false;}};
+  render();return {receiveImport,refresh:()=>render(screen),flush:()=>flushPlan(),modelReady:()=>updateModel(),modelFailed:()=>{modelFailure=true;const status=$('#simpleRange');if(status)status.textContent='Не удалось рассчитать прогноз. Откройте экран ещё раз.';},back:()=>{if(!flushPlan())return true;if(screen!=='today'){render('today');return true;}return false;}};
 }

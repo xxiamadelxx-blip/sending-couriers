@@ -11,7 +11,7 @@ import {periodDayMarkup} from './period-day-view.mjs';
 import { feedback as emitFeedback } from './feedback.mjs';
 import { mountForecast } from './forecast-ui.mjs';
 import {prepareForecast,forecastKey} from './forecast-runtime.mjs';
-import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity } from './forecast.mjs';
+import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity, importDays } from './forecast.mjs';
 import { weatherCache, weatherParts, weatherSymbol, weatherDescription, weatherLocation } from './weather.mjs';
 import { intervalField, bindIntervals, intervalValue } from './interval-control.mjs';
 import { withSlotWorkingTime } from './slot-work.mjs';
@@ -81,6 +81,59 @@ function openForecast(initial = 'today') {
   warmForecast();
 }
 window.receiveForecastImport = text => { if(view!=='forecast')openForecast(); forecastScreen.receiveImport(text); };
+window.receiveVideoImport = raw => {
+  try {
+    const result = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
+    const acknowledge=()=>{if(result.sourceSha256)Native?.acknowledgeVideoImport?.(result.sourceSha256);};
+    if (!result.ok) { notify(result.error || 'Не удалось обработать видео.'); acknowledge(); }
+    else if (result.forecastFactsAccepted && result.forecastDay) {
+      const source=result.forecastSource||'video_import';
+      const forecast=importDays(state.forecast,[result.forecastDay],source,new Date().toISOString());
+      persist({...state,forecast},true);
+      acknowledge();
+      if (view === 'forecast') forecastScreen?.refresh?.();
+      else openForecast('today');
+      notify(`Видео импортировано: ${result.importedOrderCount} заказов. Прогноз открыт, данные сохранены.`);
+    } else if (result.duplicate) { notify(result.forecastFactMessage||'Это видео уже обработано.'); acknowledge(); }
+    else { notify(result.forecastFactMessage||`Разобрано кадров: ${result.frames}; извлечённые факты не прошли сверку и не записаны в прогноз.`); acknowledge(); }
+  } catch { notify('Импорт видео завершился без читаемого результата.'); }
+};
+window.receivePendingVideoResults = raw => {
+  try {
+    const reports=JSON.parse(typeof raw==='string'?raw:JSON.stringify(raw));
+    if(!Array.isArray(reports))return;
+    for(const report of reports) {
+      const result=JSON.parse(report.response);
+      result.sourceSha256=result.sourceSha256||report.sourceSha256;
+      window.receiveVideoImport(result);
+    }
+  } catch(error) { notify(`Не удалось восстановить результат импорта видео: ${error.message}`); }
+};
+window.receiveNativeForecasts = raw => {
+  try {
+    if(!state)return;
+    const incoming=JSON.parse(typeof raw==='string'?raw:JSON.stringify(raw));
+    const snapshots=Array.isArray(incoming?.snapshots)?incoming.snapshots:[];
+    const models=Array.isArray(incoming?.models)?incoming.models:[];
+    const snapshotIds=new Set(state.forecast.snapshots.map(s=>s.id));
+    const modelIds=new Set(state.forecast.models.map(m=>m.id));
+    const addedSnapshots=snapshots.filter(s=>s&&typeof s.id==='string'&&!snapshotIds.has(s.id));
+    const addedModels=models.filter(m=>m&&typeof m.id==='string'&&!modelIds.has(m.id));
+    if(!addedSnapshots.length&&!addedModels.length)return;
+    const forecast={...state.forecast,snapshots:[...state.forecast.snapshots,...addedSnapshots],models:[...state.forecast.models,...addedModels]};
+    persist({...state,forecast},true);
+    if(view==='forecast')forecastScreen?.refresh?.();
+    else if(view==='summary')summary();
+  } catch(error) { notify(`Не удалось загрузить локальный прогноз: ${error.message}`); }
+};
+function refreshNativeForecasts() {
+  try {
+    const imports=Native?.pendingVideoResults?.();if(imports)window.receivePendingVideoResults(imports);
+    const pending=Native?.pendingNativeForecasts?.();if(pending)window.receiveNativeForecasts(pending);
+  }
+  catch(error) { console.warn('Native forecast handoff failed:',error?.message??error); }
+}
+window.refreshNativeForecasts=refreshNativeForecasts;
 window.receiveWeather = text => {
   try {
     const p=weatherLocation(state.forecast);if(!p.weatherCity)return;
@@ -613,10 +666,11 @@ function history() {
       <p class="history-section-label">Работа с данными</p>
       <button class="button history-action" id="historyExport" type="button" aria-label="Экспорт для ChatGPT"><span class="history-action-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Экспорт для ChatGPT</strong><small>Отчёт о выбранном периоде</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
       <button class="button history-action" id="importData" type="button" aria-label="Импорт JSON"><span class="history-action-icon history-import-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Импорт JSON</strong><small>Восстановить записи из копии</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
+      <button class="button history-action" id="importVideo" type="button" aria-label="Импорт видео Яндекс Про"><span class="history-action-icon history-import-icon" aria-hidden="true">${icons.share}</span><span class="history-action-copy"><strong>Импорт видео Яндекс Про</strong><small>Распознать кадры локально</small></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
       <p class="history-section-label history-period-label">Действие с периодом</p>
       <button class="button history-action history-period-action" id="closePeriod" type="button" aria-label="${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}"><span class="history-action-icon" aria-hidden="true">${icon.calendar}</span><span class="history-action-copy"><strong>${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</strong></span><span class="history-action-chevron" aria-hidden="true">${icons.chevron}</span></button>
     </div>`;
-  const filledFooter = `<div class="history-footer"><button class="button quiet export-action" id="historyExport" type="button">${icons.share}Экспорт для ChatGPT</button><button class="button quiet" id="closePeriod" type="button">${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</button><button class="button quiet" id="importData" type="button">Импорт JSON</button></div>`;
+  const filledFooter = `<div class="history-footer"><button class="button quiet export-action" id="historyExport" type="button">${icons.share}Экспорт для ChatGPT</button><button class="button quiet" id="closePeriod" type="button">${s.closure ? 'Изменить закрытие периода' : 'Закрытие периода'}</button><button class="button quiet" id="importData" type="button">Импорт JSON</button><button class="button quiet" id="importVideo" type="button">Импорт видео</button></div>`;
   app.innerHTML = `${heading('История')}${navigation()}<div class="history-list">${groups.join('')}</div>${empty ? '<section class="empty-history"><h2>Пока нет записей</h2><p>Добавьте часы, заказы и выплаты за слот через «+» внизу экрана.</p></section>' : ''}
     ${s.closure ? `<p class="closure-fact">Период закрыт. Финальная доплата: ${esc(money(s.closure.finalAdjustment))}</p>` : ''}
     ${empty ? emptyFooter : filledFooter}<input type="file" id="importInput" accept=".json,application/json" hidden>`;
@@ -628,6 +682,10 @@ function history() {
   $('#closePeriod').addEventListener('click', closure);
   $('#importData').addEventListener('click', () => {
     if (Native) Native.importData(); else $('#importInput').click();
+  });
+  $('#importVideo').addEventListener('click', () => {
+    if (typeof Native?.importVideo === 'function') Native.importVideo();
+    else notify('Импорт видео доступен после обновления Android-приложения.');
   });
   $('#importInput').addEventListener('change', async event => {
     const file = event.target.files[0]; if (!file) return;
@@ -740,6 +798,7 @@ try {
     try { persist({...state,forecast:evaluateForecasts(snapshotIfPossible(syncSlots(state.forecast,state.entries)))},true); }
     catch(error) { notify(error.message); }
   }
+  refreshNativeForecasts();
 } catch (error) {
   app.innerHTML = `<div class="fatal"><h1>Не удалось открыть данные</h1><p>${esc(error.message)}</p><p>Сохранённые записи не изменены. Можно восстановить резервную копию JSON.</p><button id="recover" class="button primary" type="button">Открыть резервную копию</button><input id="recoverFile" type="file" accept=".json,application/json" hidden></div>`;
   $('#recover').addEventListener('click', () => { if (Native) Native.importData(); else $('#recoverFile').click(); });
@@ -748,4 +807,4 @@ try {
 Native?.ready();
 
 // Refresh date boundaries on return from the background; never promise an exact background alarm.
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{refreshNativeForecasts();persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});

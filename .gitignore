@@ -2,6 +2,10 @@
 /signing/
 /verification/
 /qa-results/
+/app/build/
+/.gradle/
+/m4-models/
+/m4-fixture/
 *.keystore
 *.jks
 *.xlsx

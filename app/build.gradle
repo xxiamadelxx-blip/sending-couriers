@@ -1,0 +1,98 @@
+plugins {
+    id 'com.android.application'
+}
+
+def generatedAssets = layout.buildDirectory.dir('generated/m4/assets')
+def generatedManifest = layout.buildDirectory.file('generated/m4/AndroidManifest.xml')
+def m4QaBuildId = (System.getenv('GITHUB_SHA') ?: 'local').take(8)
+
+tasks.register('stageCourierAssets') {
+    inputs.dir(rootProject.file('web'))
+    inputs.dir(rootProject.file('m4-models/tessdata'))
+    outputs.dir(generatedAssets)
+    doLast {
+        ['rus.traineddata','eng.traineddata'].each { name ->
+            File model=rootProject.file("m4-models/tessdata/${name}")
+            if(!model.isFile() || model.length()<1_000_000L) throw new GradleException("Pinned OCR model is missing or incomplete: ${name}")
+        }
+        File output=generatedAssets.get().asFile
+        project.delete(output)
+        project.copy { from rootProject.file('web'); into new File(output,'www') }
+        project.copy { from rootProject.file('m4-models/tessdata'); into new File(output,'tessdata') }
+        project.copy { from rootProject.file('m4/THIRD_PARTY_NOTICES.md'); into new File(output,'m4') }
+        File fixture=rootProject.file('m4-fixture/screen.mp4')
+        if(fixture.isFile()) project.copy { from fixture; into new File(output,'m4-fixture') }
+    }
+}
+
+tasks.register('stageCourierManifest') {
+    inputs.file(rootProject.file('android/AndroidManifest.xml'))
+    outputs.file(generatedManifest)
+    doLast {
+        String manifest=rootProject.file('android/AndroidManifest.xml').getText('UTF-8')
+        manifest=manifest.replaceFirst(/ package="ru\.courier\.finance"/,'')
+        manifest=manifest.replaceFirst(/ android:versionCode="29" android:versionName="1\.7\.15"/,'')
+        manifest=manifest.replaceFirst(/\s*<uses-sdk[^>]*\/>/,'')
+        manifest=manifest.replace('android:authorities="ru.courier.finance.exports"','android:authorities="${applicationId}.exports"')
+        if(manifest.contains('package="ru.courier.finance"') || !manifest.contains('</application>'))
+            throw new GradleException('Cannot safely stage the existing Android manifest')
+        if(!manifest.contains('android:authorities="${applicationId}.exports"'))
+            throw new GradleException('Cannot stage a package-specific export provider authority')
+        String activity='''
+    <activity android:name=".M4VideoImportActivity" android:exported="true" android:label="Импорт видео Яндекс Про" android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|uiMode">
+      <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="video/mp4"/></intent-filter>
+      <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="video/quicktime"/></intent-filter>
+    </activity>
+'''
+        manifest=manifest.replace('</application>',activity+'</application>')
+        if(!manifest.contains('M4VideoImportActivity')) throw new GradleException('M4 video activity was not added to the staged manifest')
+        File output=generatedManifest.get().asFile; output.parentFile.mkdirs(); output.setText(manifest,'UTF-8')
+    }
+}
+
+android {
+    namespace 'ru.courier.finance'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ru.courier.finance'
+        minSdk 26
+        targetSdk 35
+        versionCode 29
+        versionName '1.7.15'
+    }
+    buildTypes {
+        debug { applicationIdSuffix '.m4probe' }
+        release { minifyEnabled false }
+        m4Qa {
+            initWith release
+            applicationIdSuffix ".m4qa${m4QaBuildId}"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
+    }
+    sourceSets {
+        main {
+            manifest.srcFile generatedManifest.get().asFile
+            java.srcDirs = ['../android/src','../m4/src/main/java']
+            res.srcDirs = ['../android/res']
+            assets.srcDirs = [generatedAssets.get().asFile]
+        }
+        debug {
+            manifest.srcFile '../m4/debug/AndroidManifest.xml'
+            java.srcDirs = ['../tests/m4probe']
+        }
+        test { java.srcDirs = ['../tests/m4unit'] }
+    }
+    testOptions { unitTests.returnDefaultValues = true }
+}
+
+tasks.named('preBuild') {
+    dependsOn 'stageCourierAssets', 'stageCourierManifest'
+}
+
+dependencies {
+    implementation 'cz.adaptech.tesseract4android:tesseract4android:4.9.0'
+    implementation 'androidx.work:work-runtime:2.12.0'
+    testImplementation 'junit:junit:4.13.2'
+}

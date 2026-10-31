@@ -1,9 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseWorkbook,parseForecastFile,importSummary,applyHistory} from '../web/forecast-import.mjs';
-import {emptyForecast,importDays,saveDay,predict,parseWindows} from '../web/forecast.mjs';
+import {emptyForecast,importDays,normalizeForecast,saveDay,predict,parseWindows} from '../web/forecast.mjs';
 import {prepareCountModel,resetCountModels} from '../web/forecast-count.mjs';
 import {forecastModelLabel} from '../web/forecast-ui.mjs';
+test('video facts retain Yandex order ids and same-minute rows after forecast reload',()=>{
+ const source=`video:${'a'.repeat(64)}`,date='2026-10-18';
+ const orderEvidence=Array.from({length:33},(_,i)=>({
+  id:`video-${i+1}`,visibleMin:i<2?18*60+57:19*60+i,
+  acceptedMin:i===0?18*60+40:null,deliveredMin:i===0?18*60+57:null,
+  orderNumber:i===0?'123456-1234567':null,source,confirmed:i===0,
+  fieldSources:{visibleMin:{status:'CONFIRMED',source},acceptedMin:{status:i===0?'CONFIRMED':'UNKNOWN',source},deliveredMin:{status:i===0?'CONFIRMED':'UNKNOWN',source}}
+ }));
+ const row={date,timezone:'Europe/Moscow',orders:33,ordersConfirmed:true,completed:true,
+  workConfirmed:true,precision:'intervals',intervals:[{start:18*60+40,end:18*60+57,state:'WORK'}],
+  orderEvidence,source,sourceHash:'a'.repeat(64)};
+ const imported=importDays(emptyForecast(),[row],source,'2026-10-30T17:00:00Z');
+ const reloaded=normalizeForecast(JSON.parse(JSON.stringify(imported)));
+ const day=reloaded.days[date];
+ assert.equal(day.orders,33);
+ assert.equal(day.orderEvidence.length,33);
+ assert.equal(day.orderEvidence.filter(o=>o.visibleMin===18*60+57).length,2);
+ assert.equal(day.orderEvidence[0].orderNumber,'123456-1234567');
+ const repeated=importDays(reloaded,[row],source,'2026-10-30T17:00:01Z');
+ assert.equal(repeated.days[date].orderEvidence.length,33);
+ assert.equal(repeated.imports.length,1);
+});
 test('XLSX mapping excludes formula tails, reconstructed time, money and duplicate minute collapse',()=>{
  const grid={sheets:{'Дневные итоги':{'1':{A:'Дата',E:'Заказы'},'2':{A:'2026-10-01',E:2,F:900,G:14,O:9,Q:14},'500':{T:{formula:true}}},'Смены':{'2':{A:'2026-10-01',C:9/24,D:21/24,E:9,F:14,G:2}},'Заказы RAW':{'2':{A:'2026-10-01',C:12/24,D:1,E:100,L:11/24,M:12/24},'3':{A:'2026-10-01',C:12/24,D:2,E:100,L:11/24,M:12/24}}}};
  const result=parseWorkbook(grid);assert.equal(result.days.length,1);const d=result.days[0];assert.equal(d.orders,2);assert.equal(d.workingMin,540);assert.equal(d.workConfirmed,false);assert.equal(d.appAccountedMin,840);assert.equal(d.orderEvidence.length,2);assert.notEqual(d.orderEvidence[0].id,d.orderEvidence[1].id);assert.equal(d.reward,undefined);assert.equal(d.tips,undefined);assert.deepEqual(d.intervals,[]);

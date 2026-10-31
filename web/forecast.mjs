@@ -7,6 +7,12 @@ const copy = value => JSON.parse(JSON.stringify(value));
 const fail = message => { throw new Error(message); };
 const number = (value, max = 1000000) => value == null || typeof value==='string'&&!value.trim() ? null : ['string','number'].includes(typeof value)&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=max ? Number(value) : fail('Проверьте числовые данные прогноза.');
 const integer = (value, max = 1000000) => { const n = number(value,max); return n == null || Number.isInteger(n) ? n : fail('Нужно целое число.'); };
+function orderNumber(value) {
+  if(value==null||value==='') return null;
+  if(typeof value==='number'&&Number.isSafeInteger(value)&&value>=0) return value;
+  if(typeof value==='string'&&/^\d{1,40}(?:-\d{4,40})?$/.test(value)) return value;
+  fail('Проверьте номер заказа.');
+}
 const knownZones=new Set();
 function validZone(timezone){if(!knownZones.has(timezone)){try{localClock(timezone);}catch{fail('Проверьте часовой пояс факта.');}knownZones.add(timezone);}return timezone;}
 export function dayStamp(date) {
@@ -122,7 +128,7 @@ function evidence(input=[]) {
     const id=String(o.id??'').slice(0,160); if(!id||ids.has(id)) fail('Повторяется идентификатор заказа.'); ids.add(id);
     const acceptedMin=number(o.acceptedMin,2880),deliveredMin=number(o.deliveredMin,2880),visibleMin=number(o.visibleMin,1440);
     if(acceptedMin!=null && deliveredMin!=null && deliveredMin<acceptedMin) fail('Завершение заказа раньше принятия.');
-    return {id,visibleMin,acceptedMin,deliveredMin,orderNumber:integer(o.orderNumber),source:String(o.source??'manual').slice(0,200),confidence:String(o.confidence??'').slice(0,100),note:String(o.note??'').slice(0,1000),workingInterval:String(o.workingInterval??'').slice(0,100),fieldSources:Object.fromEntries(['visibleMin','acceptedMin','deliveredMin'].map(k=>{const status=o.fieldSources?.[k]?.status??(o[k]==null?'UNKNOWN':o.confirmed?'CONFIRMED':'RECONSTRUCTED');if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте источник времени заказа.');return [k,{status,source:String(o.fieldSources?.[k]?.source??o.source??'').slice(0,200)}];})),completeness:acceptedMin!=null&&deliveredMin!=null?'FULL':'PARTIAL',confirmed:o.confirmed===true};
+    return {id,visibleMin,acceptedMin,deliveredMin,orderNumber:orderNumber(o.orderNumber),source:String(o.source??'manual').slice(0,200),confidence:String(o.confidence??'').slice(0,100),note:String(o.note??'').slice(0,1000),workingInterval:String(o.workingInterval??'').slice(0,100),fieldSources:Object.fromEntries(['visibleMin','acceptedMin','deliveredMin'].map(k=>{const status=o.fieldSources?.[k]?.status??(o[k]==null?'UNKNOWN':o.confirmed?'CONFIRMED':'RECONSTRUCTED');if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте источник времени заказа.');return [k,{status,source:String(o.fieldSources?.[k]?.source??o.source??'').slice(0,200)}];})),completeness:acceptedMin!=null&&deliveredMin!=null?'FULL':'PARTIAL',confirmed:o.confirmed===true};
   });
 }
 function day(input) {
