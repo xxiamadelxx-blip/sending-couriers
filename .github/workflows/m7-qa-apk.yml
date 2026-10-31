@@ -63,16 +63,25 @@ jobs:
           test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
       - name: Build M7 debug APK for the isolated QA spreadsheet
         run: gradle --no-daemon :app:assembleDebug "-Pm7SheetsSpreadsheetId=$M7_QA_SHEETS_ID"
-      - name: Verify package and report OAuth fingerprint
+      - name: Sign QA APK with the cached QA certificate and report OAuth fingerprint
         run: |
           set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
+          ORIGINAL="$RUNNER_TEMP/m7-app-original.apk"
+          cp "$APK" "$ORIGINAL"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android --key-pass pass:android \
+            --out "$APK" "$ORIGINAL"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.m4probe'"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/m7-cert.txt"
-          SHA1="$(awk -F': ' '/SHA-1 digest/ {print $2; exit}' "$RUNNER_TEMP/m7-cert.txt")"
+          SHA1="$(awk -F': ' '/SHA-1 digest/ {print $2; exit}' "$RUNNER_TEMP/m7-cert.txt" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          EXPECTED_SHA1="$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android -keypass android 2>/dev/null | awk '/SHA1:/ {print $2; exit}' | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           test -n "$SHA1"
+          test "$SHA1" = "$EXPECTED_SHA1"
           {
             echo "applicationId=ru.courier.finance.m4probe"
             echo "sha1=$SHA1"
