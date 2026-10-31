@@ -86,7 +86,8 @@ if [[ "$worker_restarted_process" -ne 1 ]]; then
   echo "WorkManager did not restart the app process while its activity was closed"
   fail_with_diagnostics
 fi
-adb shell am start -W -n "$package/$activity" --ez m6.verifyRestart true
+# Create a new Activity instance so the restart intent is not swallowed by the old task stack.
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.verifyRestart true
 wait_for_marker "M6 RESTART PASS" "M6 RESTART FAIL" 120
 capture_screen m6-restart.png
 
