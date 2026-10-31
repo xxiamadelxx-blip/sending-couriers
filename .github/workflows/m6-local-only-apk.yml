@@ -1,0 +1,85 @@
+name: M6 local-only APK (stable QA signature)
+
+on:
+  pull_request:
+    branches:
+      - m7/opt-in-sheets-sync-20261031
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m6-local-only-signed-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      M6_SOURCE_SHA: d6586f24b8be04445f8b2b87075f946b9d17d06b
+      EXPECTED_QA_SHA1: 0b4c9a5ee432d5f16049c98ca53f3268d9a6601c
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d6586f24b8be04445f8b2b87075f946b9d17d06b
+      - name: Verify exact M6 source
+        run: test "$(git rev-parse HEAD)" = "$M6_SOURCE_SHA"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android 35 build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Reuse M7 QA debug signing certificate
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: m7-qa-debug-keystore-v1
+      - name: Require the existing QA signing certificate
+        run: |
+          set -euo pipefail
+          test -s "$HOME/.android/debug.keystore"
+          actual="$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android -keypass android 2>/dev/null | awk '/SHA1:/ {print $2; exit}' | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$actual" = "$EXPECTED_QA_SHA1"
+      - name: Download pinned offline OCR models
+        run: |
+          set -euo pipefail
+          mkdir -p m4-models/tessdata
+          base='https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd'
+          curl -fL "$base/rus.traineddata" -o m4-models/tessdata/rus.traineddata
+          curl -fL "$base/eng.traineddata" -o m4-models/tessdata/eng.traineddata
+          test "$(git hash-object m4-models/tessdata/rus.traineddata)" = b146cb2263acbc6383f8e92ea0ce759537687bb8
+          test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
+      - name: Build M6 local-only APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Sign and verify the M6 APK
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          original="$RUNNER_TEMP/m6-app-original.apk"
+          cp "$apk" "$original"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out "$apk" "$original"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='ru.courier.finance.m4probe' versionCode='29' versionName='1.7.15'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/m6-cert.txt"
+          actual="$(awk -F': ' '/SHA-1 digest/ {print $2; exit}' "$RUNNER_TEMP/m6-cert.txt" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$actual" = "$EXPECTED_QA_SHA1"
+          printf 'applicationId=ru.courier.finance.m4probe\nversion=1.7.15 (29)\nsha1=%s\nsourceCommit=%s\n' "$actual" "$M6_SOURCE_SHA" > m6-local-build-report.txt
+          sha256sum "$apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m6-local-only-apk-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            m6-local-build-report.txt
+          retention-days: 30
+          if-no-files-found: error
