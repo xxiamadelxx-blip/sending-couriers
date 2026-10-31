@@ -2,7 +2,7 @@
 set -euo pipefail
 
 package=ru.courier.finance.m3probe
-activity=ru.courier.finance.M3DeviceProbeActivity
+activity=ru.courier.finance.m3probe.M3DeviceProbeActivity
 apk="${RUNNER_TEMP}/m3-limrun-debug.apk"
 window=/sdcard/m3-window.xml
 artifact_dir="${RUNNER_TEMP}/m3-artifacts"
