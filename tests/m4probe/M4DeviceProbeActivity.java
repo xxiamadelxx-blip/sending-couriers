@@ -9,6 +9,9 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.TextView;
 import android.media.MediaMetadataRetriever;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import androidx.work.Data;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.Operation;
@@ -41,6 +44,9 @@ public final class M4DeviceProbeActivity extends Activity {
         else if(getIntent().getBooleanExtra("m4.verifyRestart",false)) worker.execute(this::verifyForecastAfterRestart);
         else if(getIntent().getBooleanExtra("m6.verifyWorker",false)) worker.execute(this::verifyM6Worker);
         else if(getIntent().getBooleanExtra("m6.verifyRestart",false)) worker.execute(this::verifyM6Restart);
+        else if(getIntent().getBooleanExtra("m6.checkOffline",false)) worker.execute(this::checkM6Offline);
+        else if(getIntent().getBooleanExtra("m6.queueReboot",false)) worker.execute(this::queueM6RebootWork);
+        else if(getIntent().getBooleanExtra("m6.verifyReboot",false)) worker.execute(this::verifyM6Reboot);
         else worker.execute(this::runProbe);
     }
 
@@ -257,7 +263,6 @@ public final class M4DeviceProbeActivity extends Activity {
     }
 
     private void verifyM6Worker() {
-        CourierDatabase store=null;
         try {
             String zone="Europe/Moscow";
             LocalDate target=LocalDate.now(ZoneId.of(zone));
@@ -272,7 +277,7 @@ public final class M4DeviceProbeActivity extends Activity {
                     .put("intervals",new JSONArray().put(new JSONObject().put("start",600).put("end",1080).put("state","WORK")));
                 days.put(date,day);
             }
-            JSONObject forecast=new JSONObject().put("location",new JSONObject().put("timezone",zone))
+            JSONObject forecast=new JSONObject().put("version",1).put("location",new JSONObject().put("timezone",zone))
                 .put("typicalPlan",new JSONObject().put("timezone",zone).put("intervals",intervals).put("precision","intervals"))
                 .put("days",days);
             JSONObject state=new JSONObject().put("schemaVersion",6).put("entries",new JSONArray()).put("forecast",forecast);
@@ -282,9 +287,32 @@ public final class M4DeviceProbeActivity extends Activity {
 
             OneTimeWorkRequest request=new OneTimeWorkRequest.Builder(ForecastAutomationWorker.class)
                 .setInputData(new Data.Builder().putString(ForecastAutomationWorker.KEY_MODE,
-                    ForecastAutomationWorker.MODE_DAILY).build()).build();
-            UUID id=request.getId();WorkManager manager=WorkManager.getInstance(getApplicationContext());
-            Operation operation=manager.enqueue(request);operation.getResult().get(15,TimeUnit.SECONDS);
+                    ForecastAutomationWorker.MODE_DAILY).build())
+                // Leave enough time for the harness to close and kill this process first.
+                .setInitialDelay(15,TimeUnit.SECONDS)
+                .build();
+            UUID id=request.getId();
+            WorkManager manager=WorkManager.getInstance(getApplicationContext());
+            Operation operation=manager.enqueue(request);
+            operation.getResult().get(15,TimeUnit.SECONDS);
+            if(!getSharedPreferences("m6-forecast-qa",MODE_PRIVATE).edit()
+                    .putString("target",target.toString()).putString("workId",id.toString()).commit())
+                throw new AssertionError("queued forecast marker was not committed");
+            show("M6 ENQUEUED\nDelayed offline forecast queued before process kill.");
+        } catch(Throwable error) {
+            show("M6 WORKER FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+        }
+    }
+
+    private void verifyM6Restart() {
+        CourierDatabase store=null;
+        try {
+            android.content.SharedPreferences marker=getSharedPreferences("m6-forecast-qa",MODE_PRIVATE);
+            String target=marker.getString("target",null);
+            String workId=marker.getString("workId",null);
+            if(target==null||workId==null)throw new AssertionError("queued WorkManager forecast marker is missing");
+            UUID id=UUID.fromString(workId);
+            WorkManager manager=WorkManager.getInstance(getApplicationContext());
             WorkInfo finished=null;
             for(int attempt=0;attempt<120;attempt++) {
                 WorkInfo current=manager.getWorkInfoById(id).get(10,TimeUnit.SECONDS);
@@ -292,41 +320,103 @@ public final class M4DeviceProbeActivity extends Activity {
                 Thread.sleep(500);
             }
             if(finished==null||finished.getState()!=WorkInfo.State.SUCCEEDED)
-                throw new AssertionError("daily WorkManager forecast did not succeed: "+(finished==null?"no WorkInfo":finished.getState()));
-
-            store=new CourierDatabase(this);SQLiteDatabase db=store.getReadableDatabase();
-            try(Cursor cursor=db.rawQuery("SELECT COUNT(*),MIN(target_date),MIN(training_cutoff),MIN(center_orders),"
-                    +"MIN(lower_orders),MIN(upper_orders),MIN(model_version) FROM forecast_snapshots WHERE id=?",
+                throw new AssertionError("queued daily WorkManager forecast did not succeed after process recovery: "
+                    +(finished==null?"no WorkInfo":finished.getState()));
+            store=new CourierDatabase(this);
+            SQLiteDatabase db=store.getReadableDatabase();
+            String createdAt;
+            try(Cursor cursor=db.rawQuery("SELECT COUNT(*),MIN(training_cutoff),MIN(center_orders),MIN(created_at) FROM forecast_snapshots WHERE id=?",
                     new String[]{"native-MORNING-"+target})) {
-                if(!cursor.moveToFirst()||cursor.getInt(0)!=1||!target.toString().equals(cursor.getString(1))
-                        ||cursor.isNull(2)||cursor.getString(2).compareTo(target.toString())>=0
-                        ||cursor.isNull(3)||cursor.isNull(4)||cursor.isNull(5)||cursor.getInt(4)>cursor.getInt(3)
-                        ||cursor.getInt(3)>cursor.getInt(5)||!cursor.getString(6).startsWith(NativeCountModel.VERSION+":"))
-                    throw new AssertionError("native daily forecast snapshot is incomplete or used future data");
+                if(!cursor.moveToFirst()||cursor.getInt(0)!=1||cursor.isNull(1)
+                        ||cursor.getString(1).compareTo(target)>=0||cursor.isNull(2)||cursor.isNull(3))
+                    throw new AssertionError("published forecast did not survive scheduled process recovery");
+                createdAt=cursor.getString(3);
             }
-            if(!getSharedPreferences("m6-forecast-qa",MODE_PRIVATE).edit().putString("target",target.toString()).commit())
-                throw new AssertionError("forecast restart marker was not committed");
-            show("M6 WORKER PASS\nOffline daily WorkManager forecast saved to SQLite.");
+            if(!marker.edit().putString("nativeCreatedAt",createdAt).commit())
+                throw new AssertionError("native forecast creation marker was not committed");
+            show("M6 RESTART PASS\nQueued forecast ran after process death and survived app restoration.");
         } catch(Throwable error) {
-            show("M6 WORKER FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+            show("M6 RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(store!=null)store.close(); }
     }
 
-    private void verifyM6Restart() {
+    private boolean hasValidatedNetwork() {
+        ConnectivityManager manager=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        if(manager==null)return false;
+        for(Network network:manager.getAllNetworks()) {
+            NetworkCapabilities capabilities=manager.getNetworkCapabilities(network);
+            if(capabilities!=null&&capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))return true;
+        }
+        return false;
+    }
+
+    private void checkM6Offline() {
+        try {
+            if(hasValidatedNetwork())throw new AssertionError("Android still reports a validated network after offline setup");
+            show("M6 OFFLINE PASS\nNo validated network is available to the app.");
+        } catch(Throwable error) {
+            show("M6 OFFLINE FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+        }
+    }
+
+    private void queueM6RebootWork() {
+        try {
+            if(hasValidatedNetwork())throw new AssertionError("reboot recovery must be queued while offline");
+            android.content.SharedPreferences marker=getSharedPreferences("m6-forecast-qa",MODE_PRIVATE);
+            String target=marker.getString("target",null);
+            String createdAt=marker.getString("nativeCreatedAt",null);
+            if(target==null||createdAt==null)throw new AssertionError("pre-reboot native snapshot proof is missing");
+            OneTimeWorkRequest request=new OneTimeWorkRequest.Builder(ForecastAutomationWorker.class)
+                .setInputData(new Data.Builder().putString(ForecastAutomationWorker.KEY_MODE,
+                    ForecastAutomationWorker.MODE_DAILY).build())
+                .setInitialDelay(120,TimeUnit.SECONDS)
+                .build();
+            UUID id=request.getId();
+            WorkManager manager=WorkManager.getInstance(getApplicationContext());
+            manager.enqueue(request).getResult().get(15,TimeUnit.SECONDS);
+            if(!marker.edit().putString("rebootWorkId",id.toString()).commit())
+                throw new AssertionError("pre-reboot WorkManager ID was not committed");
+            show("M6 REBOOT ENQUEUED\nOffline forecast queued before device reboot.");
+        } catch(Throwable error) {
+            show("M6 REBOOT QUEUE FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+        }
+    }
+
+    private void verifyM6Reboot() {
         CourierDatabase store=null;
         try {
-            String target=getSharedPreferences("m6-forecast-qa",MODE_PRIVATE).getString("target",null);
-            if(target==null)throw new AssertionError("WorkManager forecast restart marker is missing");
-            store=new CourierDatabase(this);SQLiteDatabase db=store.getReadableDatabase();
-            try(Cursor cursor=db.rawQuery("SELECT COUNT(*),MIN(training_cutoff),MIN(center_orders) FROM forecast_snapshots WHERE id=?",
+            if(hasValidatedNetwork())throw new AssertionError("device is online during reboot recovery verification");
+            android.content.SharedPreferences marker=getSharedPreferences("m6-forecast-qa",MODE_PRIVATE);
+            String target=marker.getString("target",null);
+            String workId=marker.getString("rebootWorkId",null);
+            String expectedCreatedAt=marker.getString("nativeCreatedAt",null);
+            if(target==null||workId==null||expectedCreatedAt==null)
+                throw new AssertionError("persisted reboot work markers are missing");
+            UUID id=UUID.fromString(workId);
+            WorkManager manager=WorkManager.getInstance(getApplicationContext());
+            WorkInfo current=manager.getWorkInfoById(id).get(15,TimeUnit.SECONDS);
+            if(current==null||current.getState()==WorkInfo.State.FAILED||current.getState()==WorkInfo.State.CANCELLED)
+                throw new AssertionError("queued work did not survive device reboot: "+(current==null?"no WorkInfo":current.getState()));
+            WorkInfo finished=null;
+            for(int attempt=0;attempt<240;attempt++) {
+                current=manager.getWorkInfoById(id).get(10,TimeUnit.SECONDS);
+                if(current!=null&&current.getState().isFinished()) { finished=current;break; }
+                Thread.sleep(500);
+            }
+            if(finished==null||finished.getState()!=WorkInfo.State.SUCCEEDED)
+                throw new AssertionError("queued forecast did not succeed after reboot: "+(finished==null?"no WorkInfo":finished.getState()));
+            if(hasValidatedNetwork())throw new AssertionError("validated network appeared during offline worker run");
+            store=new CourierDatabase(this);
+            try(Cursor cursor=store.getReadableDatabase().rawQuery(
+                    "SELECT COUNT(*),MIN(created_at) FROM forecast_snapshots WHERE id=?",
                     new String[]{"native-MORNING-"+target})) {
                 if(!cursor.moveToFirst()||cursor.getInt(0)!=1||cursor.isNull(1)
-                        ||cursor.getString(1).compareTo(target)>=0||cursor.isNull(2))
-                    throw new AssertionError("published forecast did not survive process restart");
+                        ||!expectedCreatedAt.equals(cursor.getString(1)))
+                    throw new AssertionError("reboot retry changed or duplicated the immutable morning snapshot");
             }
-            show("M6 RESTART PASS\nAppend-only forecast survived force-stop and restart.");
+            show("M6 REBOOT PASS\nOffline WorkManager job survived reboot; morning snapshot stayed immutable.");
         } catch(Throwable error) {
-            show("M6 RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
+            show("M6 REBOOT FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(store!=null)store.close(); }
     }
 

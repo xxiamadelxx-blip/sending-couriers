@@ -43,6 +43,26 @@ wait_for_marker() {
   fail_with_diagnostics
 }
 
+disable_network() {
+  adb shell svc wifi disable >/dev/null 2>&1 || true
+  adb shell svc data disable >/dev/null 2>&1 || true
+  adb shell settings put global airplane_mode_on 1 >/dev/null 2>&1 || true
+  adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true >/dev/null 2>&1 || true
+  sleep 3
+}
+
+assert_app_open_forecast_catchup() {
+  local target="$1"
+  adb shell run-as "$package" cat shared_prefs/courier_finance.xml 2>/dev/null \
+    | python3 -c 'import json,sys,xml.etree.ElementTree as ET; root=ET.fromstring(sys.stdin.read()); raw=root.find("./string[@name=\"state\"]").text; state=json.loads(raw); rows=state.get("forecast",{}).get("snapshots",[]); morning=[row for row in rows if row.get("date")==sys.argv[1] and row.get("kind")=="MORNING"]; nowcast=[row for row in rows if row.get("date")==sys.argv[1] and row.get("kind")=="NOWCAST" and str(row.get("id","")).startswith("NOWCAST-"+sys.argv[1]+"-")]; sys.exit(0 if len(morning)==1 and len(nowcast)==1 else 1)' "$target"
+}
+
+print_web_state_diagnostic() {
+  local target="$1"
+  adb shell run-as "$package" cat shared_prefs/courier_finance.xml 2>/dev/null \
+    | python3 -c 'import json,sys,xml.etree.ElementTree as ET; root=ET.fromstring(sys.stdin.read()); raw=root.find("./string[@name=\"state\"]").text; state=json.loads(raw); forecast=state.get("forecast",{}); rows=forecast.get("snapshots",[]); print(json.dumps({"schemaVersion":state.get("schemaVersion"),"forecastVersion":forecast.get("version"),"dayCount":len(forecast.get("days",{})),"profileCount":len(forecast.get("profiles",[])),"snapshotCount":len(rows),"locationTimezone":(forecast.get("location") or {}).get("timezone"),"currentDaySnapshots":[{"id":row.get("id"),"kind":row.get("kind"),"date":row.get("date")} for row in rows if row.get("date")==sys.argv[1]]},ensure_ascii=False))' "$target"
+}
+
 adb install app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -W -n "$package/$activity"
 wait_for_marker "M4 FORECAST WRITE PASS" "M4 FORECAST QA FAIL" 90
@@ -53,13 +73,97 @@ wait_for_marker "M4 FORECAST RESTART PASS" "M4 FORECAST RESTART FAIL" 30
 capture_screen m4-forecast-restart.png
 
 adb shell am force-stop "$package"
-adb shell am start -W -n "$package/$activity" --ez m6.verifyWorker true
-wait_for_marker "M6 WORKER PASS" "M6 WORKER FAIL" 120
-capture_screen m6-worker.png
+disable_network
+adb shell am start -W -n "$package/$activity" --ez m6.checkOffline true
+wait_for_marker "M6 OFFLINE PASS" "M6 OFFLINE FAIL" 30
+capture_screen m6-offline-before.png
 adb shell am force-stop "$package"
-adb shell am start -W -n "$package/$activity" --ez m6.verifyRestart true
-wait_for_marker "M6 RESTART PASS" "M6 RESTART FAIL" 30
+adb shell am start -W -n "$package/$activity" --ez m6.verifyWorker true
+wait_for_marker "M6 ENQUEUED" "M6 WORKER FAIL" 30
+capture_screen m6-enqueued.png
+original_pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' || true)
+test -n "$original_pid"
+adb shell input keyevent KEYCODE_HOME
+sleep 2
+adb shell am kill "$package"
+process_stopped=0
+for attempt in $(seq 1 30); do
+  if [[ -z "$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' || true)" ]]; then
+    process_stopped=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$process_stopped" -ne 1 ]]; then
+  echo "M6 harness could not kill the background app process"
+  fail_with_diagnostics
+fi
+worker_restarted_process=0
+for attempt in $(seq 1 120); do
+  restarted_pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' || true)
+  if [[ -n "$restarted_pid" && "$restarted_pid" != "$original_pid" ]]; then
+    worker_restarted_process=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$worker_restarted_process" -ne 1 ]]; then
+  echo "WorkManager did not restart the app process while its activity was closed"
+  fail_with_diagnostics
+fi
+# Create a new Activity instance so the restart intent is not swallowed by the old task stack.
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.verifyRestart true
+wait_for_marker "M6 RESTART PASS" "M6 RESTART FAIL" 120
 capture_screen m6-restart.png
+
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.queueReboot true
+wait_for_marker "M6 REBOOT ENQUEUED" "M6 REBOOT QUEUE FAIL" 30
+capture_screen m6-reboot-enqueued.png
+adb reboot
+timeout 180s adb wait-for-device
+booted=0
+for attempt in $(seq 1 120); do
+  if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" == "1" ]]; then
+    booted=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$booted" -ne 1 ]]; then
+  echo "M6 emulator did not finish rebooting"
+  adb logcat -d -s AndroidRuntime:E || true
+  exit 1
+fi
+disable_network
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.checkOffline true
+wait_for_marker "M6 OFFLINE PASS" "M6 OFFLINE FAIL" 30
+capture_screen m6-offline-after-reboot.png
+adb shell am start -W -n "$package/$activity" -f 0x10008000 --ez m6.verifyReboot true
+wait_for_marker "M6 REBOOT PASS" "M6 REBOOT FAIL" 180
+capture_screen m6-reboot.png
+
+target=$(adb shell run-as "$package" cat shared_prefs/m6-forecast-qa.xml \
+  | python3 -c 'import sys,xml.etree.ElementTree as ET; print(ET.fromstring(sys.stdin.read()).find("./string[@name=\"target\"]").text)')
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/ru.courier.finance.MainActivity" -f 0x10008000
+catchup=0
+for attempt in $(seq 1 60); do
+  if assert_app_open_forecast_catchup "$target"; then
+    catchup=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$catchup" -ne 1 ]]; then
+  echo "M6 app opening did not persist exactly one current-day morning forecast and nowcast"
+  echo "M6 persisted state summary:"
+  print_web_state_diagnostic "$target" || true
+  adb logcat -d -v brief 2>/dev/null | grep -E 'chromium|WebView|CourierSQLite|CourierForecast|M6' | tail -60 || true
+  fail_with_diagnostics
+fi
+echo "M6 APP-OPEN CATCH-UP PASS: $target"
+capture_screen m6-app-open-catchup.png
 
 if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4" ]]; then
   import_real_video() {
