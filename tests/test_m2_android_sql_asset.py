@@ -31,7 +31,8 @@ class AndroidSQLAssetTest(unittest.TestCase):
             self.assertEqual(db.execute("SELECT COUNT(*) FROM legacy_slot_facts").fetchone()[0],1)
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
         java=(ROOT/"android/src/ru/courier/finance/CourierDatabase.java").read_text()
-        self.assertIn("public static final int VERSION = 4;",java)
+        self.assertIn("public static final int VERSION = 5;",java)
+        self.assertIn('applySchema(db, "www/m5_reconciliation_v1.sql");',java)
         self.assertIn('applySchema(db, "www/m2_schema_v1.sql", true);',java)
         self.assertIn('applySchema(db, "www/m2_views_v2.sql");',java)
 

@@ -28,7 +28,7 @@ import org.json.JSONObject;
  */
 public final class CourierDatabase extends SQLiteOpenHelper {
     public static final String FILE_NAME = "courier_facts_v1.db";
-    public static final int VERSION = 4;
+    public static final int VERSION = 5;
     private final Context appContext;
 
     public CourierDatabase(Context context) {
@@ -45,6 +45,7 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         applySchema(db, "www/m2_schema_v1.sql");
         applySchema(db, "www/m2_views_v2.sql");
         applySchema(db, "www/m3_schema_v1.sql");
+        installM5Views(db);
     }
 
     private void applySchema(SQLiteDatabase db, String asset) {
@@ -83,17 +84,35 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         }
     }
 
+    private void installM5Views(SQLiteDatabase db) {
+        ensureObservedAtColumn(db);
+        db.execSQL("DROP VIEW IF EXISTS active_orders");
+        db.execSQL("DROP VIEW IF EXISTS active_aggregate_order_counts");
+        applySchema(db, "www/m5_reconciliation_v1.sql");
+    }
+
+    private void ensureObservedAtColumn(SQLiteDatabase db) {
+        boolean present=false;
+        try (Cursor cursor=db.rawQuery("PRAGMA table_info(orders)",null)) {
+            int name=cursor.getColumnIndex("name");
+            while(cursor.moveToNext()) if(name>=0&&"observed_at".equals(cursor.getString(name))) present=true;
+        }
+        if(!present) db.execSQL("ALTER TABLE orders ADD COLUMN observed_at TEXT");
+    }
+
     @Override public void onUpgrade(SQLiteDatabase db, int from, int to) {
-        if ((from == 1 || from == 2) && to == 4) {
-            // M2 adds the source archive; M3 adds append-only evaluation metadata.
-            // SQLiteOpenHelper wraps onUpgrade in a transaction; preserve every existing row.
+        if ((from == 1 || from == 2) && to == 5) {
+            // Apply additive schema declarations and the historical v4 view before
+            // replacing only the read projections. Existing source facts remain intact.
             applySchema(db, "www/m2_schema_v1.sql", true);
             applySchema(db, "www/m2_views_v2.sql");
             applySchema(db, "www/m3_schema_v1.sql");
+            installM5Views(db);
             return;
         }
-        if (from == 3 && to == 4) {
-            applySchema(db, "www/m3_schema_v1.sql");
+        if ((from == 3 || from == 4) && to == 5) {
+            if (from == 3) applySchema(db, "www/m3_schema_v1.sql");
+            installM5Views(db);
             return;
         }
         throw new SQLiteException("Unreviewed courier migration from " + from + " to " + to);

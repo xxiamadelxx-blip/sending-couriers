@@ -7,13 +7,16 @@ import android.database.sqlite.SQLiteDatabase;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
@@ -63,38 +66,56 @@ public final class M4ForecastFactWriter {
         public final int visibleOrderRows;
         public final int matchedOrderDetails;
         public final boolean rawComplete;
+        public final boolean needsReview;
+        public final int suppressedOrderRows;
         public final JSONObject forecastDay;
         public final String source;
 
         private ImportResult(boolean accepted,boolean duplicate,String message,int orderCount,
                              int visibleOrderRows,int matchedOrderDetails,boolean rawComplete,
+                             boolean needsReview,int suppressedOrderRows,
                              JSONObject forecastDay,String source) {
             this.accepted=accepted; this.duplicate=duplicate; this.message=message;
             this.orderCount=orderCount; this.visibleOrderRows=visibleOrderRows;
             this.matchedOrderDetails=matchedOrderDetails; this.rawComplete=rawComplete;
+            this.needsReview=needsReview; this.suppressedOrderRows=suppressedOrderRows;
             this.forecastDay=forecastDay; this.source=source;
         }
+    }
+
+    private static final class WriteResult {
+        boolean duplicate, aggregateDuplicate, aggregateConflict, needsReview;
+        int suppressedOrderRows;
     }
 
     public static ImportResult importFacts(Context context,VideoImportProcessor.Result analysis) throws Exception {
         Facts facts;
         try { facts=extract(analysis); }
         catch(IllegalArgumentException invalid) {
-            return new ImportResult(false,false,invalid.getMessage(),0,0,0,false,null,null);
+            return new ImportResult(false,false,invalid.getMessage(),0,0,0,false,false,0,null,null);
         }
-        boolean duplicate=writeNativeFacts(context,facts);
+        WriteResult written=writeNativeFacts(context,facts);
         boolean rawComplete=facts.orders.size()==facts.declaredCount;
         String detail=facts.recoveredOrderRows==0?"":(" Дополнительно сохранены отдельные карточки завершённых заказов: "
             +facts.recoveredOrderRows+".");
         String reconciliation=rawComplete
             ?" Распознано и сверено строк заказов: "+facts.orders.size()+" из "+facts.declaredCount+"."
             :" Перечень RAW частичный.";
-        return new ImportResult(true,duplicate,
+        if(written.suppressedOrderRows>0)
+            reconciliation+=" Совпавшие строки уже есть в истории и повторно не добавлены: "
+                +written.suppressedOrderRows+".";
+        if(written.aggregateDuplicate)
+            reconciliation+=" Совпадающий итог слота уже сохранён; повторный агрегат не удваивает прогноз.";
+        if(written.aggregateConflict)
+            reconciliation+=" Итог слота расходится с источником в истории; обе записи сохранены для проверки, конфликтный агрегат исключён из расчёта.";
+        else if(written.needsReview)
+            reconciliation+=" На эту дату есть RAW, но полный набор нельзя однозначно сопоставить по доступным полям; проверьте вручную.";
+        return new ImportResult(true,written.duplicate,
             "Подтверждён агрегат слота: "+facts.declaredCount+" заказов; отдельных строк распознано "
             +facts.orders.size()+" из "+facts.declaredCount+"."+(rawComplete?" Сумма полного списка сверена.":"")
-            +reconciliation
-            +detail+" Рабочее время осталось неизвестным.",
-            facts.declaredCount,facts.orders.size(),facts.deliveries.size(),rawComplete,toForecastDay(facts),facts.sourceId);
+            +reconciliation+detail+" Рабочее время осталось неизвестным.",
+            facts.declaredCount,facts.orders.size(),facts.deliveries.size(),rawComplete,
+            written.needsReview,written.suppressedOrderRows,toForecastDay(facts),facts.sourceId);
     }
 
     private static Facts extract(VideoImportProcessor.Result analysis) {
@@ -226,8 +247,15 @@ public final class M4ForecastFactWriter {
         if(facts.orders.size()<facts.declaredCount&&facts.rowAmountKopecks>orderTotal)
             throw new IllegalArgumentException("Сумма наблюдаемых заказов больше подтверждённого итога слота; факты не записаны.");
 
-        for(int i=0;i<facts.orders.size();i++) facts.orders.get(i).id="video-"+facts.sourceHash.substring(0,24)+"-"+facts.slotId+"-"+(i+1);
         attachOrderDetails(facts,details);
+        Set<String> identities=new HashSet<>();
+        for(int i=0;i<facts.orders.size();i++) {
+            OrderFact order=facts.orders.get(i);
+            order.id=M5OrderIdentity.rowId(facts.date,facts.slotId,order.orderNumber,
+                order.visibleMinute,order.amountKopecks,order.occurrence,facts.sourceHash,i+1);
+            if(!identities.add(order.id))
+                throw new IllegalArgumentException("Две строки имеют одинаковую идентичность заказа; факты не записаны.");
+        }
         return facts;
     }
 
@@ -391,64 +419,267 @@ public final class M4ForecastFactWriter {
         return day;
     }
 
-    private static boolean writeNativeFacts(Context context,Facts facts) throws Exception {
+    private static final class ExistingOrder {
+        String id,date,orderNumber,acceptedAt,completedAt;
+        Long amount;
+        String signature;
+    }
+
+    private static final class ExistingOrderIndex {
+        final Map<String,Integer> signatureCounts=new HashMap<>();
+        final Map<String,List<ExistingOrder>> byYandexId=new HashMap<>();
+        final Set<String> usedIds=new HashSet<>();
+    }
+
+    private static long count(SQLiteDatabase db,String sql,String... args) {
+        try(Cursor cursor=db.rawQuery(sql,args)) { if(!cursor.moveToFirst()) return -1; return cursor.getLong(0); }
+    }
+
+    private static WriteResult writeNativeFacts(Context context,Facts facts) throws Exception {
         CourierDatabase store=new CourierDatabase(context); SQLiteDatabase db=store.getWritableDatabase();
-        String now=nowUtc(); boolean duplicate=false;
+        WriteResult result=new WriteResult(); String now=nowUtc();
+        int sourceOrdersBefore;
         db.beginTransaction();
         try {
-            try(Cursor found=db.rawQuery("SELECT id FROM import_sources WHERE id=? OR sha256=?",new String[]{facts.sourceId,facts.sourceHash})) {
-                duplicate=found.moveToFirst();
+            sourceOrdersBefore=(int)count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",facts.sourceId);
+            try(Cursor found=db.rawQuery("SELECT id FROM import_sources WHERE id=? OR sha256=?",
+                    new String[]{facts.sourceId,facts.sourceHash})) {
+                result.duplicate=found.moveToFirst();
             }
             ContentValues source=new ContentValues(); source.put("id",facts.sourceId); source.put("sha256",facts.sourceHash);
             source.put("source_kind","video_import"); source.put("parser_version",YandexScreenParser.VERSION);
             source.put("status","mirrored"); source.put("created_at",now); source.put("updated_at",now);
             db.insertWithOnConflict("import_sources",null,source,SQLiteDatabase.CONFLICT_IGNORE);
 
+            Long aggregateReward=facts.slotOrderAmountKopecks;
+            if(aggregateReward==null&&facts.slotTipsKopecks==null) aggregateReward=facts.slotAmountKopecks;
+            boolean[] aggregateCheck=checkSlotAggregate(db,facts,aggregateReward);
+            result.aggregateDuplicate=aggregateCheck[0];
+            result.aggregateConflict=aggregateCheck[1];
+            if(result.aggregateConflict) result.needsReview=true;
+            boolean completeRawMatch=matchesCompleteRawDay(db,facts);
+            boolean xlsxRawExists=hasActiveXlsxRawOrders(db,facts.date);
+            boolean repeatedSource=result.duplicate;
+
             ContentValues aggregate=new ContentValues();
             aggregate.put("id",facts.sourceId+":count:"+facts.date+":"+facts.slotId); aggregate.put("date",facts.date);
             aggregate.put("slot_id",facts.slotId); aggregate.put("order_count",facts.declaredCount);
-            if(facts.slotOrderAmountKopecks!=null) aggregate.put("reward_kopecks",facts.slotOrderAmountKopecks);
-            else if(facts.slotTipsKopecks==null) aggregate.put("reward_kopecks",facts.slotAmountKopecks);
+            if(aggregateReward!=null) aggregate.put("reward_kopecks",aggregateReward);
             aggregate.put("source_id",facts.sourceId); aggregate.put("source_kind","video_import");
             aggregate.put("confidence","confirmed"); aggregate.put("created_at",now); aggregate.put("updated_at",now);
             db.insertWithOnConflict("aggregate_order_counts",null,aggregate,SQLiteDatabase.CONFLICT_IGNORE);
 
+            ExistingOrderIndex existing=loadExistingOrders(db,facts.date);
+            int insertedOrders=0;
             for(OrderFact order:facts.orders) {
+                if(repeatedSource||completeRawMatch||isExistingOrder(db,existing,facts,order)) {
+                    result.suppressedOrderRows++;
+                    continue;
+                }
                 ContentValues row=new ContentValues(); row.put("id",order.id); row.put("date",facts.date);
-                if(order.startedAt!=null) row.put("accepted_at",toUtc(order.startedAt));
+                row.put("observed_at",toUtc(localDateTime(LocalDate.parse(facts.date),order.visibleMinute)));
                 if(order.completedAt!=null) row.put("completed_at",toUtc(order.completedAt));
+                if(order.startedAt!=null) row.put("accepted_at",toUtc(order.startedAt));
                 if(order.orderNumber!=null) row.put("yandex_order_id",order.orderNumber);
                 row.put("reward_kopecks",order.amountKopecks); row.put("source_id",facts.sourceId);
                 row.put("source_kind","video_import"); row.put("confidence",order.confirmedDelivery?"confirmed":"observed");
                 row.put("precision",order.confirmedDelivery?"order_detail_minute":"list_row_minute");
                 row.put("created_at",now); row.put("updated_at",now);
-                db.insertWithOnConflict("orders",null,row,SQLiteDatabase.CONFLICT_IGNORE);
+                long inserted=db.insertWithOnConflict("orders",null,row,SQLiteDatabase.CONFLICT_IGNORE);
+                if(inserted==-1) {
+                    if(!sameStoredIdentity(db,order,facts))
+                        throw new IllegalStateException("Конфликт стабильной идентичности заказа; факт сохранён для проверки.");
+                    result.suppressedOrderRows++;
+                } else {
+                    insertedOrders++;
+                }
             }
+            if(xlsxRawExists&&!completeRawMatch&&result.suppressedOrderRows<facts.orders.size())
+                result.needsReview=true;
             ContentValues audit=new ContentValues(); audit.put("id",facts.sourceId+":facts:"+facts.slotId);
             audit.put("happened_at",now); audit.put("action","video_import_facts_written");
             audit.put("record_type","video_import"); audit.put("record_id",facts.sourceId);
             audit.put("source_kind","video_import");
             audit.put("payload_json",new JSONObject().put("date",facts.date).put("aggregateOrderCount",facts.declaredCount)
-                .put("observedOrderRows",facts.orders.size())
+                .put("observedOrderRows",facts.orders.size()).put("duplicateOrderRowsSuppressed",result.suppressedOrderRows)
+                .put("completeRawDayMatch",completeRawMatch)
+                .put("matchingSlotAggregate",result.aggregateDuplicate).put("aggregateConflict",result.aggregateConflict)
+                .put("needsReview",result.needsReview)
                 .put("slotId",facts.slotId).put("slotDateBasis",facts.dateBasis)
                 .put("matchedOrderDetails",facts.deliveries.size())
                 .put("recoveredOrderRows",facts.recoveredOrderRows).toString());
             db.insertWithOnConflict("audit_events",null,audit,SQLiteDatabase.CONFLICT_IGNORE);
 
-            long count=count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",facts.sourceId);
-            long aggregateCount=count(db,"SELECT COUNT(*) FROM aggregate_order_counts WHERE source_id=? AND date=?",facts.sourceId,facts.date);
-            if(count!=facts.orders.size()||aggregateCount!=1)
-                throw new IllegalStateException("SQLite video fact write did not match the extracted data");
+            long afterSourceOrders=count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",facts.sourceId);
+            long aggregateCount=count(db,"SELECT COUNT(*) FROM aggregate_order_counts WHERE source_id=? AND date=?",
+                facts.sourceId,facts.date);
+            if(afterSourceOrders!=sourceOrdersBefore+insertedOrders||aggregateCount!=1)
+                throw new IllegalStateException("SQLite video fact write did not match the reconciled extraction");
             ContentValues mark=new ContentValues(); mark.put("status","mirrored"); mark.put("updated_at",now);
             db.update("import_sources",mark,"id=?",new String[]{facts.sourceId});
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); store.close(); }
-        return duplicate;
+        return result;
     }
 
-    private static long count(SQLiteDatabase db,String sql,String... args) {
-        try(Cursor cursor=db.rawQuery(sql,args)) { if(!cursor.moveToFirst()) return -1; return cursor.getLong(0); }
+    private static boolean[] checkSlotAggregate(SQLiteDatabase db,Facts facts,Long reward) {
+        boolean duplicate=false,conflict=false;
+        String sql="SELECT a.order_count,a.reward_kopecks FROM aggregate_order_counts a "
+            +"LEFT JOIN import_sources s ON s.id=a.source_id WHERE a.date=? AND a.slot_id=? "
+            +"AND a.source_id<>? AND (a.source_kind<>'xlsx' OR (s.status='mirrored' AND NOT EXISTS ("
+            +"SELECT 1 FROM aggregate_order_counts u WHERE u.source_kind='legacy_state' AND u.date=a.date)))";
+        try(Cursor cursor=db.rawQuery(sql,new String[]{facts.date,facts.slotId,facts.sourceId})) {
+            while(cursor.moveToNext()) {
+                Integer count=cursor.isNull(0)?null:cursor.getInt(0);
+                Long amount=cursor.isNull(1)?null:cursor.getLong(1);
+                if(count!=null&&count!=facts.declaredCount) conflict=true;
+                else if(amount!=null&&reward!=null&&!amount.equals(reward)) conflict=true;
+                else if(count!=null&&count==facts.declaredCount) duplicate=true;
+            }
+        }
+        return new boolean[]{duplicate,conflict};
     }
+
+    private static ExistingOrderIndex loadExistingOrders(SQLiteDatabase db,String date) {
+        ExistingOrderIndex index=new ExistingOrderIndex();
+        try(Cursor cursor=db.rawQuery("SELECT id,date,yandex_order_id,accepted_at,completed_at,reward_kopecks "
+                +"FROM active_orders WHERE date=?",new String[]{date})) {
+            while(cursor.moveToNext()) {
+                ExistingOrder row=new ExistingOrder(); row.id=cursor.getString(0); row.date=cursor.getString(1);
+                row.orderNumber=cursor.isNull(2)?null:cursor.getString(2);
+                row.acceptedAt=cursor.isNull(3)?null:cursor.getString(3);
+                row.completedAt=cursor.isNull(4)?null:cursor.getString(4);
+                row.amount=cursor.isNull(5)?null:cursor.getLong(5);
+                row.signature=detailSignature(row.date,row.acceptedAt,row.completedAt,row.amount);
+                if(row.signature!=null)
+                    index.signatureCounts.put(row.signature,index.signatureCounts.containsKey(row.signature)
+                        ?index.signatureCounts.get(row.signature)+1:1);
+                if(row.orderNumber!=null)
+                    index.byYandexId.computeIfAbsent(row.orderNumber,k->new ArrayList<>()).add(row);
+            }
+        }
+        return index;
+    }
+
+    private static boolean isExistingOrder(SQLiteDatabase db,ExistingOrderIndex index,Facts facts,OrderFact order) {
+        String incomingSignature=order.confirmedDelivery
+            ?detailSignature(facts.date,order.startedAt,order.completedAt,order.amountKopecks):null;
+        if(order.orderNumber!=null) {
+            List<ExistingOrder> rows=index.byYandexId.get(order.orderNumber);
+            if(rows!=null) for(ExistingOrder row:rows) if(!index.usedIds.contains(row.id)) {
+                verifySameEvent(row,facts,order);
+                index.usedIds.add(row.id);
+                consumeSignature(index,row.signature);
+                return true;
+            }
+            try(Cursor cursor=db.rawQuery("SELECT id,date,yandex_order_id,accepted_at,completed_at,reward_kopecks "
+                    +"FROM active_orders WHERE yandex_order_id=?",new String[]{order.orderNumber})) {
+                if(cursor.moveToFirst()) {
+                    ExistingOrder row=new ExistingOrder(); row.id=cursor.getString(0); row.date=cursor.getString(1);
+                    row.orderNumber=cursor.getString(2); row.acceptedAt=cursor.isNull(3)?null:cursor.getString(3);
+                    row.completedAt=cursor.isNull(4)?null:cursor.getString(4);
+                    row.amount=cursor.isNull(5)?null:cursor.getLong(5);
+                    row.signature=detailSignature(row.date,row.acceptedAt,row.completedAt,row.amount);
+                    verifySameEvent(row,facts,order);
+                    return true;
+                }
+            }
+        }
+        int count=index.signatureCounts.containsKey(incomingSignature)?index.signatureCounts.get(incomingSignature):0;
+        if(count<=0) return false;
+        index.signatureCounts.put(incomingSignature,count-1);
+        return true;
+    }
+
+    private static void verifySameEvent(ExistingOrder existing,Facts facts,OrderFact incoming) {
+        if(existing.date!=null&&!facts.date.equals(existing.date))
+            throw new IllegalArgumentException("Номер заказа уже указан в истории для другой даты; видео сохранено для проверки.");
+        if(existing.amount!=null&&existing.amount.longValue()!=incoming.amountKopecks)
+            throw new IllegalArgumentException("Сумма заказа расходится с уже сохранённым источником; видео сохранено для проверки.");
+        if(incoming.confirmedDelivery) {
+            Integer accepted=minuteInMoscow(existing.acceptedAt),completed=minuteInMoscow(existing.completedAt);
+            if(accepted!=null&&accepted.intValue()!=incoming.acceptedMinute)
+                throw new IllegalArgumentException("Время принятия заказа расходится с уже сохранённым источником; видео сохранено для проверки.");
+            if(completed!=null&&completed.intValue()!=incoming.deliveredMinute)
+                throw new IllegalArgumentException("Время завершения заказа расходится с уже сохранённым источником; видео сохранено для проверки.");
+        }
+    }
+
+    private static void consumeSignature(ExistingOrderIndex index,String signature) {
+        if(signature==null) return;
+        int count=index.signatureCounts.containsKey(signature)?index.signatureCounts.get(signature):0;
+        if(count>0) index.signatureCounts.put(signature,count-1);
+    }
+
+    private static String detailSignature(String date,String acceptedAt,String completedAt,Long amount) {
+        if(date==null||amount==null||acceptedAt==null||completedAt==null) return null;
+        Integer accepted=minuteInMoscow(acceptedAt),completed=minuteInMoscow(completedAt);
+        if(accepted==null||completed==null) return null;
+        return date+"|"+accepted+"|"+completed+"|"+amount;
+    }
+
+    private static Integer minuteInMoscow(String timestamp) {
+        if(timestamp==null) return null;
+        try {
+            LocalDateTime local=OffsetDateTime.parse(timestamp).atZoneSameInstant(ZoneId.of(TIME_ZONE)).toLocalDateTime();
+            return local.getHour()*60+local.getMinute();
+        } catch(Exception ignored) {
+            try {
+                LocalDateTime local=LocalDateTime.parse(timestamp,DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                return local.getHour()*60+local.getMinute();
+            } catch(Exception invalid) { return null; }
+        }
+    }
+
+    private static boolean hasActiveXlsxRawOrders(SQLiteDatabase db,String date) {
+        return count(db,"SELECT COUNT(*) FROM active_orders WHERE date=? AND source_kind='xlsx'",date)>0;
+    }
+
+    private static boolean matchesCompleteRawDay(SQLiteDatabase db,Facts facts) {
+        if(facts.orders.size()!=facts.declaredCount||facts.rowAmountKopecks<0) return false;
+        try(Cursor daily=db.rawQuery("SELECT COUNT(DISTINCT a.order_count),MIN(a.order_count) "
+                +"FROM aggregate_order_counts a LEFT JOIN import_sources s ON s.id=a.source_id "
+                +"WHERE a.date=? AND a.slot_id IS NULL AND a.source_kind='xlsx' "
+                +"AND a.confidence='reported_sheet' AND s.status='mirrored' "
+                +"AND NOT EXISTS(SELECT 1 FROM aggregate_order_counts u "
+                +"WHERE u.source_kind='legacy_state' AND u.date=a.date)",new String[]{facts.date})) {
+            if(!daily.moveToFirst()||daily.getInt(0)!=1||daily.isNull(1)||daily.getInt(1)!=facts.declaredCount) return false;
+        }
+        Map<Long,Integer> videoAmounts=new HashMap<>();
+        for(OrderFact row:facts.orders) videoAmounts.put(row.amountKopecks,
+            videoAmounts.containsKey(row.amountKopecks)?videoAmounts.get(row.amountKopecks)+1:1);
+        Map<Long,Integer> sheetAmounts=new HashMap<>(); int count=0; long total=0;
+        try(Cursor raw=db.rawQuery("SELECT reward_kopecks FROM active_orders "
+                +"WHERE date=? AND source_kind='xlsx'",new String[]{facts.date})) {
+            while(raw.moveToNext()) {
+                if(raw.isNull(0)) return false;
+                long amount=raw.getLong(0); count++;
+                try { total=Math.addExact(total,amount); }
+                catch(ArithmeticException overflow) { return false; }
+                sheetAmounts.put(amount,sheetAmounts.containsKey(amount)?sheetAmounts.get(amount)+1:1);
+            }
+        }
+        return count==facts.declaredCount&&total==facts.rowAmountKopecks&&videoAmounts.equals(sheetAmounts);
+    }
+
+    private static boolean sameStoredIdentity(SQLiteDatabase db,OrderFact order,Facts facts) {
+        try(Cursor cursor=db.rawQuery("SELECT date,reward_kopecks,yandex_order_id,accepted_at,completed_at,observed_at "
+                +"FROM orders WHERE id=?",new String[]{order.id})) {
+            if(!cursor.moveToFirst()||!facts.date.equals(cursor.getString(0))
+                    ||cursor.isNull(1)||cursor.getLong(1)!=order.amountKopecks) return false;
+            String priorNumber=cursor.isNull(2)?null:cursor.getString(2);
+            if(order.orderNumber!=null&&!order.orderNumber.equals(priorNumber)) return false;
+            Integer priorVisible=cursor.isNull(5)?null:minuteInMoscow(cursor.getString(5));
+            if(priorVisible!=null&&priorVisible.intValue()!=order.visibleMinute) return false;
+            ExistingOrder prior=new ExistingOrder(); prior.date=cursor.getString(0);
+            prior.amount=cursor.getLong(1); prior.acceptedAt=cursor.isNull(3)?null:cursor.getString(3);
+            prior.completedAt=cursor.isNull(4)?null:cursor.getString(4);
+            try { verifySameEvent(prior,facts,order); }
+            catch(IllegalArgumentException conflict) { return false; }
+            return true;
+        }
+    }
+
 
     private static LocalDateTime parseLocal(String value) {
         try { return LocalDateTime.parse(value,LOCAL); } catch(Exception invalid) { return null; }
