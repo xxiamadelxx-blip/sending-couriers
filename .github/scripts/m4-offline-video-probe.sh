@@ -54,11 +54,40 @@ capture_screen m4-forecast-restart.png
 
 adb shell am force-stop "$package"
 adb shell am start -W -n "$package/$activity" --ez m6.verifyWorker true
-wait_for_marker "M6 WORKER PASS" "M6 WORKER FAIL" 120
-capture_screen m6-worker.png
-adb shell am force-stop "$package"
+wait_for_marker "M6 ENQUEUED" "M6 WORKER FAIL" 30
+capture_screen m6-enqueued.png
+original_pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' || true)
+test -n "$original_pid"
+adb shell input keyevent KEYCODE_HOME
+sleep 2
+adb shell am kill "$package"
+process_stopped=0
+for attempt in $(seq 1 30); do
+  if [[ -z "$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' || true)" ]]; then
+    process_stopped=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$process_stopped" -ne 1 ]]; then
+  echo "M6 harness could not kill the background app process"
+  fail_with_diagnostics
+fi
+worker_restarted_process=0
+for attempt in $(seq 1 120); do
+  restarted_pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' || true)
+  if [[ -n "$restarted_pid" && "$restarted_pid" != "$original_pid" ]]; then
+    worker_restarted_process=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$worker_restarted_process" -ne 1 ]]; then
+  echo "WorkManager did not restart the app process while its activity was closed"
+  fail_with_diagnostics
+fi
 adb shell am start -W -n "$package/$activity" --ez m6.verifyRestart true
-wait_for_marker "M6 RESTART PASS" "M6 RESTART FAIL" 30
+wait_for_marker "M6 RESTART PASS" "M6 RESTART FAIL" 120
 capture_screen m6-restart.png
 
 if [[ -f "${RUNNER_TEMP}/m4-real/one.mp4" && -f "${RUNNER_TEMP}/m4-real/two.mp4" ]]; then
