@@ -15,6 +15,14 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.lifecycle.Observer;
+import androidx.work.Data;
+import androidx.work.ExistingWorkPolicy;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.Operation;
+import androidx.work.WorkInfo;
+import androidx.work.WorkManager;
+
 import org.json.JSONObject;
 import org.json.JSONArray;
 
@@ -22,9 +30,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -36,11 +46,18 @@ public final class M4VideoImportActivity extends Activity {
     private TextView status;
     private ProgressBar progress;
     private boolean launchedForResult;
+    private UUID activeWorkId;
+    private Observer<WorkInfo> workObserver;
+    private boolean resultDelivered;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         launchedForResult=getIntent().getBooleanExtra("m4.returnResult",false) || getCallingActivity()!=null;
         showProgress("Подготовка локального OCR…");
+        if(state!=null&&state.containsKey("m4.workId")) {
+            try { observeWork(UUID.fromString(state.getString("m4.workId"))); return; }
+            catch(Exception ignored) { }
+        }
         Uri shared=sharedVideo(getIntent());
         if(shared!=null) process(shared);
         else if(Intent.ACTION_SEND.equals(getIntent().getAction())) finishError("Отправьте одно видео MP4 или MOV.");
@@ -75,62 +92,106 @@ public final class M4VideoImportActivity extends Activity {
         super.onActivityResult(request,result,data);
         if(request!=PICK_VIDEO) return;
         if(result!=RESULT_OK || data==null || data.getData()==null) { setResult(RESULT_CANCELED); finish(); return; }
+        try {
+            int grant=data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION;
+            if(grant!=0) getContentResolver().takePersistableUriPermission(data.getData(),grant);
+        } catch(Exception ignored) { }
         process(data.getData());
     }
 
     private void process(Uri uri) {
         status.setText("Извлекаю кадры и распознаю текст на устройстве…");
         executor.execute(() -> {
-            File temporary=null;
+            File pending=null;
             try {
                 String name=displayName(uri); String mime=VideoImportProcessor.normalizedMime(getContentResolver().getType(uri),name);
-                temporary=copyToPrivateCache(uri);
-                VideoImportProcessor.Result analysis;
-                try(TesseractOcrEngine ocr=new TesseractOcrEngine(this)) {
-                    analysis=VideoImportProcessor.processFile(this,temporary,mime,name,ocr::recognize,
-                        (done,total)->runOnUiThread(()->{if(status!=null)status.setText("Кадров обработано: "+done+" из "+total+"…");}));
+                pending=copyToPrivateQueue(uri);
+                String hash=sha256(pending);
+                Data input=new Data.Builder().putString(VideoImportWorker.KEY_FILE,pending.getAbsolutePath())
+                    .putString(VideoImportWorker.KEY_SHA256,hash).putString(VideoImportWorker.KEY_MIME,mime)
+                    .putString(VideoImportWorker.KEY_NAME,name).build();
+                OneTimeWorkRequest request=new OneTimeWorkRequest.Builder(VideoImportWorker.class)
+                    .addTag("m4-video-import").setInputData(input).build();
+                String uniqueName="m4-video-import-"+hash;
+                WorkManager manager=WorkManager.getInstance(getApplicationContext());
+                List<WorkInfo> prior=manager.getWorkInfosForUniqueWork(uniqueName).get();
+                UUID observe=null;
+                for(WorkInfo info:prior) if(info.getState()==WorkInfo.State.ENQUEUED
+                        ||info.getState()==WorkInfo.State.RUNNING||info.getState()==WorkInfo.State.BLOCKED) {
+                    observe=info.getId(); break;
                 }
-                VideoImportDatabase.PersistResult saved=new VideoImportDatabase(this).persist(analysis,mime);
-                M4ForecastFactWriter.ImportResult forecastFacts=M4ForecastFactWriter.importFacts(this,analysis);
-                logDebugCounts(analysis,forecastFacts);
-                JSONObject response=new JSONObject(); response.put("ok",true); response.put("duplicate",saved.duplicate);
-                response.put("frames",saved.frameCount); response.put("uniqueFrames",analysis.uniqueFramesOcr);
-                response.put("unknownScreens",saved.unknownScreenCount); response.put("durationMs",analysis.durationMs);
-                response.put("persistedCandidateRows",saved.insertedCandidateCount);
-                response.put("sourceSha256",analysis.sourceSha256);
-                JSONArray extractions=new JSONArray();
-                java.util.List<YandexScreenParser.Candidate> uniqueCandidates=analysis.uniqueCandidates();
-                for(int i=0;i<uniqueCandidates.size()&&i<MAX_RETURNED_CANDIDATES;i++)
-                    extractions.put(new JSONObject(uniqueCandidates.get(i).toJson()));
-                response.put("extractedCandidateCount",analysis.uniqueCandidateCount());
-                response.put("extractionsTruncated",uniqueCandidates.size()>MAX_RETURNED_CANDIDATES);
-                response.put("extractions",extractions);
-                response.put("forecastFactsAccepted",forecastFacts.accepted);
-                response.put("forecastFactsDuplicate",forecastFacts.duplicate);
-                response.put("forecastFactMessage",forecastFacts.message);
-                if(forecastFacts.accepted) {
-                    response.put("forecastSource",forecastFacts.source);
-                    response.put("forecastDay",forecastFacts.forecastDay);
-                    response.put("importedOrderCount",forecastFacts.orderCount);
-                    response.put("confirmedDeliveryIntervals",forecastFacts.deliveryIntervals);
+                if(observe!=null) pending.delete();
+                else {
+                    Operation operation=manager.enqueueUniqueWork(uniqueName,ExistingWorkPolicy.KEEP,request);
+                    operation.getResult().get();
+                    List<WorkInfo> current=manager.getWorkInfosForUniqueWork(uniqueName).get();
+                    for(WorkInfo info:current) if(info.getId().equals(request.getId())) { observe=info.getId(); break; }
+                    if(observe==null&&!current.isEmpty()) observe=current.get(0).getId();
+                    if(observe==null) throw new IllegalStateException("Не удалось запланировать обработку видео.");
+                    if(!observe.equals(request.getId())) pending.delete();
                 }
-                String message=saved.duplicate
-                    ?"Видео уже импортировалось. Ниже показан повторный анализ новой версии парсера; ранее сохранённые результаты не перезаписаны.\n\n"+extractionSummary(analysis,false)
-                    :extractionSummary(analysis,true);
-                message=message+"\n\n"+forecastFacts.message;
-                finishWith(response.toString(),message);
+                final UUID id=observe;
+                runOnUiThread(()->observeWork(id));
             } catch(Exception error) {
+                if(pending!=null) pending.delete();
                 String message=error.getMessage()==null?"Проверьте файл и повторите импорт.":error.getMessage();
                 try { JSONObject response=new JSONObject();response.put("ok",false);response.put("error",message);finishWith(response.toString(),message); }
                 catch(Exception ignored) { finishError("Не удалось обработать видео."); }
-            } finally {
-                if(temporary!=null) temporary.delete();
             }
         });
     }
 
-    private File copyToPrivateCache(Uri uri) throws Exception {
-        File temp=File.createTempFile("m4-video-", ".tmp",getCacheDir());
+    private void observeWork(UUID id) {
+        if(isFinishing()||isDestroyed()) return;
+        activeWorkId=id;
+        if(workObserver!=null) WorkManager.getInstance(getApplicationContext()).getWorkInfoByIdLiveData(id).removeObserver(workObserver);
+        workObserver=info->{
+            if(info==null||status==null||isFinishing()||resultDelivered) return;
+            if(info.getState()==WorkInfo.State.RUNNING) {
+                int done=info.getProgress().getInt(VideoImportWorker.KEY_DONE,0);
+                int total=info.getProgress().getInt(VideoImportWorker.KEY_TOTAL,0);
+                if(total>0) { progress.setIndeterminate(false); progress.setMax(total); progress.setProgress(done); }
+                status.setText(total>0?"Кадров обработано: "+done+" из "+total+"…":"Извлекаю кадры и распознаю текст на устройстве…");
+            } else if(info.getState()==WorkInfo.State.SUCCEEDED) {
+                resultDelivered=true;
+                String path=info.getOutputData().getString(VideoImportWorker.KEY_RESULT_FILE);
+                deleteCompletedInput(info);
+                executor.execute(()->deliverResult(path));
+            } else if(info.getState()==WorkInfo.State.FAILED) {
+                resultDelivered=true;
+                deleteCompletedInput(info);
+                String message=info.getOutputData().getString(VideoImportWorker.KEY_ERROR);
+                String error=message==null?"Не удалось обработать видео.":message;
+                try { finishWith(new JSONObject().put("ok",false).put("error",error).toString(),error); }
+                catch(Exception ignored) { finishError(error); }
+            } else if(info.getState()==WorkInfo.State.CANCELLED) {
+                resultDelivered=true;deleteCompletedInput(info);finishError("Обработка видео отменена.");
+            }
+        };
+        WorkManager.getInstance(getApplicationContext()).getWorkInfoByIdLiveData(id).observe(this,workObserver);
+    }
+
+    private void deliverResult(String path) {
+        try {
+            if(path==null) throw new IllegalStateException("Не найден сохранённый отчёт импорта.");
+            File file=new File(path).getCanonicalFile();
+            File root=new File(getFilesDir(),"video-import-results").getCanonicalFile();
+            if(!file.getPath().startsWith(root.getPath()+File.separator)||!file.isFile())
+                throw new IllegalStateException("Сохранённый отчёт импорта недоступен.");
+            byte[] bytes=java.nio.file.Files.readAllBytes(file.toPath());
+            JSONObject result=new JSONObject(new String(bytes,java.nio.charset.StandardCharsets.UTF_8));
+            finishWith(result.getString("response"),result.getString("message"));
+        } catch(Exception failure) {
+            String message=failure.getMessage()==null?"Не удалось прочитать отчёт импорта.":failure.getMessage();
+            try { finishWith(new JSONObject().put("ok",false).put("error",message).toString(),message); }
+            catch(Exception ignored) { finishError(message); }
+        }
+    }
+
+    private File copyToPrivateQueue(Uri uri) throws Exception {
+        File directory=new File(getFilesDir(),"video-import-queue");
+        if(!directory.isDirectory()&&!directory.mkdirs()) throw new IllegalStateException("Не удалось подготовить локальное хранилище видео.");
+        File temp=File.createTempFile("video-", ".mp4",directory);
         long total=0;
         try(InputStream input=getContentResolver().openInputStream(uri);FileOutputStream output=new FileOutputStream(temp)) {
             if(input==null) throw new IllegalArgumentException("Не удалось открыть видео");
@@ -142,6 +203,25 @@ public final class M4VideoImportActivity extends Activity {
             output.getFD().sync();
         } catch(Exception failure) { temp.delete(); throw failure; }
         return temp;
+    }
+
+    private void deleteCompletedInput(WorkInfo info) {
+        if(info==null)return;
+        try {
+            String raw=info.getInputData().getString(VideoImportWorker.KEY_FILE);
+            if(raw==null)return;
+            File root=new File(getFilesDir(),"video-import-queue").getCanonicalFile();
+            File file=new File(raw).getCanonicalFile();
+            if(file.getPath().startsWith(root.getPath()+File.separator))file.delete();
+        } catch(Exception ignored) { }
+    }
+
+    private static String sha256(File file) throws Exception {
+        MessageDigest digest=MessageDigest.getInstance("SHA-256");byte[] buffer=new byte[64*1024];int count;
+        try(InputStream input=java.nio.file.Files.newInputStream(file.toPath())) { while((count=input.read(buffer))!=-1) digest.update(buffer,0,count); }
+        StringBuilder out=new StringBuilder(64);
+        for(byte value:digest.digest()) out.append(String.format(Locale.ROOT,"%02x",value&0xff));
+        return out.toString();
     }
 
     private String displayName(Uri uri) {
@@ -304,5 +384,9 @@ public final class M4VideoImportActivity extends Activity {
         catch(Exception ignored) { setResult(RESULT_CANCELED);finish(); }
     }
 
-    @Override protected void onDestroy() { executor.shutdownNow(); super.onDestroy(); }
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out); if(activeWorkId!=null) out.putString("m4.workId",activeWorkId.toString());
+    }
+
+    @Override protected void onDestroy() { executor.shutdown(); super.onDestroy(); }
 }

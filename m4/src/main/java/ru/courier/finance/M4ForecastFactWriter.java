@@ -5,7 +5,6 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -41,14 +40,17 @@ public final class M4ForecastFactWriter {
         String orderNumber, startedAt, completedAt;
         int acceptedMinute=-1, deliveredMinute=-1;
         boolean confirmedDelivery;
+        boolean reconstructedFromDetail;
     }
 
     private static final class Facts {
         String sourceHash, sourceId, slotId, date, startedAt, completedAt;
+        String dateBasis, dateEvidence;
         Integer declaredCount;
         int slotStartMinute, slotEndMinute;
-        Long slotAmountKopecks;
+        Long slotAmountKopecks, slotOrderAmountKopecks, slotTipsKopecks;
         long rowAmountKopecks;
+        int recoveredOrderRows;
         final List<OrderFact> orders=new ArrayList<>();
         final List<OrderFact> deliveries=new ArrayList<>();
     }
@@ -58,14 +60,18 @@ public final class M4ForecastFactWriter {
         public final boolean duplicate;
         public final String message;
         public final int orderCount;
-        public final int deliveryIntervals;
+        public final int visibleOrderRows;
+        public final int matchedOrderDetails;
+        public final boolean rawComplete;
         public final JSONObject forecastDay;
         public final String source;
 
         private ImportResult(boolean accepted,boolean duplicate,String message,int orderCount,
-                             int deliveryIntervals,JSONObject forecastDay,String source) {
+                             int visibleOrderRows,int matchedOrderDetails,boolean rawComplete,
+                             JSONObject forecastDay,String source) {
             this.accepted=accepted; this.duplicate=duplicate; this.message=message;
-            this.orderCount=orderCount; this.deliveryIntervals=deliveryIntervals;
+            this.orderCount=orderCount; this.visibleOrderRows=visibleOrderRows;
+            this.matchedOrderDetails=matchedOrderDetails; this.rawComplete=rawComplete;
             this.forecastDay=forecastDay; this.source=source;
         }
     }
@@ -74,13 +80,17 @@ public final class M4ForecastFactWriter {
         Facts facts;
         try { facts=extract(analysis); }
         catch(IllegalArgumentException invalid) {
-            return new ImportResult(false,false,invalid.getMessage(),0,0,null,null);
+            return new ImportResult(false,false,invalid.getMessage(),0,0,0,false,null,null);
         }
         boolean duplicate=writeNativeFacts(context,facts);
+        boolean rawComplete=facts.orders.size()==facts.declaredCount;
+        String detail=facts.recoveredOrderRows==0?"":(" Дополнительно сохранены отдельные карточки завершённых заказов: "
+            +facts.recoveredOrderRows+".");
         return new ImportResult(true,duplicate,
-            "Распознано и сверено строк заказов: "+facts.orders.size()+" из "+facts.declaredCount+
-            "; сумма строк совпала с итогом слота. В историю прогноза записано. Рабочие часы из полного слота не выводились.",
-            facts.orders.size(),facts.deliveries.size(),toForecastDay(facts),facts.sourceId);
+            "Подтверждён агрегат слота: "+facts.declaredCount+" заказов; отдельных строк распознано "
+            +facts.orders.size()+" из "+facts.declaredCount+"."+(rawComplete?" Сумма полного списка сверена.":" Перечень RAW частичный.")
+            +detail+" Рабочее время осталось неизвестным.",
+            facts.declaredCount,facts.orders.size(),facts.deliveries.size(),rawComplete,toForecastDay(facts),facts.sourceId);
     }
 
     private static Facts extract(VideoImportProcessor.Result analysis) {
@@ -108,16 +118,76 @@ public final class M4ForecastFactWriter {
         facts.slotId=field(slot,"slot_id");
         facts.declaredCount=parseInt(field(slot,"slot_order_count"));
         facts.slotAmountKopecks=parseLong(field(slot,"slot_total_kopecks"));
+        facts.slotOrderAmountKopecks=parseLong(field(slot,"slot_order_total_kopecks"));
+        facts.slotTipsKopecks=parseLong(field(slot,"slot_tips_kopecks"));
         facts.startedAt=field(slot,"started_at"); facts.completedAt=field(slot,"completed_at");
         if(facts.slotId==null||!facts.slotId.matches("[0-9]{6,12}")||facts.declaredCount==null||facts.declaredCount<1
-                ||facts.slotAmountKopecks==null||facts.startedAt==null||facts.completedAt==null)
+                ||facts.slotAmountKopecks==null)
             throw new IllegalArgumentException("Данные карточки слота неполны; факты не записаны.");
         LocalDateTime slotStart=parseLocal(facts.startedAt),slotEnd=parseLocal(facts.completedAt);
+        int rangeStart=parseMinute(field(slot,"slot_start_time"));
+        int rangeEnd=parseMinute(field(slot,"slot_end_time"));
+        if(slotStart!=null&&slotEnd!=null) {
+            if(!slotStart.toLocalDate().equals(slotEnd.toLocalDate())||!slotEnd.isAfter(slotStart))
+                throw new IllegalArgumentException("Дата или время слота не прошли проверку; факты не записаны.");
+            facts.date=slotStart.toLocalDate().toString();
+            facts.slotStartMinute=slotStart.getHour()*60+slotStart.getMinute();
+            facts.slotEndMinute=slotEnd.getHour()*60+slotEnd.getMinute();
+            facts.dateBasis="slot_card";
+            facts.dateEvidence="Дата и время взяты с карточки слота.";
+        } else {
+            if(rangeStart<0||rangeEnd<=rangeStart)
+                throw new IllegalArgumentException("Данные карточки слота неполны; факты не записаны.");
+            LocalDate resolvedDate=null;
+            String resolvedBasis=null,resolvedEvidence=null;
+            if(slotStart!=null||slotEnd!=null) {
+                LocalDate explicitDate=slotStart!=null?slotStart.toLocalDate():slotEnd.toLocalDate();
+                if((slotStart!=null&&slotStart.getHour()*60+slotStart.getMinute()!=rangeStart)
+                        ||(slotEnd!=null&&slotEnd.getHour()*60+slotEnd.getMinute()!=rangeEnd))
+                    throw new IllegalArgumentException("Время карточки слота противоречиво; факты не записаны.");
+                resolvedDate=explicitDate;
+                resolvedBasis="partial_slot_card";
+                resolvedEvidence="Дата взята с карточки слота; недостающее время — из видимого диапазона.";
+            } else {
+                java.util.Set<String> detailDates=orderDetailDates(details,rangeStart,rangeEnd);
+                if(detailDates.size()>1)
+                    throw new IllegalArgumentException("Карточки заказов указывают на разные даты; факты не записаны.");
+                if(detailDates.size()==1) {
+                    resolvedDate=LocalDate.parse(detailDates.iterator().next());
+                    resolvedBasis="order_detail_date";
+                    resolvedEvidence="Дата подтверждена датой завершённых карточек заказов.";
+                } else {
+                    List<String> orderTimes=new ArrayList<>();
+                    for(YandexScreenParser.Candidate row:rows) {
+                        String rowSlot=field(row,"slot_id");
+                        if(rowSlot==null||facts.slotId.equals(rowSlot)) orderTimes.add(field(row,"order_time"));
+                    }
+                    M4VideoDateResolver.Resolution resolution=M4VideoDateResolver.resolve(
+                        analysis.recordingDateMetadata,field(slot,"slot_start_time"),field(slot,"slot_end_time"),orderTimes);
+                    if(resolution==null)
+                        throw new IllegalArgumentException("В карточке нет даты, а время создания видео не позволяет однозначно определить день; факты не записаны.");
+                    resolvedDate=resolution.date;
+                    resolvedBasis=resolution.previousDay?"video_metadata_previous_day":"video_metadata_same_day";
+                    resolvedEvidence="Дата определена по метке создания видео "
+                        +LOCAL.format(resolution.recordingLocal)+" и времени строк списка.";
+                }
+            }
+            facts.date=resolvedDate.toString();
+            facts.slotStartMinute=rangeStart; facts.slotEndMinute=rangeEnd;
+            facts.startedAt=localDateTime(resolvedDate,rangeStart);
+            facts.completedAt=localDateTime(resolvedDate,rangeEnd);
+            facts.dateBasis=resolvedBasis; facts.dateEvidence=resolvedEvidence;
+            slotStart=parseLocal(facts.startedAt); slotEnd=parseLocal(facts.completedAt);
+        }
         if(slotStart==null||slotEnd==null||!slotStart.toLocalDate().equals(slotEnd.toLocalDate())||!slotEnd.isAfter(slotStart))
             throw new IllegalArgumentException("Дата или время слота не прошли проверку; факты не записаны.");
-        facts.date=slotStart.toLocalDate().toString();
-        facts.slotStartMinute=slotStart.getHour()*60+slotStart.getMinute();
-        facts.slotEndMinute=slotEnd.getHour()*60+slotEnd.getMinute();
+        if(facts.slotOrderAmountKopecks!=null&&facts.slotTipsKopecks!=null) {
+            long subtotal;
+            try { subtotal=Math.addExact(facts.slotOrderAmountKopecks,facts.slotTipsKopecks); }
+            catch(ArithmeticException overflow) { throw new IllegalArgumentException("Сумма карточки слота не прошла проверку; факты не записаны."); }
+            if(subtotal!=facts.slotAmountKopecks)
+                throw new IllegalArgumentException("Сумма заказов и чаевых не совпала с итогом карточки слота; факты не записаны.");
+        }
 
         for(YandexScreenParser.Candidate row:rows) {
             String rowSlot=field(row,"slot_id");
@@ -127,33 +197,101 @@ public final class M4ForecastFactWriter {
             Integer occurrence=parseInt(field(row,"occurrence"));
             if(minute<facts.slotStartMinute||minute>facts.slotEndMinute||amount==null||amount<0||occurrence==null||occurrence<1) continue;
             OrderFact item=new OrderFact(); item.time=time; item.visibleMinute=minute; item.amountKopecks=amount;
-            item.occurrence=occurrence; facts.orders.add(item); facts.rowAmountKopecks+=amount;
+            item.occurrence=occurrence; facts.orders.add(item);
+            try { facts.rowAmountKopecks=Math.addExact(facts.rowAmountKopecks,amount); }
+            catch(ArithmeticException overflow) { throw new IllegalArgumentException("Сумма строк списка не прошла проверку."); }
         }
         Collections.sort(facts.orders,Comparator.comparingInt((OrderFact o)->o.visibleMinute).thenComparingInt(o->o.occurrence));
-        if(facts.orders.size()!=facts.declaredCount)
-            throw new IllegalArgumentException("Извлечено строк заказов: "+facts.orders.size()+"; в слоте указано "+facts.declaredCount+". Неполные данные оставлены кандидатами, в прогноз не записаны.");
-        if(facts.rowAmountKopecks!=facts.slotAmountKopecks)
-            throw new IllegalArgumentException("Сумма строк списка не совпала с итогом слота; в прогноз не записано.");
+        Long orderTotal=facts.slotOrderAmountKopecks!=null?facts.slotOrderAmountKopecks:facts.slotAmountKopecks;
+        if(facts.orders.size()>facts.declaredCount)
+            throw new IllegalArgumentException("Извлечено уникальных строк заказов: "+facts.orders.size()+"; в слоте указано "+facts.declaredCount+". Проверьте повторы или карточку слота.");
+        if(facts.orders.size()<facts.declaredCount) recoverObservedDetailRows(facts,details,orderTotal);
+        if(facts.orders.size()>facts.declaredCount)
+            throw new IllegalArgumentException("Строки списка и карточки заказов превышают подтверждённый итог слота.");
+        if(facts.orders.size()==facts.declaredCount&&facts.rowAmountKopecks!=orderTotal)
+            throw new IllegalArgumentException("Полный перечень заказов не совпал по сумме с карточкой слота; факты не записаны.");
+        if(facts.orders.size()<facts.declaredCount&&facts.rowAmountKopecks>orderTotal)
+            throw new IllegalArgumentException("Сумма наблюдаемых заказов больше подтверждённого итога слота; факты не записаны.");
 
         for(int i=0;i<facts.orders.size();i++) facts.orders.get(i).id="video-"+facts.sourceHash.substring(0,24)+"-"+facts.slotId+"-"+(i+1);
         attachOrderDetails(facts,details);
         return facts;
     }
 
+    /**
+     * Adds only complete, uniquely identified order cards that are genuinely
+     * visible in the source video. The slot total itself never creates RAW rows.
+     */
+    private static void recoverObservedDetailRows(Facts facts,List<YandexScreenParser.Candidate> details,
+                                                   Long expectedOrderTotal) {
+        if(expectedOrderTotal==null||facts.orders.size()>=facts.declaredCount) return;
+        java.util.Set<String> orderIds=new java.util.HashSet<>();
+        for(OrderFact row:facts.orders) if(row.orderNumber!=null) orderIds.add(row.orderNumber);
+        Map<Integer,List<OrderFact>> byMinute=new HashMap<>();
+        for(OrderFact row:facts.orders) byMinute.computeIfAbsent(row.visibleMinute,k->new ArrayList<>()).add(row);
+        for(YandexScreenParser.Candidate detail:details) {
+            if(!"COMPLETED".equals(field(detail,"status"))) continue;
+            String number=field(detail,"order_number"),startText=field(detail,"started_at"),endText=field(detail,"completed_at");
+            LocalDateTime start=parseLocal(startText),end=parseLocal(endText);
+            Long amount=parseLong(field(detail,"total_kopecks"));
+            if(number==null||start==null||end==null||amount==null||amount<0) continue;
+            if(!facts.date.equals(start.toLocalDate().toString())||!facts.date.equals(end.toLocalDate().toString())
+                    ||!end.isAfter(start)) continue;
+            int startMinute=start.getHour()*60+start.getMinute(),endMinute=end.getHour()*60+end.getMinute();
+            if(startMinute<facts.slotStartMinute||endMinute>facts.slotEndMinute) continue;
+            if(!orderIds.add(number)) continue;
+
+            List<OrderFact> atMinute=byMinute.get(endMinute); OrderFact match=null;
+            if(atMinute!=null) for(OrderFact row:atMinute) {
+                if(!row.confirmedDelivery&&row.amountKopecks==amount) { match=row; break; }
+            }
+            if(match!=null) {
+                applyDetail(match,detail);
+                facts.deliveries.add(match);
+                continue;
+            }
+            if(facts.orders.size()>=facts.declaredCount) continue;
+            int occurrence=1;
+            if(atMinute!=null) for(OrderFact prior:atMinute) occurrence=Math.max(occurrence,prior.occurrence+1);
+            OrderFact row=new OrderFact(); row.visibleMinute=endMinute;
+            row.time=String.format(Locale.ROOT,"%02d:%02d",end.getHour(),end.getMinute());
+            row.amountKopecks=amount; row.occurrence=occurrence; row.reconstructedFromDetail=true;
+            applyDetail(row,detail);
+            try { facts.rowAmountKopecks=Math.addExact(facts.rowAmountKopecks,amount); }
+            catch(ArithmeticException overflow) { throw new IllegalArgumentException("Сумма наблюдаемых заказов не прошла проверку."); }
+            facts.orders.add(row); facts.deliveries.add(row); facts.recoveredOrderRows++;
+            byMinute.computeIfAbsent(endMinute,k->new ArrayList<>()).add(row);
+        }
+        Collections.sort(facts.orders,Comparator.comparingInt((OrderFact o)->o.visibleMinute).thenComparingInt(o->o.occurrence));
+    }
+
+    private static void applyDetail(OrderFact order,YandexScreenParser.Candidate detail) {
+        String orderNumber=field(detail,"order_number"),startText=field(detail,"started_at"),endText=field(detail,"completed_at");
+        LocalDateTime start=parseLocal(startText),end=parseLocal(endText);
+        order.orderNumber=orderNumber!=null&&orderNumber.matches("[0-9]{6}-[0-9]{4,}")?orderNumber:null;
+        order.startedAt=startText; order.completedAt=endText;
+        order.acceptedMinute=start.getHour()*60+start.getMinute(); order.deliveredMinute=end.getHour()*60+end.getMinute();
+        order.confirmedDelivery=true;
+    }
+
     private static void attachOrderDetails(Facts facts,List<YandexScreenParser.Candidate> details) {
         Map<Integer,List<OrderFact>> byMinute=new HashMap<>();
         for(OrderFact order:facts.orders) byMinute.computeIfAbsent(order.visibleMinute,k->new ArrayList<>()).add(order);
         Map<Integer,Integer> nextOccurrence=new HashMap<>();
+        java.util.Set<String> attachedOrderNumbers=new java.util.HashSet<>();
         for(YandexScreenParser.Candidate detail:details) {
             if(!"COMPLETED".equals(field(detail,"status"))) continue;
             String orderNumber=field(detail,"order_number"),startText=field(detail,"started_at"),endText=field(detail,"completed_at");
             LocalDateTime start=parseLocal(startText),end=parseLocal(endText);
             if(orderNumber==null||start==null||end==null||!facts.date.equals(start.toLocalDate().toString())
-                    ||!facts.date.equals(end.toLocalDate().toString())||!end.isAfter(start)) continue;
+                    ||!facts.date.equals(end.toLocalDate().toString())||!end.isAfter(start)
+                    ||!attachedOrderNumbers.add(orderNumber)) continue;
             int minute=end.getHour()*60+end.getMinute();
             List<OrderFact> matches=byMinute.get(minute); if(matches==null) continue;
             int position=nextOccurrence.containsKey(minute)?nextOccurrence.get(minute):0;
-            while(position<matches.size()&&matches.get(position).confirmedDelivery) position++;
+            Long amount=parseLong(field(detail,"total_kopecks"));
+            while(position<matches.size()&&(matches.get(position).confirmedDelivery
+                    ||amount==null||matches.get(position).amountKopecks!=amount)) position++;
             if(position>=matches.size()) continue;
             OrderFact order=matches.get(position); nextOccurrence.put(minute,position+1);
             order.orderNumber=orderNumber; order.startedAt=startText; order.completedAt=endText;
@@ -163,33 +301,42 @@ public final class M4ForecastFactWriter {
     }
 
     private static JSONObject toForecastDay(Facts facts) throws Exception {
-        JSONObject day=new JSONObject(); JSONArray evidence=new JSONArray(),intervals=new JSONArray();
+        JSONObject day=new JSONObject(); JSONArray evidence=new JSONArray();
         for(OrderFact order:facts.orders) {
             JSONObject row=new JSONObject().put("id",order.id).put("visibleMin",order.visibleMinute)
                 .put("acceptedMin",order.confirmedDelivery?order.acceptedMinute:JSONObject.NULL)
                 .put("deliveredMin",order.confirmedDelivery?order.deliveredMinute:JSONObject.NULL)
                 .put("orderNumber",order.orderNumber==null?JSONObject.NULL:order.orderNumber)
-                .put("source",facts.sourceId).put("confidence",order.confirmedDelivery?"ORDER_DETAIL_MATCHED":"LIST_ROW_CROSSCHECKED")
-                .put("note","").put("workingInterval","").put("confirmed",order.confirmedDelivery)
+                .put("source",facts.sourceId).put("confidence",order.reconstructedFromDetail?"ORDER_DETAIL_OBSERVED":
+                    (order.confirmedDelivery?"ORDER_DETAIL_MATCHED":"LIST_ROW_CROSSCHECKED"))
+                .put("note",order.reconstructedFromDetail?"Отдельная запись получена из видимой карточки завершённого заказа.":"")
+                .put("workingInterval","").put("confirmed",order.confirmedDelivery)
                 .put("fieldSources",new JSONObject()
                     .put("visibleMin",new JSONObject().put("status","CONFIRMED").put("source",facts.sourceId))
                     .put("acceptedMin",new JSONObject().put("status",order.confirmedDelivery?"CONFIRMED":"UNKNOWN").put("source",facts.sourceId))
                     .put("deliveredMin",new JSONObject().put("status",order.confirmedDelivery?"CONFIRMED":"UNKNOWN").put("source",facts.sourceId)));
             evidence.put(row);
-            if(order.confirmedDelivery) intervals.put(new JSONObject().put("start",order.acceptedMinute).put("end",order.deliveredMinute).put("state","WORK"));
         }
+        boolean rawComplete=facts.orders.size()==facts.declaredCount;
+        String orderNote="Число заказов "+facts.declaredCount+" подтверждено итогом слота; в видео различимы отдельные записи: "+facts.orders.size()+".";
+        if(rawComplete) orderNote+=" Сумма полного списка сверена с итогом слота.";
+        orderNote+=" "+facts.dateEvidence;
+        if(facts.recoveredOrderRows>0) orderNote+=" Отдельно распознано карточек завершённых заказов: "+facts.recoveredOrderRows+".";
         JSONObject fieldSources=new JSONObject().put("orders",new JSONObject().put("status","CONFIRMED").put("kind","FACT")
-            .put("source",facts.sourceId).put("note","Все "+facts.declaredCount+" строк совпали с числом заказов и суммой слота."));
-        if(!facts.deliveries.isEmpty()) fieldSources.put("workingMin",new JSONObject().put("status","CONFIRMED").put("kind","FACT")
-            .put("source",facts.sourceId).put("note","Только явно показанные интервалы завершённых заказов; промежутки между ними неизвестны."));
-        JSONArray notes=new JSONArray().put("Проверено строк списка: "+facts.declaredCount+"; число и сумма совпали с итогом слота.")
+            .put("source",facts.sourceId).put("note",orderNote));
+        JSONArray notes=new JSONArray().put("Подтверждённый агрегат: "+facts.declaredCount+" заказов.")
+            .put("Отдельных записей заказов в видео: "+facts.orders.size()+" из "+facts.declaredCount+".")
             .put("Время полного слота "+facts.startedAt+"–"+facts.completedAt+" сохранено как слот и не засчитано рабочим временем.")
-            .put("В WORK записаны только распознанные интервалы завершённых заказов; время ожидания и пауз между заказами осталось неизвестным.");
+            .put("Время между принятием и завершением заказа описывает доставку и не используется как полная рабочая экспозиция.");
+        if(rawComplete) notes.put("Сумма полного списка заказов сверена с итогом слота.");
+        if(facts.recoveredOrderRows>0) notes.put("Дополнительно распознано отдельных карточек завершённых заказов: "+facts.recoveredOrderRows+".");
+        if(!"slot_card".equals(facts.dateBasis)) notes.put(facts.dateEvidence);
         day.put("date",facts.date).put("timezone",TIME_ZONE).put("zone",TIME_ZONE)
-            .put("orders",facts.orders.size()).put("ordersConfirmed",true).put("completed",true)
-            .put("workConfirmed",!facts.deliveries.isEmpty()).put("precision",facts.deliveries.isEmpty()?"unknown":"intervals")
-            .put("intervals",intervals).put("appAccountedMin",JSONObject.NULL).put("accountedConfirmed",false)
-            .put("orderEvidence",evidence).put("evidenceComplete",facts.deliveries.size()==facts.orders.size())
+            .put("orders",facts.declaredCount).put("ordersConfirmed",true).put("completed",true)
+            .put("workConfirmed",false).put("workingMin",JSONObject.NULL).put("precision","unknown")
+            .put("intervals",new JSONArray()).put("appAccountedMin",JSONObject.NULL).put("accountedConfirmed",false)
+            .put("orderEvidence",evidence).put("evidenceComplete",rawComplete&&facts.deliveries.size()==facts.orders.size())
+            .put("rawComplete",rawComplete)
             .put("source",facts.sourceId).put("sourceHash",facts.sourceHash)
             .put("sourceNotes",notes).put("fieldSources",fieldSources);
         return day;
@@ -210,7 +357,9 @@ public final class M4ForecastFactWriter {
 
             ContentValues aggregate=new ContentValues();
             aggregate.put("id",facts.sourceId+":count:"+facts.date+":"+facts.slotId); aggregate.put("date",facts.date);
-            aggregate.put("slot_id",facts.slotId); aggregate.put("order_count",facts.orders.size());
+            aggregate.put("slot_id",facts.slotId); aggregate.put("order_count",facts.declaredCount);
+            if(facts.slotOrderAmountKopecks!=null) aggregate.put("reward_kopecks",facts.slotOrderAmountKopecks);
+            else if(facts.slotTipsKopecks==null) aggregate.put("reward_kopecks",facts.slotAmountKopecks);
             aggregate.put("source_id",facts.sourceId); aggregate.put("source_kind","video_import");
             aggregate.put("confidence","confirmed"); aggregate.put("created_at",now); aggregate.put("updated_at",now);
             db.insertWithOnConflict("aggregate_order_counts",null,aggregate,SQLiteDatabase.CONFLICT_IGNORE);
@@ -225,29 +374,21 @@ public final class M4ForecastFactWriter {
                 row.put("precision",order.confirmedDelivery?"order_detail_minute":"list_row_minute");
                 row.put("created_at",now); row.put("updated_at",now);
                 db.insertWithOnConflict("orders",null,row,SQLiteDatabase.CONFLICT_IGNORE);
-                if(order.confirmedDelivery) {
-                    int active=(int)Duration.between(parseLocal(order.startedAt),parseLocal(order.completedAt)).toMinutes();
-                    ContentValues interval=new ContentValues(); interval.put("id",order.id+":delivery");
-                    interval.put("date",facts.date); interval.put("started_at",toUtc(order.startedAt));
-                    interval.put("ended_at",toUtc(order.completedAt)); interval.put("zone",TIME_ZONE);
-                    interval.put("state","WORK"); interval.put("active_minutes",active);
-                    interval.put("source_id",facts.sourceId); interval.put("source_kind","video_import");
-                    interval.put("confidence","confirmed"); interval.put("created_at",now); interval.put("updated_at",now);
-                    db.insertWithOnConflict("work_intervals",null,interval,SQLiteDatabase.CONFLICT_IGNORE);
-                }
             }
             ContentValues audit=new ContentValues(); audit.put("id",facts.sourceId+":facts:"+facts.slotId);
             audit.put("happened_at",now); audit.put("action","video_import_facts_written");
             audit.put("record_type","video_import"); audit.put("record_id",facts.sourceId);
             audit.put("source_kind","video_import");
-            audit.put("payload_json",new JSONObject().put("date",facts.date).put("orderCount",facts.orders.size())
-                .put("slotId",facts.slotId).put("matchedDeliveryIntervals",facts.deliveries.size()).toString());
+            audit.put("payload_json",new JSONObject().put("date",facts.date).put("aggregateOrderCount",facts.declaredCount)
+                .put("observedOrderRows",facts.orders.size())
+                .put("slotId",facts.slotId).put("slotDateBasis",facts.dateBasis)
+                .put("matchedOrderDetails",facts.deliveries.size())
+                .put("recoveredOrderRows",facts.recoveredOrderRows).toString());
             db.insertWithOnConflict("audit_events",null,audit,SQLiteDatabase.CONFLICT_IGNORE);
 
             long count=count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",facts.sourceId);
             long aggregateCount=count(db,"SELECT COUNT(*) FROM aggregate_order_counts WHERE source_id=? AND date=?",facts.sourceId,facts.date);
-            long intervalCount=count(db,"SELECT COUNT(*) FROM work_intervals WHERE source_id=? AND date=? AND state='WORK'",facts.sourceId,facts.date);
-            if(count!=facts.orders.size()||aggregateCount!=1||intervalCount!=facts.deliveries.size())
+            if(count!=facts.orders.size()||aggregateCount!=1)
                 throw new IllegalStateException("SQLite video fact write did not match the extracted data");
             ContentValues mark=new ContentValues(); mark.put("status","mirrored"); mark.put("updated_at",now);
             db.update("import_sources",mark,"id=?",new String[]{facts.sourceId});
@@ -262,6 +403,27 @@ public final class M4ForecastFactWriter {
 
     private static LocalDateTime parseLocal(String value) {
         try { return LocalDateTime.parse(value,LOCAL); } catch(Exception invalid) { return null; }
+    }
+
+    private static String localDateTime(LocalDate date,int minute) {
+        return LOCAL.format(date.atStartOfDay().plusMinutes(minute));
+    }
+
+    private static java.util.Set<String> orderDetailDates(List<YandexScreenParser.Candidate> details,
+                                                          int slotStartMinute,int slotEndMinute) {
+        java.util.Set<String> dates=new java.util.LinkedHashSet<>();
+        for(YandexScreenParser.Candidate detail:details) {
+            if(!"COMPLETED".equals(field(detail,"status"))) continue;
+            LocalDateTime started=parseLocal(field(detail,"started_at"));
+            LocalDateTime completed=parseLocal(field(detail,"completed_at"));
+            LocalDateTime evidence=completed!=null?completed:started;
+            if(evidence==null) continue;
+            int minute=evidence.getHour()*60+evidence.getMinute();
+            if(minute<slotStartMinute||minute>slotEndMinute) continue;
+            if(started!=null&&completed!=null&&!started.toLocalDate().equals(completed.toLocalDate())) continue;
+            dates.add(evidence.toLocalDate().toString());
+        }
+        return dates;
     }
 
     private static int parseMinute(String value) {

@@ -22,12 +22,12 @@ import java.util.Set;
 public final class VideoImportProcessor {
     public static final long MAX_VIDEO_BYTES = 2L * 1024L * 1024L * 1024L;
     public static final long MAX_DURATION_MS = 30L * 60L * 1000L;
-    public static final int MAX_FRAMES = 320;
+    public static final int MAX_FRAMES = 600;
     // Preserve the source phone resolution so the bundled OCR can read the small order-list text.
     private static final int MAX_BITMAP_SIDE = 1608;
-    // A 1.5 s cadence captures scrolling list rows while avoiding OCR on near-identical
-    // adjacent positions. Identical decoded frames are still OCR'd only once.
-    private static final long MIN_SAMPLE_SPACING_MS = 1500L;
+    // Short clips are sampled every 250 ms so briefly opened order cards are
+    // still likely to appear in the OCR evidence. Long clips remain bounded.
+    private static final long MIN_SAMPLE_SPACING_MS = 250L;
 
     public interface Ocr {
         TesseractOcrEngine.Recognition recognize(Bitmap bitmap) throws Exception;
@@ -67,10 +67,17 @@ public final class VideoImportProcessor {
         public final long durationMs;
         public final List<Observation> observations;
         public final int uniqueFramesOcr;
+        /** Original MP4 creation-time metadata, retained for date resolution only. */
+        public final String recordingDateMetadata;
 
         Result(String sourceSha256, long byteSize, long durationMs, List<Observation> observations, int uniqueFramesOcr) {
+            this(sourceSha256,byteSize,durationMs,observations,uniqueFramesOcr,null);
+        }
+        Result(String sourceSha256, long byteSize, long durationMs, List<Observation> observations,
+               int uniqueFramesOcr,String recordingDateMetadata) {
             this.sourceSha256=sourceSha256; this.byteSize=byteSize; this.durationMs=durationMs;
             this.observations=observations; this.uniqueFramesOcr=uniqueFramesOcr;
+            this.recordingDateMetadata=recordingDateMetadata;
         }
         public int unknownScreenCount() {
             int count=0; for(Observation row:observations) if(row.reviewRequired) count++; return count;
@@ -361,6 +368,16 @@ public final class VideoImportProcessor {
 
     private VideoImportProcessor() { }
 
+    static long samplingSpacingMs(long durationMs) {
+        if(durationMs<=0) throw new IllegalArgumentException("durationMs must be positive");
+        return Math.max(MIN_SAMPLE_SPACING_MS,(durationMs+MAX_FRAMES-1)/MAX_FRAMES);
+    }
+
+    static int estimatedFrameCount(long durationMs) {
+        long spacing=samplingSpacingMs(durationMs);
+        return (int)Math.min(MAX_FRAMES,(durationMs+spacing-1)/spacing);
+    }
+
     public static Result processFile(Context context, File video, String mimeType, String displayName,
                                      Ocr ocr, Progress progress) throws Exception {
         if (context==null || video==null || ocr==null || !video.isFile()) throw new IllegalArgumentException("Видео недоступно");
@@ -379,8 +396,9 @@ public final class VideoImportProcessor {
             String rawDuration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             long duration=rawDuration==null?0:Long.parseLong(rawDuration);
             if(duration<=0 || duration>MAX_DURATION_MS) throw new IllegalArgumentException("Поддерживаются видео длительностью до 30 минут");
-            long spacing=Math.max(MIN_SAMPLE_SPACING_MS,(duration+MAX_FRAMES-1)/MAX_FRAMES);
-            int estimated=(int)Math.min(MAX_FRAMES,(duration+spacing-1)/spacing);
+            String recordingDateMetadata=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE);
+            long spacing=samplingSpacingMs(duration);
+            int estimated=estimatedFrameCount(duration);
             int index=0;
             for(long timestamp=0;timestamp<duration && index<MAX_FRAMES;timestamp+=spacing,index++) {
                 Bitmap original=retriever.getFrameAtTime(timestamp*1000L,MediaMetadataRetriever.OPTION_CLOSEST);
@@ -404,7 +422,7 @@ public final class VideoImportProcessor {
                 if(progress!=null) progress.onProgress(index+1,estimated);
             }
             if(rows.isEmpty()) throw new IllegalArgumentException("Из видео не удалось извлечь кадры");
-            Result result=new Result(sourceHash,size,duration,rows,ocrCount);
+            Result result=new Result(sourceHash,size,duration,rows,ocrCount,recordingDateMetadata);
             complete=true;
             return result;
         } finally {

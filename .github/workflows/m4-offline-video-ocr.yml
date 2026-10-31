@@ -1,7 +1,7 @@
 name: M4 offline video OCR
 on:
   push:
-    branches: [m4/offline-video-ocr-20261029]
+    branches: [m4/offline-video-ocr-20261029, m4/forecast-video-result-screen-20261031]
   workflow_dispatch:
 permissions:
   contents: read

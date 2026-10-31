@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Native SQLite adapter for the offline count model; it has no WebView or network dependency. */
@@ -111,6 +112,117 @@ public final class AutonomousForecastStore {
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
         return id;
+    }
+
+    /**
+     * Publish a forecast trained from the confirmed application state.
+     * Stable IDs make WorkManager retries idempotent; the immutable SQL
+     * trigger makes the first publication authoritative for that date.
+     */
+    public static String publishAutomation(CourierDatabase store,
+            NativeCountModel.Prediction p, String kind, Integer profileVersion,
+            boolean partialDayIssue) throws Exception {
+        if (p == null || !p.available || !"MORNING".equals(kind)) return null;
+        SQLiteDatabase db=store.getWritableDatabase();
+        String id="native-"+kind+"-"+p.targetDate;
+        try(Cursor c=db.rawQuery("SELECT 1 FROM forecast_snapshots WHERE id=?",new String[]{id})) {
+            if(c.moveToFirst()) return id;
+        }
+        String created=nowUtc();
+        String modelVersion=NativeCountModel.VERSION+":"+p.selectedModel;
+        JSONObject payload=new JSONObject();
+        payload.put("kind",kind).put("zone",p.zone).put("timezone",p.zone)
+            .put("targetWorkMinutes",p.targetWorkMinutes).put("sourceHash",p.sourceHash)
+            .put("selectedModel",p.selectedModel).put("validationN",p.validationN)
+            .put("intervalMethod",p.intervalMethod).put("offline",true)
+            .put("partialDayIssue",partialDayIssue)
+            .put("profileVersion",profileVersion==null?JSONObject.NULL:profileVersion);
+        put(payload,"mae",p.mae);put(payload,"bias",p.bias);put(payload,"wape",p.wape);
+        put(payload,"baselineMae",p.baselineMae);put(payload,"poissonMae",p.poissonMae);
+        put(payload,"negativeBinomialMae",p.negativeBinomialMae);
+        payload.put("dispersion",p.dispersion).put("negativeBinomialAlpha",p.negativeBinomialAlpha);
+
+        ContentValues snapshot=new ContentValues();
+        snapshot.put("id",id);snapshot.put("target_date",p.targetDate);snapshot.put("created_at",created);
+        snapshot.put("model_version",modelVersion);snapshot.put("training_cutoff",p.trainingCutoff);
+        snapshot.put("center_orders",p.central);snapshot.put("lower_orders",p.lower);
+        snapshot.put("upper_orders",p.upper);snapshot.put("confidence",p.confidence);
+        snapshot.put("comparable_n",p.comparableN);snapshot.put("baseline_orders",p.baseline);
+        snapshot.put("payload_json",payload.toString());
+
+        ContentValues model=new ContentValues();
+        model.put("id",NativeCountModel.VERSION+":"+p.sourceHash);
+        model.put("version",modelVersion);model.put("trained_at",created);
+        model.put("training_cutoff",p.trainingCutoff);
+        if(p.mae!=null)model.put("mae_orders_tenths",Math.round(p.mae*10));
+        if(p.bias!=null)model.put("signed_bias_tenths",Math.round(p.bias*10));
+        if(p.baselineMae!=null)model.put("baseline_mae_tenths",Math.round(p.baselineMae*10));
+        model.put("payload_json",payload.toString());model.put("created_at",created);model.put("updated_at",created);
+
+        db.beginTransaction();
+        try {
+            db.insertWithOnConflict("model_registry",null,model,SQLiteDatabase.CONFLICT_IGNORE);
+            db.insertWithOnConflict("forecast_snapshots",null,snapshot,SQLiteDatabase.CONFLICT_IGNORE);
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+        return id;
+    }
+
+    /** Returns immutable native morning snapshots for idempotent WebView import. */
+    public static String automationSnapshots(CourierDatabase store) throws Exception {
+        JSONArray snapshots=new JSONArray(),models=new JSONArray();
+        Set<String> modelIds=new HashSet<>();
+        SQLiteDatabase db=store.getReadableDatabase();
+        try(Cursor c=db.rawQuery("SELECT id,target_date,created_at,model_version,training_cutoff,"+
+                "center_orders,lower_orders,upper_orders,confidence,comparable_n,baseline_orders,payload_json "+
+                "FROM forecast_snapshots WHERE id LIKE 'native-MORNING-%' ORDER BY target_date",null)) {
+            while(c.moveToNext()) {
+                JSONObject payload=c.isNull(11)?new JSONObject():new JSONObject(c.getString(11));
+                JSONObject row=new JSONObject();
+                row.put("id",c.getString(0)).put("date",c.getString(1)).put("createdAt",c.getString(2))
+                    .put("kind","MORNING").put("modelVersion",c.getString(3))
+                    .put("trainingCutoff",c.getString(4)).put("central",c.isNull(5)?JSONObject.NULL:c.getInt(5))
+                    .put("lower",c.isNull(6)?JSONObject.NULL:c.getInt(6))
+                    .put("upper",c.isNull(7)?JSONObject.NULL:c.getInt(7))
+                    .put("confidence",c.isNull(8)?"LOW":c.getString(8))
+                    .put("comparableN",c.isNull(9)?0:c.getInt(9))
+                    .put("baseline",c.isNull(10)?JSONObject.NULL:c.getInt(10))
+                    .put("timezone",payload.optString("timezone","Europe/Moscow"))
+                    .put("zone",payload.optString("zone",""))
+                    .put("workingMin",payload.optInt("targetWorkMinutes",0))
+                    .put("sourceHash",payload.optString("sourceHash",""))
+                    .put("selectedModel",payload.optString("selectedModel",""))
+                    .put("validationN",payload.optInt("validationN",0))
+                    .put("partialDayIssue",payload.optBoolean("partialDayIssue",false))
+                    .put("signature","native:"+payload.optString("sourceHash",""));
+                JSONArray reasons=new JSONArray();
+                reasons.put("Автономная модель на устройстве; подтверждённых аналогов: "+c.getInt(9)+".");
+                reasons.put("Экспозиция цели: "+payload.optInt("targetWorkMinutes",0)+" мин подтверждённого рабочего плана.");
+                row.put("reasons",reasons);
+                snapshots.put(row);
+
+                String modelId=NativeCountModel.VERSION+":"+payload.optString("sourceHash","");
+                if(modelIds.add(modelId)) {
+                    JSONObject model=new JSONObject();model.put("id",modelId).put("modelVersion",c.getString(3))
+                        .put("profileVersion",payload.has("profileVersion")?payload.get("profileVersion"):JSONObject.NULL)
+                        .put("zone",payload.optString("zone","")).put("trainedAt",c.getString(2))
+                        .put("trainingDataCutoff",c.getString(4)).put("trainingN",c.getInt(9))
+                        .put("type",payload.optString("selectedModel","weighted-count-baseline"))
+                        .put("features",new JSONArray().put("weekday").put("recency 35 days").put("confirmed WORK exposure"))
+                        .put("exposureDefinitionVersion","ready-or-delivering-1");
+                    JSONObject validation=new JSONObject().put("n",payload.optInt("validationN",0))
+                        .put("mae",nullableNumber(payload,"mae")).put("bias",nullableNumber(payload,"bias"))
+                        .put("wape",nullableNumber(payload,"wape")).put("baselineMAE",nullableNumber(payload,"baselineMae"))
+                        .put("method","walk-forward");
+                    model.put("validation",validation);models.put(model);
+                }
+            }
+        }
+        return new JSONObject().put("snapshots",snapshots).put("models",models).toString();
+    }
+
+    private static Object nullableNumber(JSONObject object,String key) {
+        return object.isNull(key)?JSONObject.NULL:object.opt(key);
     }
 
     /**

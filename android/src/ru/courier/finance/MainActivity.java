@@ -40,6 +40,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.Arrays;
+import java.util.Comparator;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
@@ -144,6 +147,10 @@ public final class MainActivity extends Activity {
         applyAppearance(darkTheme);
         root.requestApplyInsets();
         web.loadUrl(ORIGIN + "/assets/index.html");
+        // WorkManager persists this schedule across force-stop/reboot. Its
+        // morning execution is best-effort; Web startup repairs stale dates.
+        ForecastAutomation.scheduleDaily(this,storedState());
+        ForecastAutomation.enqueueEvaluation(this);
         if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> handleBack());
     }
 
@@ -269,12 +276,55 @@ public final class MainActivity extends Activity {
                     if(!factMirrorDatabase.matchesLegacy(value))return false;
                     if(!preferences.edit().putString("state",value).commit())
                         Log.w("CourierSQLite","Legacy backup update failed; SQLite commit retained");
+                    ForecastAutomation.scheduleDaily(MainActivity.this,value);
+                    ForecastAutomation.enqueueEvaluation(MainActivity.this);
                     return true;
                 }
                 boolean saved = preferences.edit().putString("state", value).commit();
-                if (saved) mirrorFacts(value);
+                if (saved) {
+                    mirrorFacts(value);
+                    ForecastAutomation.scheduleDaily(MainActivity.this,value);
+                    ForecastAutomation.enqueueEvaluation(MainActivity.this);
+                }
                 return saved;
             } catch (Exception ignored) { return false; }
+        }
+        @JavascriptInterface public String pendingNativeForecasts() {
+            try { return AutonomousForecastStore.automationSnapshots(factMirrorDatabase); }
+            catch(Exception error) {
+                Log.e("CourierForecast","Native snapshot handoff failed: "+error.getClass().getSimpleName());
+                return "{\"snapshots\":[],\"models\":[]}";
+            }
+        }
+        @JavascriptInterface public String pendingVideoResults() {
+            JSONArray pending=new JSONArray();long total=0;
+            try {
+                File directory=new File(getFilesDir(),"video-import-results").getCanonicalFile();
+                File[] files=directory.listFiles((dir,name)->name.matches("[0-9a-f]{64}\\.json"));
+                if(files==null)return pending.toString();
+                Arrays.sort(files,Comparator.comparingLong(File::lastModified));
+                for(File file:files) {
+                    if(pending.length()>=10||!file.isFile()||file.length()<=0||file.length()>1_500_000L
+                            ||total+file.length()>5_000_000L)continue;
+                    File checked=file.getCanonicalFile();
+                    if(!checked.getPath().startsWith(directory.getPath()+File.separator))continue;
+                    byte[] bytes=java.nio.file.Files.readAllBytes(checked.toPath());
+                    JSONObject result=new JSONObject(new String(bytes,StandardCharsets.UTF_8));
+                    JSONObject item=new JSONObject().put("sourceSha256",file.getName().substring(0,64))
+                        .put("response",result.optString("response","")).put("message",result.optString("message",""));
+                    if(item.optString("response").isEmpty())continue;
+                    pending.put(item);total+=file.length();
+                }
+            }catch(Exception error){Log.e("CourierM4","Pending video result read failed: "+error.getClass().getSimpleName());}
+            return pending.toString();
+        }
+        @JavascriptInterface public boolean acknowledgeVideoImport(String sourceSha256) {
+            if(sourceSha256==null||!sourceSha256.matches("[0-9a-f]{64}"))return false;
+            try {
+                File root=new File(getFilesDir(),"video-import-results").getCanonicalFile();
+                File result=new File(root,sourceSha256+".json").getCanonicalFile();
+                return result.getPath().startsWith(root.getPath()+File.separator)&&(!result.exists()||result.delete());
+            }catch(Exception ignored){return false;}
         }
         @JavascriptInterface public void ready() { runOnUiThread(() -> { if (launch != null) { root.removeView(launch); launch = null; } }); }
         @JavascriptInterface public void importVideo() {

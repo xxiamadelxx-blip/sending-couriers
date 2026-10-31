@@ -84,13 +84,16 @@ public final class M4DeviceProbeActivity extends Activity {
                 throw new AssertionError("local evidence/candidate persistence failed");
             M4ForecastFactWriter.ImportResult forecast=M4ForecastFactWriter.importFacts(this,result);
             if(!forecast.accepted || forecast.duplicate || forecast.orderCount!=33 || forecast.forecastDay==null
-                    || forecast.forecastDay.getInt("orders")!=33)
+                    || forecast.forecastDay.getInt("orders")!=33 || forecast.visibleOrderRows!=33
+                    || !forecast.rawComplete || forecast.forecastDay.getBoolean("workConfirmed")
+                    || forecast.forecastDay.getJSONArray("intervals").length()!=0)
                 throw new AssertionError("forecast writer did not accept the exact synthetic order: "+forecast.message);
+            verifyPartialAggregate();
             String date=forecast.forecastDay.getString("date");
             boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
                 .putString("source",forecast.source).putString("date",date).commit();
             if(!saved) throw new AssertionError("restart verification marker could not be saved");
-            show("M4 FORECAST WRITE PASS\nSynthetic fixture only\n33 orders · 330000 kopecks\nForecast facts saved; restart check pending.");
+            show("M4 FACT WRITER PASS\n33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
         } catch(Throwable error) {
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
@@ -112,10 +115,41 @@ public final class M4DeviceProbeActivity extends Activity {
             if(orders[0]!=33||orders[1]!=330000||forecast[0]!=1||forecast[1]!=33||!"mirrored".equals(status))
                 throw new AssertionError("persisted forecast mismatch: orderRows="+orders[0]+", reward="+orders[1]
                     +", forecastRows="+forecast[0]+", forecastOrders="+forecast[1]+", sourceStatus="+status);
+            long[] work=counts(db,"SELECT COUNT(*),COALESCE(SUM(active_minutes),0) FROM work_intervals WHERE source_id=? AND date=? AND state='WORK'",source,date);
+            if(work[0]!=0) throw new AssertionError("delivery intervals leaked into working exposure: "+work[0]);
             show("M4 FORECAST RESTART PASS\nSQLite survived force-stop\n33 orders · ₽3,300 · forecast count 33\nSource status: mirrored");
         } catch(Throwable error) {
             show("M4 FORECAST RESTART FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(store!=null) store.close(); }
+    }
+
+    private void verifyPartialAggregate() throws Exception {
+        String slot="Слот: 2900,00 ₽\n339533360\n29 заказов · 10 км\n"
+            +"Начало\n2026.10.17 07:30\nЗавершение\n2026.10.17 22:00";
+        StringBuilder rows=new StringBuilder("Яндекс Про\nЗаказы\n");
+        for(int i=0;i<12;i++) rows.append(String.format(java.util.Locale.ROOT,"%02d:%02d 100,00 ₽ >\n",10+i,10));
+        YandexScreenParser.Result slotParsed=YandexScreenParser.parse(slot);
+        YandexScreenParser.Result rowsParsed=YandexScreenParser.parse(rows.toString());
+        java.util.List<VideoImportProcessor.Observation> observations=java.util.Arrays.asList(
+            new VideoImportProcessor.Observation(0,0,"partial-slot",slot,1f,slotParsed,null),
+            new VideoImportProcessor.Observation(1,1000,"partial-rows",rows.toString(),1f,rowsParsed,null));
+        String hash=java.util.UUID.randomUUID().toString().replace("-","")+"00000000000000000000000000000000";
+        VideoImportProcessor.Result partial=new VideoImportProcessor.Result(hash,1000,2000,observations,2);
+        M4ForecastFactWriter.ImportResult saved=M4ForecastFactWriter.importFacts(this,partial);
+        if(!saved.accepted||saved.duplicate||saved.orderCount!=29||saved.visibleOrderRows!=12||saved.rawComplete
+                ||saved.forecastDay.getInt("orders")!=29||saved.forecastDay.getJSONArray("orderEvidence").length()!=12
+                ||saved.forecastDay.getBoolean("workConfirmed")||saved.forecastDay.getJSONArray("intervals").length()!=0)
+            throw new AssertionError("partial aggregate contract failed: "+saved.message);
+        CourierDatabase store=new CourierDatabase(this);
+        SQLiteDatabase db=store.getReadableDatabase();
+        try {
+            String source="video:"+hash;
+            long[] raw=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM orders WHERE source_id=?",source);
+            long[] aggregate=counts(db,"SELECT COUNT(*),COALESCE(SUM(order_count),0) FROM aggregate_order_counts WHERE source_id=?",source);
+            long[] work=counts(db,"SELECT COUNT(*),COALESCE(SUM(active_minutes),0) FROM work_intervals WHERE source_id=? AND state='WORK'",source);
+            if(raw[0]!=12||raw[1]!=120000||aggregate[0]!=1||aggregate[1]!=29||work[0]!=0)
+                throw new AssertionError("partial SQLite rows mismatch: RAW="+raw[0]+", aggregate="+aggregate[1]+", work="+work[0]);
+        } finally { db.close(); store.close(); }
     }
 
     private void verifyRealAfterRestart() {

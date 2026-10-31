@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v10";
+    public static final String VERSION = "yandex-pro-video-extract-v12";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -141,6 +141,9 @@ public final class YandexScreenParser {
     private static final Pattern HOCR_BBOX=Pattern.compile("(?:^|\\s)bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)(?:[;\\s]|$)");
     private static final Pattern HOCR_TIME_WORD=Pattern.compile("^((?:[01]?\\d|2[0-3])[:.]([0-5]\\d))\\d?$");
     private static final Pattern HOCR_DECIMAL_MONEY=Pattern.compile("(?<!\\d)\\d+[.,]\\d{2}(?!\\d)");
+    private static final Pattern SLOT_TIME_RANGE=Pattern.compile(
+        "(?<!\\d)([01]?\\d|2[0-3])[:.]([0-5]\\d)\\s*(?:[—–−]|-|\\bto\\b)\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)(?!\\d)",
+        Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
 
     private YandexScreenParser() { }
 
@@ -188,8 +191,8 @@ public final class YandexScreenParser {
 
         List<Candidate> candidates=new ArrayList<>();
         if(screen==ScreenType.ORDERS) {
-            addOrderDetail(lines,candidates);
-            String slotId=addSlotDetail(lines,candidates);
+            addOrderDetail(lines,hocrText,candidates);
+            String slotId=addSlotDetail(lines,hocrText,candidates);
             int before=candidates.size();
             addOrderRowsFromHocr(hocrText,slotId,candidates);
             if(candidates.size()==before) addOrderRows(lines,slotId,candidates);
@@ -340,7 +343,7 @@ public final class YandexScreenParser {
         return new Result(type,review,reason,Collections.<Candidate>emptyList());
     }
 
-    private static void addOrderDetail(String[] lines,List<Candidate> out) {
+    private static void addOrderDetail(String[] lines,String hocr,List<Candidate> out) {
         if(!containsLine(lines,"номер заказа")&&!containsLine(lines,"коэффициент спроса")) return;
         String orderNumber=valueAfter(lines,"номер\\s+заказа");
         String total=valueAfter(lines,"итого");
@@ -352,14 +355,16 @@ public final class YandexScreenParser {
         CandidateBuilder candidate=new CandidateBuilder("ORDER_DETAIL",0.92f);
         addText(candidate,"order_number",extractOrderId(orderNumber));
         addText(candidate,"status",normalizeStatus(status));
-        addMoney(candidate,"total_kopecks",parseLabeledMoney(total));
+        Long totalKopecks=parseLabeledMoney(total);
+        if(totalKopecks==null) totalKopecks=hocrOrderDetailTotal(hocr);
+        addMoney(candidate,"total_kopecks",totalKopecks);
         addDecimal(candidate,"demand_coefficient",parseDecimal(coefficient));
         addDateTime(candidate,"started_at",parseDateTime(started));
         addDateTime(candidate,"completed_at",parseDateTime(completed));
         addIfPresent(out,candidate);
     }
 
-    private static String addSlotDetail(String[] lines,List<Candidate> out) {
+    private static String addSlotDetail(String[] lines,String hocr,List<Candidate> out) {
         int headerIndex=slotHeaderIndex(lines);
         if(!containsLine(lines,"слот")&&headerIndex<0) return null;
         String header=headerIndex>=0?lines[headerIndex]:valueAfter(lines,"слот");
@@ -370,20 +375,136 @@ public final class YandexScreenParser {
         String slotId=slotId(lines);
         Long amount=parseLabeledMoney(header);
         if(amount==null) amount=parseLabeledMoney(slotTitleAmount(header));
+        String orderTotalText=valueAfterAnywhere(lines,"заказы");
+        Long orderTotal=parseLabeledMoney(orderTotalText);
+        if(orderTotal==null) orderTotal=hocrMoneyAlignedToLabel(hocr,"заказы");
+        Long tips=hocrMoneyAlignedToLabel(hocr,"чаевые");
         String orderCount=parseSlotOrderCount(lines);
         String distanceKm=parseDistanceKm(lines);
 
         CandidateBuilder candidate=new CandidateBuilder("SLOT_DETAIL",0.90f);
         addText(candidate,"slot_id",slotId);
         addMoney(candidate,"slot_total_kopecks",amount);
+        addMoney(candidate,"slot_order_total_kopecks",orderTotal);
+        addMoney(candidate,"slot_tips_kopecks",tips);
         addInteger(candidate,"slot_order_count",orderCount);
         addDecimal(candidate,"distance_km",distanceKm);
         addText(candidate,"slot_type",normalizeSlotType(type));
         addText(candidate,"status",normalizeStatus(status));
         addDateTime(candidate,"started_at",parseDateTime(started));
         addDateTime(candidate,"completed_at",parseDateTime(completed));
+        String[] slotRange=slotTimeRange(lines,headerIndex);
+        if(slotRange!=null) {
+            candidate.add("slot_start_time","time",slotRange[0]);
+            candidate.add("slot_end_time","time",slotRange[1]);
+        }
         addIfPresent(out,candidate);
         return slotId;
+    }
+
+    /**
+     * Yandex's summary card often displays only "07:30 — 22:00", without a
+     * date. Preserve those clock values as a range; the fact writer resolves
+     * the calendar date from explicit evidence before importing anything.
+     */
+    private static String[] slotTimeRange(String[] lines,int headerIndex) {
+        int start=headerIndex>=0?headerIndex:0;
+        int end=Math.min(lines.length,start+8);
+        for(int i=start;i<end;i++) {
+            String text=lines[i];
+            if(i+1<end) text=text+" "+lines[i+1];
+            Matcher range=SLOT_TIME_RANGE.matcher(text);
+            if(!range.find()) continue;
+            return new String[] {
+                two(range.group(1))+":"+range.group(2),
+                two(range.group(3))+":"+range.group(4)
+            };
+        }
+        return null;
+    }
+
+    /** Recover currency amounts whose ruble glyph was corrupted by OCR. */
+    private static Long hocrMoneyAlignedToLabel(String hocr,String labelText) {
+        HocrPage page=parseHocrPage(hocr);
+        if(page==null||page.width()<=0||page.height()<=0) return null;
+        String label=normalize(labelText);
+        HocrWord labelWord=null;
+        for(HocrWord word:parseHocrWords(hocr))
+            if(normalize(word.text).equals(label)) { labelWord=word; break; }
+        if(labelWord==null) return null;
+        HocrWord best=null;Long bestAmount=null;int bestDistance=Integer.MAX_VALUE;
+        for(HocrWord word:parseHocrWords(hocr)) {
+            int x=word.centerX()-page.left,y=word.centerY()-page.top;
+            if(x<page.width()*0.55||word.centerX()<=labelWord.right) continue;
+            int distance=Math.abs(word.centerY()-labelWord.centerY());
+            int tolerance=Math.max(10,(word.height()+labelWord.height())/2+8);
+            Long amount=parseHocrMoneyToken(word.text);
+            if(amount==null||distance>tolerance) continue;
+            if(distance<bestDistance) { best=word;bestAmount=amount;bestDistance=distance; }
+        }
+        return best==null?null:bestAmount;
+    }
+
+    /** On an order-detail screen the payout is the first right-column money value below the address block. */
+    private static Long hocrOrderDetailTotal(String hocr) {
+        HocrPage page=parseHocrPage(hocr);
+        if(page==null||page.width()<=0||page.height()<=0) return null;
+        HocrWord best=null;Long bestAmount=null;
+        for(HocrWord word:parseHocrWords(hocr)) {
+            int x=word.centerX()-page.left,y=word.centerY()-page.top;
+            if(x<page.width()*0.60||y<page.height()*0.18||y>page.height()*0.43) continue;
+            Long amount=parseHocrMoneyToken(word.text);
+            if(amount!=null&&(best==null||word.centerY()<best.centerY())) { best=word;bestAmount=amount; }
+        }
+        return best==null?null:bestAmount;
+    }
+
+    private static Long parseHocrMoneyToken(String value) {
+        if(value==null) return null;
+        String numeric=value.replaceAll("[^0-9,.+−-]","");
+        if(!numeric.matches("[-+−]?(?:\\d{1,3}(?:[ ,\\u00a0\\u202f]\\d{3})+|\\d+)[.,]\\d{2}")) {
+            // In money-label rows Tesseract can append the ruble icon as one
+            // trailing digit (for example, "100,002"). Keep the two decimals
+            // and discard only that single OCR currency glyph.
+            Matcher ocrCurrency=Pattern.compile("^([-+−]?(?:\\d{1,3}(?:[ ,\\u00a0\\u202f]\\d{3})+|\\d+)[.,]\\d{2})\\d$").matcher(numeric);
+            if(!ocrCurrency.matches()) return null;
+            numeric=ocrCurrency.group(1);
+        }
+        return toKopecks(numeric);
+    }
+
+    private static HocrPage parseHocrPage(String hocr) {
+        if(hocr==null||hocr.trim().isEmpty()) return null;
+        Matcher tags=HOCR_START_TAG.matcher(hocr);
+        while(tags.find()) {
+            String classes=attribute(tags.group(1),"class");
+            if(classes==null||!classes.matches(".*\\bocr_page\\b.*")) continue;
+            String title=attribute(tags.group(1),"title");
+            Matcher bbox=HOCR_BBOX.matcher(title==null?"":title);
+            if(bbox.find()) return new HocrPage(parseInt(bbox.group(1)),parseInt(bbox.group(2)),
+                parseInt(bbox.group(3)),parseInt(bbox.group(4)));
+        }
+        return null;
+    }
+
+    private static List<HocrWord> parseHocrWords(String hocr) {
+        List<HocrWord> words=new ArrayList<>();
+        if(hocr==null||hocr.trim().isEmpty()) return words;
+        Matcher spans=HOCR_WORD_SPAN.matcher(hocr);
+        while(spans.find()) {
+            String classes=attribute(spans.group(1),"class");
+            if(classes==null||!classes.matches(".*\\bocrx_word\\b.*")) continue;
+            String title=attribute(spans.group(1),"title");
+            Matcher bbox=HOCR_BBOX.matcher(title==null?"":title);
+            if(!bbox.find()) continue;
+            int confidence=0;
+            Matcher confidenceMatcher=Pattern.compile("(?:^|\\s)x_wconf\\s+(\\d+)(?:\\s|$)").matcher(title);
+            if(confidenceMatcher.find()) confidence=parseInt(confidenceMatcher.group(1));
+            String word=decodeHocrText(spans.group(2).replaceAll("<[^>]*>"," ")).trim();
+            if(!word.isEmpty()) words.add(new HocrWord(word,parseInt(bbox.group(1)),parseInt(bbox.group(2)),
+                parseInt(bbox.group(3)),parseInt(bbox.group(4)),confidence));
+        }
+        return words;
     }
 
     private static void addOrderRows(String[] lines,String slotId,List<Candidate> out) {

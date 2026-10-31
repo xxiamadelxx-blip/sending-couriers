@@ -84,18 +84,56 @@ window.receiveForecastImport = text => { if(view!=='forecast')openForecast(); fo
 window.receiveVideoImport = raw => {
   try {
     const result = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
-    if (!result.ok) notify(result.error || 'Не удалось обработать видео.');
+    const acknowledge=()=>{if(result.sourceSha256)Native?.acknowledgeVideoImport?.(result.sourceSha256);};
+    if (!result.ok) { notify(result.error || 'Не удалось обработать видео.'); acknowledge(); }
     else if (result.forecastFactsAccepted && result.forecastDay) {
       const source=result.forecastSource||'video_import';
       const forecast=importDays(state.forecast,[result.forecastDay],source,new Date().toISOString());
       persist({...state,forecast},true);
+      acknowledge();
       if (view === 'forecast') forecastScreen?.refresh?.();
       else openForecast('today');
       notify(`Видео импортировано: ${result.importedOrderCount} заказов. Прогноз открыт, данные сохранены.`);
-    } else if (result.duplicate) notify(result.forecastFactMessage||'Это видео уже обработано.');
-    else notify(result.forecastFactMessage||`Разобрано кадров: ${result.frames}; извлечённые факты не прошли сверку и не записаны в прогноз.`);
+    } else if (result.duplicate) { notify(result.forecastFactMessage||'Это видео уже обработано.'); acknowledge(); }
+    else { notify(result.forecastFactMessage||`Разобрано кадров: ${result.frames}; извлечённые факты не прошли сверку и не записаны в прогноз.`); acknowledge(); }
   } catch { notify('Импорт видео завершился без читаемого результата.'); }
 };
+window.receivePendingVideoResults = raw => {
+  try {
+    const reports=JSON.parse(typeof raw==='string'?raw:JSON.stringify(raw));
+    if(!Array.isArray(reports))return;
+    for(const report of reports) {
+      const result=JSON.parse(report.response);
+      result.sourceSha256=result.sourceSha256||report.sourceSha256;
+      window.receiveVideoImport(result);
+    }
+  } catch(error) { notify(`Не удалось восстановить результат импорта видео: ${error.message}`); }
+};
+window.receiveNativeForecasts = raw => {
+  try {
+    if(!state)return;
+    const incoming=JSON.parse(typeof raw==='string'?raw:JSON.stringify(raw));
+    const snapshots=Array.isArray(incoming?.snapshots)?incoming.snapshots:[];
+    const models=Array.isArray(incoming?.models)?incoming.models:[];
+    const snapshotIds=new Set(state.forecast.snapshots.map(s=>s.id));
+    const modelIds=new Set(state.forecast.models.map(m=>m.id));
+    const addedSnapshots=snapshots.filter(s=>s&&typeof s.id==='string'&&!snapshotIds.has(s.id));
+    const addedModels=models.filter(m=>m&&typeof m.id==='string'&&!modelIds.has(m.id));
+    if(!addedSnapshots.length&&!addedModels.length)return;
+    const forecast={...state.forecast,snapshots:[...state.forecast.snapshots,...addedSnapshots],models:[...state.forecast.models,...addedModels]};
+    persist({...state,forecast},true);
+    if(view==='forecast')forecastScreen?.refresh?.();
+    else if(view==='summary')summary();
+  } catch(error) { notify(`Не удалось загрузить локальный прогноз: ${error.message}`); }
+};
+function refreshNativeForecasts() {
+  try {
+    const imports=Native?.pendingVideoResults?.();if(imports)window.receivePendingVideoResults(imports);
+    const pending=Native?.pendingNativeForecasts?.();if(pending)window.receiveNativeForecasts(pending);
+  }
+  catch(error) { console.warn('Native forecast handoff failed:',error?.message??error); }
+}
+window.refreshNativeForecasts=refreshNativeForecasts;
 window.receiveWeather = text => {
   try {
     const p=weatherLocation(state.forecast);if(!p.weatherCity)return;
@@ -760,6 +798,7 @@ try {
     try { persist({...state,forecast:evaluateForecasts(snapshotIfPossible(syncSlots(state.forecast,state.entries)))},true); }
     catch(error) { notify(error.message); }
   }
+  refreshNativeForecasts();
 } catch (error) {
   app.innerHTML = `<div class="fatal"><h1>Не удалось открыть данные</h1><p>${esc(error.message)}</p><p>Сохранённые записи не изменены. Можно восстановить резервную копию JSON.</p><button id="recover" class="button primary" type="button">Открыть резервную копию</button><input id="recoverFile" type="file" accept=".json,application/json" hidden></div>`;
   $('#recover').addEventListener('click', () => { if (Native) Native.importData(); else $('#recoverFile').click(); });
@@ -768,4 +807,4 @@ try {
 Native?.ready();
 
 // Refresh date boundaries on return from the background; never promise an exact background alarm.
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{refreshNativeForecasts();persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});

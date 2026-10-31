@@ -22,6 +22,27 @@ public final class YandexScreenParserTest {
         assertTrue(detail.toJson().contains("\"total_kopecks\":{\"type\":\"integer\",\"value\":12345}"));
     }
 
+    @Test public void keepsOrderCardsShownSlowlyAndBrieflyAtDifferentFrameRates() {
+        String slowCard="Заказ\nИтого\n100,00 ₽\nДетали\nСтатус\nЗавершён\n"
+            +"Коэффициент спроса\n1.0\nНомер заказа\n123456-1234567\n"
+            +"Начало\n2026.10.18 10:30\nЗавершение\n2026.10.18 10:38";
+        String briefCard="Заказ\nИтого\n100,00 ₽\nДетали\nСтатус\nЗавершён\n"
+            +"Коэффициент спроса\n1.0\nНомер заказа\n765432-7654321\n"
+            +"Начало\n2026.10.18 10:39\nЗавершение\n2026.10.18 10:41";
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        YandexScreenParser.Result slow=YandexScreenParser.parse(slowCard);
+        YandexScreenParser.Result brief=YandexScreenParser.parse(briefCard);
+        for(int i=0;i<8;i++)
+            observations.add(new VideoImportProcessor.Observation(i,i*250L,"slow-frame-"+i,slowCard,1f,slow,null));
+        observations.add(new VideoImportProcessor.Observation(8,2000L,"brief-frame",briefCard,1f,brief,null));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,2250,observations,9);
+        assertEquals(2,video.uniqueCandidateCount("ORDER_DETAIL"));
+        java.util.Set<String> orderNumbers=new java.util.HashSet<>();
+        for(YandexScreenParser.Candidate detail:video.uniqueCandidates())
+            if("ORDER_DETAIL".equals(detail.candidateType)) orderNumbers.add(field(detail,"order_number"));
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("123456-1234567","765432-7654321")),orderNumbers);
+    }
+
     @Test public void extractsSlotAndVisibleOrderRowsWithoutAddingUnseenOrders() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "Слот: 900,00 ₽\n339533360\n17:59 — 22:00\n9 заказов · 12,33 км\nЗаказы\n900,00 ₽\n"
@@ -259,6 +280,82 @@ public final class YandexScreenParserTest {
         assertEquals("9",field(slot,"slot_order_count"));
     }
 
+    @Test public void extractsOrderSubtotalAndTipsFromHocrWhenCurrencyGlyphsAreCorrupted() {
+        String text="Слот: 2970,00P\n341228517\n07:30 — 22:00\n29 заказов\n"
+            +"Итого 2970,00 P\nЧаевые 70,00 P\nЗаказы 2900,00? м\n"
+            +"Тип слота Плановый\nНачало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
+        String hocr="<div class='ocr_page' title='image \"screen.png\"; bbox 0 0 720 1608; ppageno 0'>"
+            +"<span class='ocr_line'>"+hocrWord("Чаевые",31,602,127,626)+hocrWord("70,00",568,602,637,626)+"</span>"
+            +"<span class='ocr_line'>"+hocrWord("Заказы",31,732,124,756)+hocrWord("2900,002",503,732,638,756)+"</span>"
+            +"</div>";
+        YandexScreenParser.Candidate slot=find(YandexScreenParser.parse(text,hocr),"SLOT_DETAIL");
+        assertNotNull(slot);
+        assertEquals("297000",field(slot,"slot_total_kopecks"));
+        assertEquals("290000",field(slot,"slot_order_total_kopecks"));
+        assertEquals("7000",field(slot,"slot_tips_kopecks"));
+    }
+
+    @Test public void extractsOrderDetailAmountWhenOcrAddsCurrencyDigitAndLabelNoise() {
+        String text="Заказ\nИтого 100,002 м\nДетали\nСтатус Завершён\nКоэффициент спроса 1.0\n"
+            +"Номер заказа 261017-1234567\nНачало 2026.10.17 11:12\nЗавершение 2026.10.17 11:20";
+        String hocr="<div class='ocr_page' title='image \"screen.png\"; bbox 0 0 720 1608; ppageno 0'>"
+            +"<span class='ocr_line'>"+hocrWord("Итого",31,519,107,543)+hocrWord("100,002",524,519,638,543)+"</span>"
+            +"</div>";
+        YandexScreenParser.Candidate detail=find(YandexScreenParser.parse(text,hocr),"ORDER_DETAIL");
+        assertNotNull(detail);
+        assertEquals("10000",field(detail,"total_kopecks"));
+    }
+
+    @Test public void reconstructsOneMissingSameMinuteListRowOnlyWhenCompletedDetailsReconcile() throws Exception {
+        String slot="Слот: 300,00 ₽\n341234567\n3 заказа · 3 км\nЗаказы 300,00 ₽\n"
+            +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
+        String list="Яндекс Про\nЗаказы\n11:20 100,00 ₽ >\n11:40 100,00 ₽ >";
+        VideoImportProcessor.Result video=videoWith(slot,list,
+            detailCard("261017-1111111","10:55","11:20","100,00 ₽"),
+            detailCard("261017-2222222","10:58","11:20","100,00 ₽"),
+            detailCard("261017-3333333","11:25","11:40","100,00 ₽"));
+        Object facts=extractFacts(video);
+        assertEquals(3,((java.util.List<?>)fact(facts,"orders")).size());
+        assertEquals(3,((java.util.List<?>)fact(facts,"deliveries")).size());
+        assertEquals(30000,((Long)fact(facts,"rowAmountKopecks")).longValue());
+        assertEquals(1,((Integer)fact(facts,"recoveredOrderRows")).intValue());
+    }
+
+    @Test public void refusesMissingRowRecoveryWhenDetailSubtotalDoesNotReconcile() throws Exception {
+        String slot="Слот: 300,00 ₽\n341234567\n3 заказа · 3 км\nЗаказы 300,00 ₽\n"
+            +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
+        String list="Яндекс Про\nЗаказы\n11:20 100,00 ₽ >\n11:40 100,00 ₽ >";
+        VideoImportProcessor.Result video=videoWith(slot,list,
+            detailCard("261017-1111111","10:55","11:20","100,00 ₽"),
+            detailCard("261017-2222222","10:58","11:20","100,00 ₽"),
+            detailCard("261017-3333333","11:25","11:40","99,00 ₽"));
+        try {
+            extractFacts(video);
+            throw new AssertionError("expected strict detail subtotal rejection");
+        } catch(java.lang.reflect.InvocationTargetException expected) {
+            assertTrue(expected.getCause() instanceof IllegalArgumentException);
+        }
+    }
+
+    @Test public void refusesSlotWhenOrderSubtotalAndTipsDoNotMatchDisplayedGross() throws Exception {
+        String slot="Слот: 110,00 ₽\n341234567\n1 заказ\nЗаказы 100,00 ₽\n"
+            +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
+        String hocr="<div class='ocr_page' title='image \"screen.png\"; bbox 0 0 720 1608; ppageno 0'>"
+            +"<span class='ocr_line'>"+hocrWord("Чаевые",31,602,127,626)+hocrWord("20,00",568,602,637,626)+"</span>"
+            +"</div>";
+        String list="Яндекс Про\nЗаказы\n18:00 100,00 ₽ >";
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        observations.add(observation(0,"slot",slot,hocr)); observations.add(observation(1,"list",list));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("a".repeat(64),1,5000,observations,2);
+        try {
+            extractFacts(video);
+            throw new AssertionError("expected order subtotal plus tips mismatch rejection");
+        } catch(java.lang.reflect.InvocationTargetException expected) {
+            assertTrue(expected.getCause() instanceof IllegalArgumentException);
+            assertTrue(expected.getCause().getMessage().contains("чаевых"));
+        }
+    }
+
     @Test public void removesOneFrameTimeReversalWhenAnotherRealRowHasOnlyTwoFrames() {
         String slot="Слот: 300,00 ₽\n341681811\n3 заказа · 3 км\n"
             +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00";
@@ -337,6 +434,59 @@ public final class YandexScreenParserTest {
         assertTrue(result.candidates.isEmpty());
     }
 
+    @Test public void extractsTimeOnlySlotRangeWithoutInventingCalendarDates() {
+        YandexScreenParser.Result result=YandexScreenParser.parse(
+            "Слот: 3300,00 ₽\n341681811\n07:30 — 22:00\n33 заказа · 34,43 км\n"
+                +"Заказы\n10:38 100,00 ₽");
+        YandexScreenParser.Candidate slot=find(result,"SLOT_DETAIL");
+        assertNotNull(slot);
+        assertEquals("07:30",field(slot,"slot_start_time"));
+        assertEquals("22:00",field(slot,"slot_end_time"));
+        assertNull(field(slot,"started_at"));
+        assertNull(field(slot,"completed_at"));
+        assertEquals(1,count(result,"ORDER_LIST_ROW"));
+    }
+
+    @Test public void samplesShortVideosOftenEnoughForBriefOrderCards() {
+        assertEquals(250L,VideoImportProcessor.samplingSpacingMs(30_000L));
+        assertEquals(120,VideoImportProcessor.estimatedFrameCount(30_000L));
+        assertEquals(250L,VideoImportProcessor.samplingSpacingMs(81_407L));
+        assertEquals(326,VideoImportProcessor.estimatedFrameCount(81_407L));
+        assertEquals(VideoImportProcessor.MAX_FRAMES,VideoImportProcessor.estimatedFrameCount(30L*60L*1000L));
+        assertEquals(3_000L,VideoImportProcessor.samplingSpacingMs(30L*60L*1000L));
+    }
+
+    @Test public void resolvesPreviousSlotDayFromVideoTimestampAndLaterVisibleOrderTimes() {
+        M4VideoDateResolver.Resolution resolution=M4VideoDateResolver.resolve(
+            "2026-10-18T21:36:30.000000Z","07:30","22:00",
+            java.util.Arrays.asList("10:38","21:57"));
+        assertNotNull(resolution);
+        assertEquals("2026-10-18",resolution.date.toString());
+        assertEquals(450,resolution.startMinute);
+        assertEquals(1320,resolution.endMinute);
+        assertTrue(resolution.previousDay);
+        assertEquals("2026-10-19T00:36",resolution.recordingLocal.toString().substring(0,16));
+    }
+
+    @Test public void resolvesSameDayOnlyWhenVideoWasRecordedSoonAfterSlotEnd() {
+        M4VideoDateResolver.Resolution resolution=M4VideoDateResolver.resolve(
+            "2026-10-18T20:30:00Z","07:30","22:00",
+            java.util.Arrays.asList("10:38","21:57"));
+        assertNotNull(resolution);
+        assertEquals("2026-10-18",resolution.date.toString());
+        assertFalse(resolution.previousDay);
+    }
+
+    @Test public void leavesTimeOnlySlotUnresolvedWhenDateEvidenceIsAmbiguous() {
+        assertNull(M4VideoDateResolver.resolve(
+            "2026-10-18T15:00:00Z","07:30","22:00",
+            java.util.Arrays.asList("10:38","17:57")));
+        assertNull(M4VideoDateResolver.resolve(
+            null,"07:30","22:00",java.util.Arrays.asList("10:38","21:57")));
+        assertNull(M4VideoDateResolver.resolve(
+            "2026-10-18 21:36:30","07:30","22:00",java.util.Arrays.asList("10:38","21:57")));
+    }
+
     private static YandexScreenParser.Candidate find(YandexScreenParser.Result result,String type) {
         for(YandexScreenParser.Candidate candidate:result.candidates)
             if(type.equals(candidate.candidateType)) return candidate;
@@ -368,6 +518,34 @@ public final class YandexScreenParserTest {
 
     private static VideoImportProcessor.Observation observation(int index,String id,String text) {
         return new VideoImportProcessor.Observation(index,index*500L,id,text,1f,YandexScreenParser.parse(text),null);
+    }
+
+    private static VideoImportProcessor.Observation observation(int index,String id,String text,String hocr) {
+        return new VideoImportProcessor.Observation(index,index*500L,id,text,1f,YandexScreenParser.parse(text,hocr),null);
+    }
+
+    private static VideoImportProcessor.Result videoWith(String slot,String list,String... details) {
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        observations.add(observation(0,"slot",slot)); observations.add(observation(1,"list",list));
+        for(int i=0;i<details.length;i++) observations.add(observation(i+2,"detail-"+i,details[i]));
+        return new VideoImportProcessor.Result("a".repeat(64),1,5000,observations,observations.size());
+    }
+
+    private static String detailCard(String id,String start,String end,String total) {
+        return "Заказ\nИтого "+total+"\nДетали\nСтатус Завершён\nКоэффициент спроса 1.0\n"
+            +"Номер заказа "+id+"\nНачало 2026.10.17 "+start+"\nЗавершение 2026.10.17 "+end;
+    }
+
+    private static Object extractFacts(VideoImportProcessor.Result video) throws Exception {
+        java.lang.reflect.Method method=M4ForecastFactWriter.class.getDeclaredMethod("extract",VideoImportProcessor.Result.class);
+        method.setAccessible(true);
+        return method.invoke(null,video);
+    }
+
+    private static Object fact(Object facts,String name) throws Exception {
+        java.lang.reflect.Field field=facts.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(facts);
     }
 
     private static String field(YandexScreenParser.Candidate candidate,String name) {
