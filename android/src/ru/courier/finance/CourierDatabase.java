@@ -28,7 +28,7 @@ import org.json.JSONObject;
  */
 public final class CourierDatabase extends SQLiteOpenHelper {
     public static final String FILE_NAME = "courier_facts_v1.db";
-    public static final int VERSION = 5;
+    public static final int VERSION = 6;
     private final Context appContext;
 
     public CourierDatabase(Context context) {
@@ -46,6 +46,7 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         applySchema(db, "www/m2_views_v2.sql");
         applySchema(db, "www/m3_schema_v1.sql");
         installM5Views(db);
+        installM7SyncSchema(db);
     }
 
     private void applySchema(SQLiteDatabase db, String asset) {
@@ -100,19 +101,38 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         if(!present) db.execSQL("ALTER TABLE orders ADD COLUMN observed_at TEXT");
     }
 
+    private void installM7SyncSchema(SQLiteDatabase db) {
+        ensureSyncQueueColumn(db,"payload_json","TEXT");
+        ensureSyncQueueColumn(db,"base_hash","TEXT");
+        ensureSyncQueueColumn(db,"payload_hash","TEXT");
+        ensureSyncQueueColumn(db,"last_error","TEXT");
+        applySchema(db,"www/m7_sync_schema_v1.sql");
+    }
+
+    private static void ensureSyncQueueColumn(SQLiteDatabase db,String column,String type) {
+        boolean present=false;
+        try(Cursor cursor=db.rawQuery("PRAGMA table_info(sync_queue)",null)) {
+            int name=cursor.getColumnIndex("name");
+            while(cursor.moveToNext()) if(name>=0&&column.equals(cursor.getString(name))) present=true;
+        }
+        if(!present) db.execSQL("ALTER TABLE sync_queue ADD COLUMN "+column+" "+type);
+    }
+
     @Override public void onUpgrade(SQLiteDatabase db, int from, int to) {
-        if ((from == 1 || from == 2) && to == 5) {
+        if ((from == 1 || from == 2) && to == 6) {
             // Apply additive schema declarations and the historical v4 view before
             // replacing only the read projections. Existing source facts remain intact.
             applySchema(db, "www/m2_schema_v1.sql", true);
             applySchema(db, "www/m2_views_v2.sql");
             applySchema(db, "www/m3_schema_v1.sql");
             installM5Views(db);
+            installM7SyncSchema(db);
             return;
         }
-        if ((from == 3 || from == 4) && to == 5) {
+        if ((from == 3 || from == 4 || from == 5) && to == 6) {
             if (from == 3) applySchema(db, "www/m3_schema_v1.sql");
-            installM5Views(db);
+            if(from <= 4) installM5Views(db);
+            installM7SyncSchema(db);
             return;
         }
         throw new SQLiteException("Unreviewed courier migration from " + from + " to " + to);

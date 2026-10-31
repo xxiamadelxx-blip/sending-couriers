@@ -1,4 +1,4 @@
-"""M5 upgrade: v1/v2 on-disk schemas migrate to the current version without data loss.
+"""M7 upgrade: v1/v2 on-disk schemas migrate to the current version without data loss.
 
 Tests a real SQLite file, foreign keys, missing late-added table objects,
 forecast immutability, additive observed-time storage, and source projection
@@ -15,14 +15,15 @@ SCHEMA=(ROOT/"web/m2_schema_v1.sql").read_text("utf8")
 M3=(ROOT/"web/m3_schema_v1.sql").read_text("utf8")
 VIEWS=(ROOT/"web/m2_views_v2.sql").read_text("utf8")
 M5=(ROOT/"web/m5_reconciliation_v1.sql").read_text("utf8")
+M7=(ROOT/"web/m7_sync_schema_v1.sql").read_text("utf8")
 PRE_ARCHIVE=SCHEMA.split("-- Source-row archive",1)[0]
 
 class UpgradeFromShippedSchemas(unittest.TestCase):
     def test_real_v1_and_v2_preserve_existing_records_and_create_missing_objects(self):
         source=(ROOT/"android/src/ru/courier/finance/CourierDatabase.java").read_text()
-        self.assertIn('public static final int VERSION = 5;',source)
+        self.assertIn('public static final int VERSION = 6;',source)
         self.assertIn('applySchema(db, "www/m2_schema_v1.sql", true);',source)
-        self.assertIn('if ((from == 1 || from == 2) && to == 5)',source)
+        self.assertIn('if ((from == 1 || from == 2) && to == 6)',source)
         self.assertIn('ALTER TABLE orders ADD COLUMN observed_at TEXT',source)
         for version in (1,2):
             with self.subTest(version=version),tempfile.TemporaryDirectory() as folder:
@@ -57,10 +58,13 @@ class UpgradeFromShippedSchemas(unittest.TestCase):
                     db.execute("DROP VIEW active_orders")
                     db.execute("DROP VIEW active_aggregate_order_counts")
                     db.executescript(M5)
-                    db.execute("PRAGMA user_version=5")
+                    for column in ("payload_json", "base_hash", "payload_hash", "last_error"):
+                        db.execute(f"ALTER TABLE sync_queue ADD COLUMN {column} TEXT")
+                    db.executescript(M7)
+                    db.execute("PRAGMA user_version=6")
                     db.commit()
                 with sqlite3.connect(path) as db:
-                    self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],5)
+                    self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0],6)
                     self.assertIn("observed_at",{row[1] for row in db.execute("PRAGMA table_info(orders)")})
                     self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
                     self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(),[])

@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.Locale;
@@ -68,18 +69,21 @@ public final class M4ForecastFactWriter {
         public final boolean rawComplete;
         public final boolean needsReview;
         public final int suppressedOrderRows;
+        /** One forecast day per identified slot; multiple slots can share a calendar date. */
+        public final JSONArray forecastDays;
+        /** Backward-compatible alias populated only for a single-slot video. */
         public final JSONObject forecastDay;
         public final String source;
 
         private ImportResult(boolean accepted,boolean duplicate,String message,int orderCount,
                              int visibleOrderRows,int matchedOrderDetails,boolean rawComplete,
                              boolean needsReview,int suppressedOrderRows,
-                             JSONObject forecastDay,String source) {
+                             JSONArray forecastDays,JSONObject forecastDay,String source) {
             this.accepted=accepted; this.duplicate=duplicate; this.message=message;
             this.orderCount=orderCount; this.visibleOrderRows=visibleOrderRows;
             this.matchedOrderDetails=matchedOrderDetails; this.rawComplete=rawComplete;
             this.needsReview=needsReview; this.suppressedOrderRows=suppressedOrderRows;
-            this.forecastDay=forecastDay; this.source=source;
+            this.forecastDays=forecastDays; this.forecastDay=forecastDay; this.source=source;
         }
     }
 
@@ -89,17 +93,24 @@ public final class M4ForecastFactWriter {
     }
 
     public static ImportResult importFacts(Context context,VideoImportProcessor.Result analysis) throws Exception {
-        Facts facts;
+        List<Facts> facts;
         try { facts=extract(analysis); }
         catch(IllegalArgumentException invalid) {
-            return new ImportResult(false,false,invalid.getMessage(),0,0,0,false,false,0,null,null);
+            return new ImportResult(false,false,invalid.getMessage(),0,0,0,false,false,0,null,null,null);
         }
         WriteResult written=writeNativeFacts(context,facts);
-        boolean rawComplete=facts.orders.size()==facts.declaredCount;
-        String detail=facts.recoveredOrderRows==0?"":(" Дополнительно сохранены отдельные карточки завершённых заказов: "
-            +facts.recoveredOrderRows+".");
+        int orderCount=0,visibleRows=0,matchedDetails=0,recoveredRows=0;
+        boolean rawComplete=true; JSONArray forecastDays=new JSONArray();
+        for(Facts slot:facts) {
+            orderCount+=slot.declaredCount; visibleRows+=slot.orders.size(); matchedDetails+=slot.deliveries.size();
+            recoveredRows+=slot.recoveredOrderRows;
+            rawComplete &= slot.orders.size()==slot.declaredCount;
+            forecastDays.put(toForecastDay(slot));
+        }
+        String detail=recoveredRows==0?"":(" Дополнительно сохранены отдельные карточки завершённых заказов: "
+            +recoveredRows+".");
         String reconciliation=rawComplete
-            ?" Распознано и сверено строк заказов: "+facts.orders.size()+" из "+facts.declaredCount+"."
+            ?" Распознано и сверено строк заказов: "+visibleRows+" из "+orderCount+"."
             :" Перечень RAW частичный.";
         if(written.suppressedOrderRows>0)
             reconciliation+=" Совпавшие строки уже есть в истории и повторно не добавлены: "
@@ -110,36 +121,92 @@ public final class M4ForecastFactWriter {
             reconciliation+=" Итог слота расходится с источником в истории; обе записи сохранены для проверки, конфликтный агрегат исключён из расчёта.";
         else if(written.needsReview)
             reconciliation+=" На эту дату есть RAW, но полный набор нельзя однозначно сопоставить по доступным полям; проверьте вручную.";
+        JSONObject onlyDay=facts.size()==1?forecastDays.optJSONObject(0):null;
         return new ImportResult(true,written.duplicate,
-            "Подтверждён агрегат слота: "+facts.declaredCount+" заказов; отдельных строк распознано "
-            +facts.orders.size()+" из "+facts.declaredCount+"."+(rawComplete?" Сумма полного списка сверена.":"")
+            "Подтверждены агрегаты "+facts.size()+" слотов: "+orderCount+" заказов; отдельных строк распознано "
+            +visibleRows+" из "+orderCount+"."+(rawComplete?" Суммы полных списков сверены.":"")
             +reconciliation+detail+" Рабочее время осталось неизвестным.",
-            facts.declaredCount,facts.orders.size(),facts.deliveries.size(),rawComplete,
-            written.needsReview,written.suppressedOrderRows,toForecastDay(facts),facts.sourceId);
+            orderCount,visibleRows,matchedDetails,rawComplete,
+            written.needsReview,written.suppressedOrderRows,forecastDays,onlyDay,facts.get(0).sourceId);
     }
 
-    private static Facts extract(VideoImportProcessor.Result analysis) {
+    private static List<Facts> extract(VideoImportProcessor.Result analysis) {
         if(analysis==null||analysis.sourceSha256==null||!analysis.sourceSha256.matches("[0-9a-f]{64}"))
             throw new IllegalArgumentException("Не удалось подтвердить источник видео.");
-        Facts facts=new Facts(); facts.sourceHash=analysis.sourceSha256; facts.sourceId="video:"+analysis.sourceSha256;
-        YandexScreenParser.Candidate slot=null;
-        List<YandexScreenParser.Candidate> identifiedSlots=new ArrayList<>(),partialSlots=new ArrayList<>();
+        Map<String,YandexScreenParser.Candidate> identifiedSlots=new LinkedHashMap<>();
+        List<YandexScreenParser.Candidate> partialSlots=new ArrayList<>();
         List<YandexScreenParser.Candidate> rows=new ArrayList<>(),details=new ArrayList<>();
         for(YandexScreenParser.Candidate candidate:analysis.uniqueCandidates()) {
             if("SLOT_DETAIL".equals(candidate.candidateType)) {
                 if(field(candidate,"slot_id")==null) partialSlots.add(candidate);
-                else identifiedSlots.add(candidate);
+                else {
+                    String id=field(candidate,"slot_id");
+                    YandexScreenParser.Candidate prior=identifiedSlots.get(id);
+                    identifiedSlots.put(id,prior==null?candidate:prior.mergeMissingFields(candidate));
+                }
             } else if("ORDER_LIST_ROW".equals(candidate.candidateType)) rows.add(candidate);
             else if("ORDER_DETAIL".equals(candidate.candidateType)) details.add(candidate);
         }
-        for(YandexScreenParser.Candidate candidate:identifiedSlots) {
-            if(slot==null) slot=candidate;
-            else if(!same(field(slot,"slot_id"),field(candidate,"slot_id")))
-                throw new IllegalArgumentException("В видео найдено несколько разных слотов; факты не записаны.");
-            else slot=slot.mergeMissingFields(candidate);
+        if(identifiedSlots.isEmpty()) throw new IllegalArgumentException("Не распознана карточка слота с числом заказов; факты не записаны.");
+        // A slot card without a readable ID can enrich an identified card only
+        // when its date/range or count/total points to that card uniquely.
+        for(YandexScreenParser.Candidate partial:partialSlots) {
+            List<String> matches=new ArrayList<>();
+            for(Map.Entry<String,YandexScreenParser.Candidate> entry:identifiedSlots.entrySet())
+                if(slotCardMatches(partial,entry.getValue())) matches.add(entry.getKey());
+            if(matches.size()==1) {
+                String id=matches.get(0); identifiedSlots.put(id,identifiedSlots.get(id).mergeMissingFields(partial));
+            } else if(identifiedSlots.size()==1) {
+                String id=identifiedSlots.keySet().iterator().next();
+                identifiedSlots.put(id,identifiedSlots.get(id).mergeMissingFields(partial));
+            }
         }
-        if(slot==null) throw new IllegalArgumentException("Не распознана карточка слота с числом заказов; факты не записаны.");
-        for(YandexScreenParser.Candidate candidate:partialSlots) slot=slot.mergeMissingFields(candidate);
+        List<Facts> extracted=new ArrayList<>();
+        for(Map.Entry<String,YandexScreenParser.Candidate> slotEntry:identifiedSlots.entrySet()) {
+            List<YandexScreenParser.Candidate> slotRows=new ArrayList<>();
+            for(YandexScreenParser.Candidate row:rows)
+                if(rowBelongsToSlot(row,slotEntry.getKey(),identifiedSlots)) slotRows.add(row);
+            extracted.add(extractSlot(analysis,slotEntry.getValue(),slotRows,details));
+        }
+        return extracted;
+    }
+
+    private static boolean slotCardMatches(YandexScreenParser.Candidate partial,YandexScreenParser.Candidate full) {
+        String partialStart=field(partial,"started_at"),partialEnd=field(partial,"completed_at");
+        String fullStart=field(full,"started_at"),fullEnd=field(full,"completed_at");
+        if(partialStart!=null&&fullStart!=null&&partialStart.equals(fullStart)) return true;
+        if(partialEnd!=null&&fullEnd!=null&&partialEnd.equals(fullEnd)) return true;
+        String partialCount=field(partial,"slot_order_count"),fullCount=field(full,"slot_order_count");
+        String partialTotal=field(partial,"slot_total_kopecks"),fullTotal=field(full,"slot_total_kopecks");
+        if(partialCount!=null&&partialTotal!=null&&partialCount.equals(fullCount)&&partialTotal.equals(fullTotal)) return true;
+        String partialStartTime=field(partial,"slot_start_time"),fullStartTime=field(full,"slot_start_time");
+        String partialEndTime=field(partial,"slot_end_time"),fullEndTime=field(full,"slot_end_time");
+        return partialStartTime!=null&&partialEndTime!=null&&partialStartTime.equals(fullStartTime)
+            &&partialEndTime.equals(fullEndTime);
+    }
+
+    private static boolean rowBelongsToSlot(YandexScreenParser.Candidate row,String slotId,
+            Map<String,YandexScreenParser.Candidate> slots) {
+        String rowSlot=field(row,"slot_id");
+        if(rowSlot!=null) return slotId.equals(rowSlot);
+        if(slots.size()==1) return true;
+        int minute=parseMinute(field(row,"order_time"));
+        if(minute<0) return false;
+        String matching=null;
+        for(Map.Entry<String,YandexScreenParser.Candidate> entry:slots.entrySet()) {
+            int start=slotMinute(entry.getValue(),"started_at","slot_start_time");
+            int end=slotMinute(entry.getValue(),"completed_at","slot_end_time");
+            if(start>=0&&end>start&&minute>=start&&minute<=end) {
+                if(matching!=null) return false;
+                matching=entry.getKey();
+            }
+        }
+        return slotId.equals(matching);
+    }
+
+    private static Facts extractSlot(VideoImportProcessor.Result analysis,YandexScreenParser.Candidate slot,
+            List<YandexScreenParser.Candidate> rows,List<YandexScreenParser.Candidate> details) {
+        Facts facts=new Facts(); facts.sourceHash=analysis.sourceSha256; facts.sourceId="video:"+analysis.sourceSha256;
         facts.slotId=field(slot,"slot_id");
         facts.declaredCount=parseInt(field(slot,"slot_order_count"));
         facts.slotAmountKopecks=parseLong(field(slot,"slot_total_kopecks"));
@@ -183,10 +250,7 @@ public final class M4ForecastFactWriter {
                     resolvedEvidence="Дата подтверждена датой завершённых карточек заказов.";
                 } else {
                     List<String> orderTimes=new ArrayList<>();
-                    for(YandexScreenParser.Candidate row:rows) {
-                        String rowSlot=field(row,"slot_id");
-                        if(rowSlot==null||facts.slotId.equals(rowSlot)) orderTimes.add(field(row,"order_time"));
-                    }
+                    for(YandexScreenParser.Candidate row:rows) orderTimes.add(field(row,"order_time"));
                     M4VideoDateResolver.Resolution resolution=M4VideoDateResolver.resolve(
                         analysis.recordingDateMetadata,field(slot,"slot_start_time"),field(slot,"slot_end_time"),orderTimes);
                     if(resolution==null)
@@ -409,6 +473,8 @@ public final class M4ForecastFactWriter {
         if(facts.recoveredOrderRows>0) notes.put("Дополнительно распознано отдельных карточек завершённых заказов: "+facts.recoveredOrderRows+".");
         if(!"slot_card".equals(facts.dateBasis)) notes.put(facts.dateEvidence);
         day.put("date",facts.date).put("timezone",TIME_ZONE).put("zone",TIME_ZONE)
+            .put("slotId",facts.slotId).put("slotOrderCount",facts.declaredCount)
+            .put("startedAt",facts.startedAt).put("completedAt",facts.completedAt)
             .put("orders",facts.declaredCount).put("ordersConfirmed",true).put("completed",true)
             .put("workConfirmed",false).put("workingMin",JSONObject.NULL).put("precision","unknown")
             .put("intervals",new JSONArray()).put("appAccountedMin",JSONObject.NULL).put("accountedConfirmed",false)
@@ -435,88 +501,104 @@ public final class M4ForecastFactWriter {
         try(Cursor cursor=db.rawQuery(sql,args)) { if(!cursor.moveToFirst()) return -1; return cursor.getLong(0); }
     }
 
-    private static WriteResult writeNativeFacts(Context context,Facts facts) throws Exception {
+    private static WriteResult writeNativeFacts(Context context,List<Facts> factsList) throws Exception {
+        if(factsList==null||factsList.isEmpty()) throw new IllegalArgumentException("В видео нет слотов для записи.");
+        Facts first=factsList.get(0);
         CourierDatabase store=new CourierDatabase(context); SQLiteDatabase db=store.getWritableDatabase();
         WriteResult result=new WriteResult(); String now=nowUtc();
         int sourceOrdersBefore;
         db.beginTransaction();
         try {
-            sourceOrdersBefore=(int)count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",facts.sourceId);
+            sourceOrdersBefore=(int)count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",first.sourceId);
             try(Cursor found=db.rawQuery("SELECT id FROM import_sources WHERE id=? OR sha256=?",
-                    new String[]{facts.sourceId,facts.sourceHash})) {
+                    new String[]{first.sourceId,first.sourceHash})) {
                 result.duplicate=found.moveToFirst();
             }
-            ContentValues source=new ContentValues(); source.put("id",facts.sourceId); source.put("sha256",facts.sourceHash);
+            ContentValues source=new ContentValues(); source.put("id",first.sourceId); source.put("sha256",first.sourceHash);
             source.put("source_kind","video_import"); source.put("parser_version",YandexScreenParser.VERSION);
             source.put("status","mirrored"); source.put("created_at",now); source.put("updated_at",now);
             db.insertWithOnConflict("import_sources",null,source,SQLiteDatabase.CONFLICT_IGNORE);
 
-            Long aggregateReward=facts.slotOrderAmountKopecks;
-            if(aggregateReward==null&&facts.slotTipsKopecks==null) aggregateReward=facts.slotAmountKopecks;
-            boolean[] aggregateCheck=checkSlotAggregate(db,facts,aggregateReward);
-            result.aggregateDuplicate=aggregateCheck[0];
-            result.aggregateConflict=aggregateCheck[1];
-            if(result.aggregateConflict) result.needsReview=true;
-            boolean completeRawMatch=matchesCompleteRawDay(db,facts);
-            boolean xlsxRawExists=hasActiveXlsxRawOrders(db,facts.date);
             boolean repeatedSource=result.duplicate;
-
-            ContentValues aggregate=new ContentValues();
-            aggregate.put("id",facts.sourceId+":count:"+facts.date+":"+facts.slotId); aggregate.put("date",facts.date);
-            aggregate.put("slot_id",facts.slotId); aggregate.put("order_count",facts.declaredCount);
-            if(aggregateReward!=null) aggregate.put("reward_kopecks",aggregateReward);
-            aggregate.put("source_id",facts.sourceId); aggregate.put("source_kind","video_import");
-            aggregate.put("confidence","confirmed"); aggregate.put("created_at",now); aggregate.put("updated_at",now);
-            db.insertWithOnConflict("aggregate_order_counts",null,aggregate,SQLiteDatabase.CONFLICT_IGNORE);
-
-            ExistingOrderIndex existing=loadExistingOrders(db,facts.date);
+            Map<String,ExistingOrderIndex> indexesByDate=new HashMap<>();
+            Map<String,Boolean> xlsxByDate=new HashMap<>();
             int insertedOrders=0;
-            for(OrderFact order:facts.orders) {
-                if(repeatedSource||completeRawMatch||isExistingOrder(db,existing,facts,order)) {
-                    result.suppressedOrderRows++;
-                    continue;
-                }
-                ContentValues row=new ContentValues(); row.put("id",order.id); row.put("date",facts.date);
-                row.put("observed_at",toUtc(localDateTime(LocalDate.parse(facts.date),order.visibleMinute)));
-                if(order.completedAt!=null) row.put("completed_at",toUtc(order.completedAt));
-                if(order.startedAt!=null) row.put("accepted_at",toUtc(order.startedAt));
-                if(order.orderNumber!=null) row.put("yandex_order_id",order.orderNumber);
-                row.put("reward_kopecks",order.amountKopecks); row.put("source_id",facts.sourceId);
-                row.put("source_kind","video_import"); row.put("confidence",order.confirmedDelivery?"confirmed":"observed");
-                row.put("precision",order.confirmedDelivery?"order_detail_minute":"list_row_minute");
-                row.put("created_at",now); row.put("updated_at",now);
-                long inserted=db.insertWithOnConflict("orders",null,row,SQLiteDatabase.CONFLICT_IGNORE);
-                if(inserted==-1) {
-                    if(!sameStoredIdentity(db,order,facts))
-                        throw new IllegalStateException("Конфликт стабильной идентичности заказа; факт сохранён для проверки.");
-                    result.suppressedOrderRows++;
-                } else {
-                    insertedOrders++;
-                }
-            }
-            if(xlsxRawExists&&!completeRawMatch&&result.suppressedOrderRows<facts.orders.size())
-                result.needsReview=true;
-            ContentValues audit=new ContentValues(); audit.put("id",facts.sourceId+":facts:"+facts.slotId);
-            audit.put("happened_at",now); audit.put("action","video_import_facts_written");
-            audit.put("record_type","video_import"); audit.put("record_id",facts.sourceId);
-            audit.put("source_kind","video_import");
-            audit.put("payload_json",new JSONObject().put("date",facts.date).put("aggregateOrderCount",facts.declaredCount)
-                .put("observedOrderRows",facts.orders.size()).put("duplicateOrderRowsSuppressed",result.suppressedOrderRows)
-                .put("completeRawDayMatch",completeRawMatch)
-                .put("matchingSlotAggregate",result.aggregateDuplicate).put("aggregateConflict",result.aggregateConflict)
-                .put("needsReview",result.needsReview)
-                .put("slotId",facts.slotId).put("slotDateBasis",facts.dateBasis)
-                .put("matchedOrderDetails",facts.deliveries.size())
-                .put("recoveredOrderRows",facts.recoveredOrderRows).toString());
-            db.insertWithOnConflict("audit_events",null,audit,SQLiteDatabase.CONFLICT_IGNORE);
+            for(Facts facts:factsList) {
+                if(!first.sourceId.equals(facts.sourceId)||!first.sourceHash.equals(facts.sourceHash))
+                    throw new IllegalArgumentException("Слоты видео ссылаются на разные источники.");
+                Long aggregateReward=facts.slotOrderAmountKopecks;
+                if(aggregateReward==null&&facts.slotTipsKopecks==null) aggregateReward=facts.slotAmountKopecks;
+                boolean[] aggregateCheck=checkSlotAggregate(db,facts,aggregateReward);
+                result.aggregateDuplicate|=aggregateCheck[0];
+                result.aggregateConflict|=aggregateCheck[1];
+                if(aggregateCheck[1]) result.needsReview=true;
+                boolean completeRawMatch=factsList.size()==1&&matchesCompleteRawDay(db,facts);
+                boolean xlsxRawExists=xlsxByDate.containsKey(facts.date)?xlsxByDate.get(facts.date)
+                    :hasActiveXlsxRawOrders(db,facts.date);
+                xlsxByDate.put(facts.date,xlsxRawExists);
 
-            long afterSourceOrders=count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",facts.sourceId);
-            long aggregateCount=count(db,"SELECT COUNT(*) FROM aggregate_order_counts WHERE source_id=? AND date=?",
-                facts.sourceId,facts.date);
-            if(afterSourceOrders!=sourceOrdersBefore+insertedOrders||aggregateCount!=1)
+                ContentValues aggregate=new ContentValues();
+                aggregate.put("id",facts.sourceId+":count:"+facts.date+":"+facts.slotId); aggregate.put("date",facts.date);
+                aggregate.put("slot_id",facts.slotId); aggregate.put("order_count",facts.declaredCount);
+                if(aggregateReward!=null) aggregate.put("reward_kopecks",aggregateReward);
+                aggregate.put("source_id",facts.sourceId); aggregate.put("source_kind","video_import");
+                aggregate.put("confidence","confirmed"); aggregate.put("created_at",now); aggregate.put("updated_at",now);
+                db.insertWithOnConflict("aggregate_order_counts",null,aggregate,SQLiteDatabase.CONFLICT_IGNORE);
+
+                ExistingOrderIndex existing=indexesByDate.get(facts.date);
+                if(existing==null) { existing=loadExistingOrders(db,facts.date); indexesByDate.put(facts.date,existing); }
+                int suppressedBefore=result.suppressedOrderRows;
+                for(OrderFact order:facts.orders) {
+                    if(repeatedSource||completeRawMatch||isExistingOrder(db,existing,facts,order)) {
+                        result.suppressedOrderRows++;
+                        continue;
+                    }
+                    ContentValues row=new ContentValues(); row.put("id",order.id); row.put("date",facts.date);
+                    row.put("observed_at",toUtc(localDateTime(LocalDate.parse(facts.date),order.visibleMinute)));
+                    if(order.completedAt!=null) row.put("completed_at",toUtc(order.completedAt));
+                    if(order.startedAt!=null) row.put("accepted_at",toUtc(order.startedAt));
+                    if(order.orderNumber!=null) row.put("yandex_order_id",order.orderNumber);
+                    row.put("reward_kopecks",order.amountKopecks); row.put("source_id",facts.sourceId);
+                    row.put("source_kind","video_import"); row.put("confidence",order.confirmedDelivery?"confirmed":"observed");
+                    row.put("precision",order.confirmedDelivery?"order_detail_minute":"list_row_minute");
+                    row.put("created_at",now); row.put("updated_at",now);
+                    long inserted=db.insertWithOnConflict("orders",null,row,SQLiteDatabase.CONFLICT_IGNORE);
+                    if(inserted==-1) {
+                        if(!sameStoredIdentity(db,order,facts))
+                            throw new IllegalStateException("Конфликт стабильной идентичности заказа; факт сохранён для проверки.");
+                        result.suppressedOrderRows++;
+                    } else {
+                        insertedOrders++;
+                    }
+                }
+                if(xlsxRawExists&&!completeRawMatch
+                        &&result.suppressedOrderRows-suppressedBefore<facts.orders.size()) result.needsReview=true;
+                ContentValues audit=new ContentValues(); audit.put("id",facts.sourceId+":facts:"+facts.slotId);
+                audit.put("happened_at",now); audit.put("action","video_import_facts_written");
+                audit.put("record_type","video_import"); audit.put("record_id",facts.sourceId);
+                audit.put("source_kind","video_import");
+                audit.put("payload_json",new JSONObject().put("date",facts.date).put("aggregateOrderCount",facts.declaredCount)
+                    .put("observedOrderRows",facts.orders.size()).put("duplicateOrderRowsSuppressed",result.suppressedOrderRows-suppressedBefore)
+                    .put("completeRawDayMatch",completeRawMatch)
+                    .put("matchingSlotAggregate",aggregateCheck[0]).put("aggregateConflict",aggregateCheck[1])
+                    .put("needsReview",result.needsReview)
+                    .put("slotId",facts.slotId).put("slotDateBasis",facts.dateBasis)
+                    .put("matchedOrderDetails",facts.deliveries.size())
+                    .put("recoveredOrderRows",facts.recoveredOrderRows).toString());
+                db.insertWithOnConflict("audit_events",null,audit,SQLiteDatabase.CONFLICT_IGNORE);
+
+                long aggregateCount=count(db,"SELECT COUNT(*) FROM aggregate_order_counts WHERE source_id=? AND date=? AND slot_id=?",
+                    facts.sourceId,facts.date,facts.slotId);
+                if(aggregateCount!=1)
+                    throw new IllegalStateException("SQLite video aggregate write did not match the reconciled extraction");
+            }
+
+            long afterSourceOrders=count(db,"SELECT COUNT(*) FROM orders WHERE source_id=?",first.sourceId);
+            long aggregateCount=count(db,"SELECT COUNT(*) FROM aggregate_order_counts WHERE source_id=?",first.sourceId);
+            if(afterSourceOrders!=sourceOrdersBefore+insertedOrders||aggregateCount<factsList.size())
                 throw new IllegalStateException("SQLite video fact write did not match the reconciled extraction");
             ContentValues mark=new ContentValues(); mark.put("status","mirrored"); mark.put("updated_at",now);
-            db.update("import_sources",mark,"id=?",new String[]{facts.sourceId});
+            db.update("import_sources",mark,"id=?",new String[]{first.sourceId});
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); store.close(); }
         return result;
@@ -704,6 +786,12 @@ public final class M4ForecastFactWriter {
             dates.add(evidence.toLocalDate().toString());
         }
         return dates;
+    }
+
+    private static int slotMinute(YandexScreenParser.Candidate slot,String dateTimeField,String clockField) {
+        LocalDateTime value=parseLocal(field(slot,dateTimeField));
+        if(value!=null) return value.getHour()*60+value.getMinute();
+        return parseMinute(field(slot,clockField));
     }
 
     private static int parseMinute(String value) {

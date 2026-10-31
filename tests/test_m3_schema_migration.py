@@ -84,12 +84,12 @@ class M3SchemaMigrationTest(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM forecast_snapshots").fetchone()[0], 0)
                 db.close()
 
-    def test_android_helper_exposes_the_v5_upgrade_path(self):
+    def test_android_helper_exposes_the_v6_upgrade_path(self):
         source = (ROOT / "android/src/ru/courier/finance/CourierDatabase.java").read_text()
-        self.assertIn("public static final int VERSION = 5;", source)
+        self.assertIn("public static final int VERSION = 6;", source)
         self.assertIn('applySchema(db, "www/m3_schema_v1.sql");', source)
-        self.assertIn("from == 1 || from == 2) && to == 5", source)
-        self.assertIn("from == 3 || from == 4) && to == 5", source)
+        self.assertIn("from == 1 || from == 2) && to == 6", source)
+        self.assertIn("from == 3 || from == 4 || from == 5) && to == 6", source)
 
 
 if __name__ == "__main__":

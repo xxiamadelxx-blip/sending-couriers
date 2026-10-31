@@ -67,7 +67,7 @@ class M2SchemaTest(unittest.TestCase):
         mirror = (ROOT / "android/src/ru/courier/finance/CourierDatabase.java").read_text(encoding="utf8")
         self.assertIn('getSharedPreferences("courier_finance", MODE_PRIVATE)', main)
         self.assertIn('preferences.getString("state", "")', main)
-        self.assertIn('preferences.edit().putString("state", value).commit()', main)
+        self.assertIn('preferences.edit().putString("state",value).commit()', main)
         self.assertIn('mirrorFacts(preferences.getString("state", ""))', main)
         self.assertIn('mirrorFacts(value)', main)
         self.assertIn('db.beginTransaction()', mirror)

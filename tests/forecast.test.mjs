@@ -85,6 +85,16 @@ test('a higher imported revision cannot replace manual time or a confirmed payme
  const merged=mergeForecast(data,incoming);assert.equal(merged.days['2026-10-01'].workingMin,540);assert.equal(merged.days['2026-10-01'].appAccountedMin,840);assert.ok(merged.days['2026-10-01'].conflicts.length);
  const imported=importDays(data,[{...confirmed('2026-10-01'),appAccountedMin:540}]);assert.equal(imported.days['2026-10-01'].appAccountedMin,840);assert.ok(imported.days['2026-10-01'].conflicts.length);
 });
+test('forecast state merge unions video slots once and gives a daily total authority',()=>{
+ const date='2026-10-13',slot=(slotId,orders,hash)=>({date,orders,ordersConfirmed:true,ordersScope:'video_slots',completed:true,workConfirmed:false,workingMin:null,precision:'unknown',slotId,source:`video:${hash}`,sourceHash:hash});
+ const first=importDays(emptyForecast(),[slot('341234567',9,'a'.repeat(64))],'video_import','2026-10-31T12:00:00Z');
+ const second=importDays(importDays(emptyForecast(),[slot('341234567',9,'a'.repeat(64))],'video_import','2026-10-31T12:00:00Z'),[slot('341234568',12,'b'.repeat(64))],'video_import','2026-10-31T12:01:00Z');
+ const merged=mergeForecast(first,second),day=merged.days[date];
+ assert.equal(day.orders,21);assert.equal(day.ordersScope,'video_slots');assert.equal(day.videoSlots.length,2);assert.deepEqual(day.sourceConflicts,[]);
+ const daily=importDays(emptyForecast(),[{date,orders:26,ordersConfirmed:true,completed:true,workConfirmed:false,workingMin:481,precision:'total',estimatedExposureJustified:true,source:'sheets_import:history'}],'sheets_import:history');
+ const reconciled=mergeForecast(merged,daily).days[date];
+ assert.equal(reconciled.orders,26);assert.equal(reconciled.ordersScope,'daily');assert.equal(reconciled.videoSlots.length,2);assert.equal(reconciled.workingMin,481);assert.deepEqual(reconciled.sourceConflicts,[]);
+});
 test('today financial projection keeps the confirmed fact and predicts only the remaining plan',()=>{
  let s=emptyState();s.forecast=history();s.forecast=saveDay(s.forecast,{...confirmed('2026-10-01',100),completed:false,asOfMinute:17*60});
  let r=forecastFinances(s,'2026-10-01',{},'2026-10-01').weekFinancial.rows[0];assert.ok(r.orders>100&&r.orders<127);assert.equal(r.source,'fact+remaining');

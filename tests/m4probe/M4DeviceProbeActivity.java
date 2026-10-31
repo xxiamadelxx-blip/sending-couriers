@@ -83,13 +83,15 @@ public final class M4DeviceProbeActivity extends Activity {
                     if(amount!=null) rowTotal+=Long.parseLong(amount);
                     if("12:19".equals(field(candidate,"order_time"))) repeatedTimeRows++;
                 }
-            String slotTotal=null,slotOrderCount=null;
+            String slotId=null,slotTotal=null,slotOrderCount=null;
             for(YandexScreenParser.Candidate candidate:result.uniqueCandidates())
                 if("SLOT_DETAIL".equals(candidate.candidateType)) {
+                    slotId=field(candidate,"slot_id");
                     slotTotal=field(candidate,"slot_total_kopecks");
                     slotOrderCount=field(candidate,"slot_order_count");
                 }
             boolean orderRowCandidate=orderRows==33&&rowTotal==330000&&repeatedTimeRows==2
+                &&slotId!=null&&slotId.matches("[0-9]{6,12}")
                 &&"330000".equals(slotTotal)&&"33".equals(slotOrderCount);
             if(!cyrillic || !numbers || !orders || !slotCandidate || !orderRowCandidate)
                 throw new AssertionError("OCR/extraction mismatch: cyrillic="+cyrillic+", number="+numbers
@@ -105,16 +107,20 @@ public final class M4DeviceProbeActivity extends Activity {
             M4ForecastFactWriter.ImportResult forecast=M4ForecastFactWriter.importFacts(this,result);
             if(!forecast.accepted || forecast.duplicate || forecast.orderCount!=33 || forecast.forecastDay==null
                     || forecast.forecastDay.getInt("orders")!=33 || forecast.visibleOrderRows!=33
+                    || !slotId.equals(forecast.forecastDay.getString("slotId"))
+                    || forecast.forecastDay.getInt("slotOrderCount")!=33
                     || !forecast.rawComplete || forecast.forecastDay.getBoolean("workConfirmed")
                     || forecast.forecastDay.getJSONArray("intervals").length()!=0)
                 throw new AssertionError("forecast writer did not accept the exact synthetic order: "+forecast.message);
             verifyPartialAggregate();
+            verifyContinuousTwoSlotImport();
             verifyM5CrossSourceDeduplication();
             String date=forecast.forecastDay.getString("date");
             boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
                 .putString("source",forecast.source).putString("date",date).commit();
             if(!saved) throw new AssertionError("restart verification marker could not be saved");
-            show("M4 FORECAST WRITE PASS\nM5 CROSS-SOURCE RECONCILIATION PASS\n33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
+            show("M4 FORECAST WRITE PASS\nM4 CONTINUOUS TWO-SLOT PASS\nM5 CROSS-SOURCE RECONCILIATION PASS\n"
+                +"33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
         } catch(Throwable error) {
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
@@ -215,6 +221,55 @@ public final class M4DeviceProbeActivity extends Activity {
             if(!two.accepted||two.suppressedOrderRows!=2||rawSameMinute!=2)
                 throw new AssertionError("two distinct 18:57 orders were collapsed or copied");
         } finally { db.close(); store.close(); }
+    }
+
+    private void verifyContinuousTwoSlotImport() throws Exception {
+        String evening="Слот: 200,00 ₽\n347889490\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
+            +"Начало\n2026.10.31 17:49\nЗавершение\n2026.10.31 22:00\n";
+        String morning="Слот: 200,00 ₽\n347714773\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
+            +"Начало\n2026.10.31 12:01\nЗавершение\n2026.10.31 15:00\n";
+        String eveningRows="Яндекс Про\nЗаказы\n20:19 100,00 ₽ >\n20:29 100,00 ₽ >\n";
+        String adjustments="Доход\n18:00–22:00\nПлановый слот\n1 805 ₽\n14:52\nДругое\n-2,36 ₽\n";
+        String morningRows="Яндекс Про\nЗаказы\n12:24 100,00 ₽ >\n12:37 100,00 ₽ >\n";
+        String hash=repeatHex('f');
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result(hash,5000,5000,java.util.Arrays.asList(
+            observation(0,"evening-slot",evening),observation(1,"evening-list",eveningRows),
+            observation(2,"adjustments",adjustments),observation(3,"morning-slot",morning),
+            observation(4,"morning-list",morningRows)),5);
+        M4ForecastFactWriter.ImportResult imported=M4ForecastFactWriter.importFacts(this,video);
+        if(!imported.accepted||imported.duplicate||!imported.rawComplete||imported.orderCount!=4
+                ||imported.visibleOrderRows!=4||imported.forecastDay!=null||imported.forecastDays.length()!=2)
+            throw new AssertionError("continuous two-slot forecast import failed: "+imported.message);
+        JSONObject first=imported.forecastDays.getJSONObject(0),second=imported.forecastDays.getJSONObject(1);
+        if(!"347889490".equals(first.getString("slotId"))||!"347714773".equals(second.getString("slotId"))
+                ||!first.getString("date").equals(second.getString("date"))
+                ||first.getInt("slotOrderCount")!=2||second.getInt("slotOrderCount")!=2
+                ||first.getBoolean("workConfirmed")||second.getBoolean("workConfirmed"))
+            throw new AssertionError("slot order/date or unknown working-time contract failed");
+
+        CourierDatabase store=new CourierDatabase(this);SQLiteDatabase db=store.getReadableDatabase();
+        try {
+            String source="video:"+hash;
+            long[] orders=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM orders WHERE source_id=?",source);
+            long[] aggregates=counts(db,"SELECT COUNT(*),COALESCE(SUM(order_count),0) FROM aggregate_order_counts WHERE source_id=?",source);
+            long workRows=counts(db,"SELECT COUNT(*),0 FROM work_intervals WHERE source_id=? AND state='WORK'",source)[0];
+            if(orders[0]!=4||orders[1]!=40000||aggregates[0]!=2||aggregates[1]!=4||workRows!=0)
+                throw new AssertionError("two-slot SQLite totals mismatch: RAW="+orders[0]+"/"+orders[1]
+                    +", aggregates="+aggregates[0]+"/"+aggregates[1]+", work="+workRows);
+        } finally { db.close();store.close(); }
+
+        M4ForecastFactWriter.ImportResult repeated=M4ForecastFactWriter.importFacts(this,video);
+        CourierDatabase repeatStore=new CourierDatabase(this); long retained;
+        try { retained=counts(repeatStore.getReadableDatabase(),
+            "SELECT COUNT(*),0 FROM orders WHERE source_id=?","video:"+hash)[0]; }
+        finally { repeatStore.close(); }
+        if(!repeated.accepted||!repeated.duplicate||repeated.suppressedOrderRows!=4||retained!=4)
+            throw new AssertionError("reimport doubled or lost one slot's rows: "+repeated.message);
+    }
+
+    private static VideoImportProcessor.Observation observation(int index,String hash,String text) {
+        YandexScreenParser.Result parsed=YandexScreenParser.parse(text);
+        return new VideoImportProcessor.Observation(index,index*1000L,hash,text,1f,parsed,null);
     }
 
     private static void seedSource(SQLiteDatabase db,String id,String hash,String kind) {

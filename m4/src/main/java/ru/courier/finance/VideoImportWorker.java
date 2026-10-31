@@ -78,9 +78,10 @@ public final class VideoImportWorker extends Worker {
                 .put("forecastFactsNeedsReview",facts.needsReview)
                 .put("duplicateOrderRowsSuppressed",facts.suppressedOrderRows)
                 .put("forecastFactMessage",facts.message);
-            if(facts.accepted) response.put("forecastSource",facts.source).put("forecastDay",facts.forecastDay)
+            if(facts.accepted) response.put("forecastSource",facts.source).put("forecastDays",facts.forecastDays)
                 .put("importedOrderCount",facts.orderCount).put("visibleOrderRows",facts.visibleOrderRows)
                 .put("matchedOrderDetails",facts.matchedOrderDetails).put("rawComplete",facts.rawComplete);
+            if(facts.accepted&&facts.forecastDay!=null) response.put("forecastDay",facts.forecastDay);
 
             String message=(evidence.duplicate
                 ?"Видео уже импортировалось. Ниже показан повторный анализ; ранее сохранённые результаты не перезаписывались.\n\n"

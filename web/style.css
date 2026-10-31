@@ -1834,3 +1834,17 @@ dialog .button{margin:8px 0 0}
 /* M4: expose local video import beside report import on the forecast screen. */
 .forecast-import-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 22px}
 .forecast-page .forecast-import-actions .forecast-import-button{width:100%;min-width:0;margin:0;padding:8px 6px;font-size:clamp(12px,3.8vw,15px);line-height:1.25;white-space:normal}
+
+/* M7: keep opt-in sync and file fallback inside the existing Settings flow. */
+.sync-settings .sync-primary-actions,.sync-settings .sync-fallback-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.sync-settings .sync-primary-actions .button,.sync-settings .sync-fallback-actions .button{min-width:0;width:100%;padding:8px 5px;font-size:clamp(11px,3.4vw,14px);line-height:1.25;white-space:normal}
+.sync-settings .sync-conflicts{border-top:1px solid var(--line);margin-top:16px;padding-top:12px}
+.sync-settings .sync-conflicts h3{font-size:14px;margin:0 0 10px}
+.sync-settings .sync-conflict{border-left:2px solid var(--teal);padding:2px 0 8px 10px;margin:10px 0}
+.sync-settings .sync-conflict strong{font-size:13px;overflow-wrap:anywhere}
+.sync-settings .sync-conflict p{font-size:12px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
+.sync-settings .sync-conflict details{margin:8px 0;color:var(--muted);font-size:12px}
+.sync-settings .sync-conflict details summary{min-height:32px;display:flex;align-items:center;cursor:pointer}
+.sync-settings .sync-conflict pre{max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:10px;line-height:1.35;padding:8px;background:var(--field);color:var(--ink)}
+.sync-settings .sync-conflict-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.sync-settings .sync-conflict-actions .button{min-height:42px;padding:7px 5px;font-size:12px;line-height:1.2}
