@@ -57,6 +57,12 @@ assert_web_morning_catchup() {
     | python3 -c 'import json,sys,xml.etree.ElementTree as ET; root=ET.fromstring(sys.stdin.read()); raw=root.find("./string[@name=\"state\"]").text; state=json.loads(raw); rows=state.get("forecast",{}).get("snapshots",[]); found=[row for row in rows if row.get("date")==sys.argv[1] and row.get("kind")=="MORNING" and str(row.get("id","")).startswith("MORNING-"+sys.argv[1]+"-")]; sys.exit(0 if len(found)==1 else 1)' "$target"
 }
 
+print_web_state_diagnostic() {
+  local target="$1"
+  adb shell run-as "$package" cat shared_prefs/courier_finance.xml 2>/dev/null \
+    | python3 -c 'import json,sys,xml.etree.ElementTree as ET; root=ET.fromstring(sys.stdin.read()); raw=root.find("./string[@name=\"state\"]").text; state=json.loads(raw); forecast=state.get("forecast",{}); rows=forecast.get("snapshots",[]); print(json.dumps({"schemaVersion":state.get("schemaVersion"),"forecastVersion":forecast.get("version"),"dayCount":len(forecast.get("days",{})),"profileCount":len(forecast.get("profiles",[])),"snapshotCount":len(rows),"locationTimezone":(forecast.get("location") or {}).get("timezone"),"currentDaySnapshots":[{"id":row.get("id"),"kind":row.get("kind"),"date":row.get("date")} for row in rows if row.get("date")==sys.argv[1]]},ensure_ascii=False))' "$target"
+}
+
 adb install app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -W -n "$package/$activity"
 wait_for_marker "M4 FORECAST WRITE PASS" "M4 FORECAST QA FAIL" 90
@@ -151,6 +157,9 @@ for attempt in $(seq 1 60); do
 done
 if [[ "$catchup" -ne 1 ]]; then
   echo "M6 app opening did not persist the current-day Web morning forecast"
+  echo "M6 persisted state summary:"
+  print_web_state_diagnostic "$target" || true
+  adb logcat -d -v brief 2>/dev/null | grep -E 'chromium|WebView|CourierSQLite|CourierForecast|M6' | tail -60 || true
   fail_with_diagnostics
 fi
 echo "M6 APP-OPEN CATCH-UP PASS: $target"
