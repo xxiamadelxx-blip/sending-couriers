@@ -292,6 +292,23 @@ public final class YandexScreenParserTest {
         assertEquals(30000,amount);
     }
 
+    @Test public void reconcilesRepeatedNineMinuteOcrVariantAgainstSlotCountAndTotal() {
+        String slot="Слот: 300,00 ₽\n341681811\n3 заказа · 3 км\n"
+            +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00";
+        String stable="Яндекс Про\nЗаказы\n13:32 100,00 ₽ >\n13:50 100,00 ₽ >\n14:12 100,00 ₽ >";
+        String misread="Яндекс Про\nЗаказы\n13:32 100,00 ₽ >\n13:59 100,00 ₽ >\n14:12 100,00 ₽ >";
+        java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
+        observations.add(observation(0,"slot",slot));
+        for(int i=1;i<=20;i++) observations.add(observation(i,"stable-"+i,stable));
+        for(int i=21;i<=24;i++) observations.add(observation(i,"misread-"+i,misread));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,6000,observations,25);
+        assertEquals(3,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        java.util.Set<String> times=new java.util.HashSet<>();
+        for(YandexScreenParser.Candidate row:video.uniqueCandidates())
+            if("ORDER_LIST_ROW".equals(row.candidateType)) times.add(field(row,"order_time"));
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("13:32","13:50","14:12")),times);
+    }
+
     @Test public void readsSlotTotalWhenHeaderCurrencyIsAnOcrDigit() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "< Слот: 900,002\n339533360\n17:59 — 22:00\n9 заказов · 12,33 км\n"
@@ -616,3 +633,4 @@ public final class YandexScreenParserTest {
         return null;
     }
 }
+

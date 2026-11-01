@@ -121,15 +121,15 @@ test('CI Android runner preserves XLSX and transfer gates with independent exit 
   assert.match(runner,/return 0 if json\.loads\(output\.read_text\(\)\)\['result'\] == 'PASS' else 1/);
 });
 
-test('release: transfer build has increasing 1.7.18/code32 and tests prior 1.7.14/code28',async()=>{
+test('release: transfer build has increasing 1.7.19/code33 and tests prior 1.7.14/code28',async()=>{
  const manifest=await readFile(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8');
  const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
  const build=await readFile(new URL('../build.py',import.meta.url),'utf8');
  const workflow=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
- assert.match(manifest,/android:versionCode="32" android:versionName="1\.7\.18"/);
- assert.match(core,/export const APP_VERSION = '1\.7\.18';/);
- assert.match(build,/Courier-Finance-1\.7\.18\.apk/);
- assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='32' versionName='1.7.18'"));
+ assert.match(manifest,/android:versionCode="33" android:versionName="1\.7\.19"/);
+ assert.match(core,/export const APP_VERSION = '1\.7\.19';/);
+ assert.match(build,/Courier-Finance-1\.7\.19\.apk/);
+ assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='33' versionName='1.7.19'"));
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
  assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
 });

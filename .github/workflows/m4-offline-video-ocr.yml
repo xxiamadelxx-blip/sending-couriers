@@ -167,11 +167,11 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           OUT="$RUNNER_TEMP/courier-transfer-release"
           test -s "$APK"
-          "$BT/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.transfer' versionCode='32' versionName='1.7.18'"
+          "$BT/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.transfer' versionCode='33' versionName='1.7.19'"
           mkdir -p "$OUT"
-          "$BT/zipalign" -f -p 4 "$APK" "$OUT/Courier-Finance-Transfer-1.7.18-unsigned.apk"
+          "$BT/zipalign" -f -p 4 "$APK" "$OUT/Courier-Finance-Transfer-1.7.19-unsigned.apk"
           cp "$BT/lib/apksigner.jar" "$OUT/apksigner.jar"
-          sha256sum "$OUT/Courier-Finance-Transfer-1.7.18-unsigned.apk"
+          sha256sum "$OUT/Courier-Finance-Transfer-1.7.19-unsigned.apk"
       - name: Publish APK and Android signer for local owner signing
         uses: actions/upload-artifact@v4
         with:

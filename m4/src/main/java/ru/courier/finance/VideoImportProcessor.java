@@ -267,7 +267,7 @@ public final class VideoImportProcessor {
                         &&!eligibleRow(candidate,slotCards)) continue;
                 result.add(candidate);
             }
-            reconcileWeakOrderOutliers(result,unique,frameCandidates,slotCards);
+            reconcileWeakOrderOutliers(result,unique,frameCandidates,slotCards,coObserved);
             return Collections.unmodifiableList(result);
         }
 
@@ -278,7 +278,7 @@ public final class VideoImportProcessor {
          */
         private void reconcileWeakOrderOutliers(List<YandexScreenParser.Candidate> candidates,
                 Map<String,SupportedCandidate> evidence,Map<Integer,List<YandexScreenParser.Candidate>> frames,
-                Map<String,YandexScreenParser.Candidate> slots) {
+                Map<String,YandexScreenParser.Candidate> slots,Map<String,Set<String>> coObserved) {
             for(Map.Entry<String,YandexScreenParser.Candidate> slotEntry:slots.entrySet()) {
                 String slotId=slotEntry.getKey(); YandexScreenParser.Candidate slot=slotEntry.getValue();
                 Integer declared=parseInteger(value(slot,"slot_order_count"));
@@ -291,10 +291,10 @@ public final class VideoImportProcessor {
                         if(amount==null||amount<0) { valid=false; break; }
                         rows.add(candidate); sum+=amount;
                     }
-                if(!valid||rows.size()!=declared+1) continue;
+                if(!valid||rows.size()<=declared||rows.size()>declared+4||sum<=total) continue;
 
                 YandexScreenParser.Candidate removable=null;int matches=0;
-                for(int i=0;i<rows.size();i++) {
+                for(int i=0;rows.size()==declared+1&&i<rows.size();i++) {
                     YandexScreenParser.Candidate row=rows.get(i);
                     SupportedCandidate support=evidence.get(row.mergeKey());
                     if(support==null||support.frames>1) continue;
@@ -309,9 +309,38 @@ public final class VideoImportProcessor {
                             &&isOneFrameTimeReversal(row,evidence,frames))
                             &&rows.size()-1==declared&&sum-amount==total) { removable=row; matches++; }
                 }
-                if(matches==1) candidates.remove(removable);
+                if(matches==1) { candidates.remove(removable); continue; }
+
+                // OCR can repeatedly misread 13:50 as 13:59. Only reconcile
+                // short-lived variants when the slot's independent count AND
+                // total require precisely those extra rows to be removed.
+                List<YandexScreenParser.Candidate> variants=new ArrayList<>();
+                long surplus=sum-total;
+                for(YandexScreenParser.Candidate row:rows) {
+                    SupportedCandidate weak=evidence.get(row.mergeKey());
+                    if(weak==null||weak.frames>4) continue;
+                    int minute=orderMinute(row); boolean hasStrongReading=false;
+                    for(YandexScreenParser.Candidate other:rows) {
+                        if(other==row||!same(value(row,"occurrence"),value(other,"occurrence"))
+                                ||!same(value(row,"amount_kopecks"),value(other,"amount_kopecks"))) continue;
+                        int difference=Math.abs(minute-orderMinute(other));
+                        if(difference<1||difference>10) continue;
+                        SupportedCandidate strong=evidence.get(other.mergeKey());
+                        if(strong==null||strong.frames<Math.max(12,weak.frames*8)
+                                ||coObserved.getOrDefault(row.mergeKey(),Collections.<String>emptySet())
+                                    .contains(other.mergeKey())) continue;
+                        hasStrongReading=true; break;
+                    }
+                    if(hasStrongReading) variants.add(row);
+                }
+                long variantTotal=0;
+                for(YandexScreenParser.Candidate row:variants)
+                    variantTotal+=parseLong(value(row,"amount_kopecks"));
+                if(variants.size()==rows.size()-declared&&variantTotal==surplus)
+                    candidates.removeAll(variants);
             }
         }
+
 
         private boolean isOneFrameTimeReversal(YandexScreenParser.Candidate row,
                 Map<String,SupportedCandidate> evidence,Map<Integer,List<YandexScreenParser.Candidate>> frames) {
@@ -549,3 +578,4 @@ public final class VideoImportProcessor {
         return result.toString();
     }
 }
+

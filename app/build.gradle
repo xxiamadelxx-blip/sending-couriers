@@ -31,7 +31,7 @@ tasks.register('stageCourierManifest') {
     doLast {
         String manifest=rootProject.file('android/AndroidManifest.xml').getText('UTF-8')
         manifest=manifest.replaceFirst(/ package="ru\.courier\.finance"/,'')
-        manifest=manifest.replaceFirst(/ android:versionCode="32" android:versionName="1\.7\.18"/,'')
+        manifest=manifest.replaceFirst(/ android:versionCode="33" android:versionName="1\.7\.19"/,'')
         manifest=manifest.replaceFirst(/\s*<uses-sdk[^>]*\/>/,'')
         manifest=manifest.replace('android:authorities="ru.courier.finance.exports"','android:authorities="${applicationId}.exports"')
         if(manifest.contains('package="ru.courier.finance"') || !manifest.contains('</application>'))
@@ -58,8 +58,8 @@ android {
         applicationId 'ru.courier.finance'
         minSdk 26
         targetSdk 35
-        versionCode 32
-        versionName '1.7.18'
+        versionCode 33
+        versionName '1.7.19'
     }
     buildTypes {
         debug { applicationIdSuffix '.m4probe' }
