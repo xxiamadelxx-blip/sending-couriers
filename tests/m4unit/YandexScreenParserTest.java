@@ -91,6 +91,30 @@ public final class YandexScreenParserTest {
         assertEquals(3,occurrences);
     }
 
+    @Test public void keepsEveningThenMorningSlotsSeparateInOneContinuousVideo() {
+        String evening="Слот: 200,00 ₽\n347889490\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
+            +"Начало\n2026.10.31 17:49\nЗавершение\n2026.10.31 22:00\n";
+        String morning="Слот: 200,00 ₽\n347714773\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
+            +"Начало\n2026.10.31 12:01\nЗавершение\n2026.10.31 15:00\n";
+        String eveningRows="Яндекс Про\nЗаказы\n20:19 100,00 ₽ >\n20:29 100,00 ₽ >\n";
+        String adjustments="Доход\n18:00–22:00\nПлановый слот\n1 805 ₽\n14:52\nДругое\n-2,36 ₽\n";
+        String morningRows="Яндекс Про\nЗаказы\n12:24 100,00 ₽ >\n12:37 100,00 ₽ >\n";
+        java.util.List<VideoImportProcessor.Observation> observations=java.util.Arrays.asList(
+            observation(0,"evening-slot",evening),observation(1,"evening-list",eveningRows),
+            observation(2,"adjustments",adjustments),observation(3,"morning-slot",morning),
+            observation(4,"morning-list",morningRows));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,5000,observations,5);
+
+        java.util.Map<String,java.util.Set<String>> timesBySlot=new java.util.HashMap<>();
+        for(YandexScreenParser.Candidate row:video.uniqueCandidates()) if("ORDER_LIST_ROW".equals(row.candidateType))
+            timesBySlot.computeIfAbsent(field(row,"slot_id"),key->new java.util.HashSet<>()).add(field(row,"order_time"));
+        assertEquals(2,timesBySlot.size());
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("20:19","20:29")),timesBySlot.get("347889490"));
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("12:24","12:37")),timesBySlot.get("347714773"));
+        assertEquals(2,video.uniqueCandidateCount("SLOT_DETAIL"));
+        assertEquals(4,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+    }
+
     @Test public void mergesPartialSlotObservationsBySlotId() {
         YandexScreenParser.Result summary=YandexScreenParser.parse(
             "Слот: 900,00 ₽\n339533360\n17:59 — 22:00\n9 заказов · 12,33 км");
@@ -574,7 +598,10 @@ public final class YandexScreenParserTest {
     private static Object extractFacts(VideoImportProcessor.Result video) throws Exception {
         java.lang.reflect.Method method=M4ForecastFactWriter.class.getDeclaredMethod("extract",VideoImportProcessor.Result.class);
         method.setAccessible(true);
-        return method.invoke(null,video);
+        Object extracted=method.invoke(null,video);
+        if(!(extracted instanceof java.util.List)||((java.util.List<?>)extracted).size()!=1)
+            throw new AssertionError("expected one slot fact for a single-slot test video");
+        return ((java.util.List<?>)extracted).get(0);
     }
 
     private static Object fact(Object facts,String name) throws Exception {

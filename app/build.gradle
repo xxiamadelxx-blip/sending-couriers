@@ -34,6 +34,10 @@ tasks.register('stageCourierManifest') {
         manifest=manifest.replaceFirst(/ android:versionCode="29" android:versionName="1\.7\.15"/,'')
         manifest=manifest.replaceFirst(/\s*<uses-sdk[^>]*\/>/,'')
         manifest=manifest.replace('android:authorities="ru.courier.finance.exports"','android:authorities="${applicationId}.exports"')
+        manifest=manifest.replace('<application ','''<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <queries><package android:name="ru.yandex.taximeter" /></queries>
+  <application ''')
         if(manifest.contains('package="ru.courier.finance"') || !manifest.contains('</application>'))
             throw new GradleException('Cannot safely stage the existing Android manifest')
         if(!manifest.contains('android:authorities="${applicationId}.exports"'))
@@ -43,9 +47,15 @@ tasks.register('stageCourierManifest') {
       <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="video/mp4"/></intent-filter>
       <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="video/quicktime"/></intent-filter>
     </activity>
+    <activity android:name=".M7CaptureActivity" android:exported="false" android:label="Захват отчёта" android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|uiMode" />
+    <service android:name=".M7ScreenCaptureService" android:exported="false" android:foregroundServiceType="mediaProjection" />
 '''
         manifest=manifest.replace('</application>',activity+'</application>')
-        if(!manifest.contains('M4VideoImportActivity')) throw new GradleException('M4 video activity was not added to the staged manifest')
+        if(!manifest.contains('M4VideoImportActivity') || !manifest.contains('M7CaptureActivity')
+                || !manifest.contains('M7ScreenCaptureService')
+                || !manifest.contains('FOREGROUND_SERVICE_MEDIA_PROJECTION')
+                || !manifest.contains('POST_NOTIFICATIONS'))
+            throw new GradleException('M4/M7 capture components were not added to the staged manifest')
         File output=generatedManifest.get().asFile; output.parentFile.mkdirs(); output.setText(manifest,'UTF-8')
     }
 }

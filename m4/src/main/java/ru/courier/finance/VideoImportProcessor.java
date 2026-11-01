@@ -69,15 +69,22 @@ public final class VideoImportProcessor {
         public final int uniqueFramesOcr;
         /** Original MP4 creation-time metadata, retained for date resolution only. */
         public final String recordingDateMetadata;
+        /** User-confirmed report date for live capture when a slot card omits its date. */
+        public final String confirmedReportDate;
 
         Result(String sourceSha256, long byteSize, long durationMs, List<Observation> observations, int uniqueFramesOcr) {
-            this(sourceSha256,byteSize,durationMs,observations,uniqueFramesOcr,null);
+            this(sourceSha256,byteSize,durationMs,observations,uniqueFramesOcr,null,null);
         }
         Result(String sourceSha256, long byteSize, long durationMs, List<Observation> observations,
                int uniqueFramesOcr,String recordingDateMetadata) {
+            this(sourceSha256,byteSize,durationMs,observations,uniqueFramesOcr,recordingDateMetadata,null);
+        }
+        Result(String sourceSha256, long byteSize, long durationMs, List<Observation> observations,
+               int uniqueFramesOcr,String recordingDateMetadata,String confirmedReportDate) {
             this.sourceSha256=sourceSha256; this.byteSize=byteSize; this.durationMs=durationMs;
             this.observations=observations; this.uniqueFramesOcr=uniqueFramesOcr;
             this.recordingDateMetadata=recordingDateMetadata;
+            this.confirmedReportDate=confirmedReportDate;
         }
         public int unknownScreenCount() {
             int count=0; for(Observation row:observations) if(row.reviewRequired) count++; return count;
@@ -119,33 +126,54 @@ public final class VideoImportProcessor {
          * low-support near-duplicate are treated as OCR variants, never as new orders.
          */
         public List<YandexScreenParser.Candidate> uniqueCandidates() {
-            Set<String> observedSlotIds=new HashSet<>();
+            Map<String,YandexScreenParser.Candidate> slotCards=new LinkedHashMap<>();
             for(Observation observation:observations) for(YandexScreenParser.Candidate candidate:observation.candidates)
                 if("SLOT_DETAIL".equals(candidate.candidateType)) {
-                    String id=value(candidate,"slot_id"); if(id!=null) observedSlotIds.add(id);
+                    String id=value(candidate,"slot_id"); if(id==null) continue;
+                    YandexScreenParser.Candidate prior=slotCards.get(id);
+                    slotCards.put(id,prior==null?candidate:prior.mergeMissingFields(candidate));
                 }
-            String slotHint=observedSlotIds.size()==1?observedSlotIds.iterator().next():null;
 
+            // Keep the active slot as the recording moves between cards. Some
+            // list frames omit the ID even though the video is still showing
+            // the same slot; a visible time range takes precedence when it
+            // uniquely identifies a different slot.
+            String activeSlotId=null;
+            Map<Integer,List<YandexScreenParser.Candidate>> frameCandidates=new HashMap<>();
             LinkedHashMap<String,SupportedCandidate> unique=new LinkedHashMap<>();
-            for(Observation observation:observations) for(YandexScreenParser.Candidate candidate:observation.candidates) {
-                String key=mergeKey(candidate,slotHint);
+            for(Observation observation:observations) {
+                Set<String> frameSlotIds=new HashSet<>();
+                for(YandexScreenParser.Candidate candidate:observation.candidates)
+                    if("SLOT_DETAIL".equals(candidate.candidateType)&&value(candidate,"slot_id")!=null)
+                        frameSlotIds.add(value(candidate,"slot_id"));
+                if(frameSlotIds.size()==1) activeSlotId=frameSlotIds.iterator().next();
+
                 String frameHash=observation.frameSha256==null?"frame-index:"+observation.frameIndex:observation.frameSha256;
-                SupportedCandidate previous=unique.get(key);
-                if(previous==null) unique.put(key,new SupportedCandidate(candidate,frameHash));
-                else previous.add(candidate,frameHash);
+                List<YandexScreenParser.Candidate> normalized=new ArrayList<>();
+                for(YandexScreenParser.Candidate candidate:observation.candidates) {
+                    YandexScreenParser.Candidate associated=candidate;
+                    if("ORDER_LIST_ROW".equals(candidate.candidateType)) {
+                        String rowSlot=value(candidate,"slot_id");
+                        if(rowSlot!=null) activeSlotId=rowSlot;
+                        else {
+                            int minute=orderMinute(candidate);
+                            String inferred=slotForTime(slotCards,minute);
+                            String context=frameSlotIds.size()==1?frameSlotIds.iterator().next():activeSlotId;
+                            if(inferred!=null) rowSlot=inferred;
+                            else if(context!=null&&slotMatchesTime(slotCards.get(context),minute)) rowSlot=context;
+                            else if(slotCards.size()==1) rowSlot=slotCards.keySet().iterator().next();
+                        }
+                        if(rowSlot!=null) associated=withSlotId(candidate,rowSlot);
+                    }
+                    normalized.add(associated);
+                    String key=associated.mergeKey();
+                    SupportedCandidate previous=unique.get(key);
+                    if(previous==null) unique.put(key,new SupportedCandidate(associated,frameHash));
+                    else previous.add(associated,frameHash);
+                }
+                frameCandidates.put(observation.frameIndex,normalized);
             }
             for(SupportedCandidate supported:unique.values()) supported.resolveAmountConsensus();
-
-            Set<String> slotIds=new HashSet<>();
-            YandexScreenParser.Candidate slot=null;
-            for(SupportedCandidate supported:unique.values()) if("SLOT_DETAIL".equals(supported.candidate.candidateType)) {
-                String id=value(supported.candidate,"slot_id");
-                if(id!=null) { slotIds.add(id); slot=supported.candidate; }
-            }
-            String singleSlot=slotIds.size()==1?slotIds.iterator().next():null;
-            int slotStart=singleSlot==null?-1:minuteOfDateTime(value(slot,"started_at"));
-            int slotEnd=singleSlot==null?-1:minuteOfDateTime(value(slot,"completed_at"));
-            boolean hasSlotRange=slotStart>=0&&slotEnd>slotStart;
 
             // A single OCR frame can turn 11:57 into 14:57. Do not let that
             // weak local peak make a real, twice-seen following row look like
@@ -154,41 +182,55 @@ public final class VideoImportProcessor {
             for(Map.Entry<String,SupportedCandidate> entry:unique.entrySet())
                 if("ORDER_LIST_ROW".equals(entry.getValue().candidate.candidateType)
                         &&entry.getValue().frames==1
-                        &&isOneFrameTimeReversal(entry.getValue().candidate,singleSlot,unique))
+                        &&isOneFrameTimeReversal(entry.getValue().candidate,unique,frameCandidates))
                     oneFrameSequenceOutliers.add(entry.getKey());
 
-            int forward=0,backward=0;
+            Map<String,int[]> directionVotes=new HashMap<>();
             for(Observation observation:observations) {
-                int previous=-1;
-                for(YandexScreenParser.Candidate candidate:observation.candidates) {
-                    if(!eligibleRow(candidate,singleSlot,slotStart,slotEnd,hasSlotRange)) continue;
-                    if(oneFrameSequenceOutliers.contains(mergeKey(candidate,slotHint))) continue;
+                Map<String,Integer> previousBySlot=new HashMap<>();
+                for(YandexScreenParser.Candidate candidate:frameCandidates.get(observation.frameIndex)) {
+                    if(!eligibleRow(candidate,slotCards)) continue;
+                    String slotId=value(candidate,"slot_id"); if(slotId==null) continue;
+                    if(oneFrameSequenceOutliers.contains(candidate.mergeKey())) continue;
                     int minute=orderMinute(candidate);
-                    if(previous>=0) {
-                        int delta=minute-previous;
-                        if(delta>5) forward++; else if(delta< -5) backward++;
+                    Integer previous=previousBySlot.put(slotId,minute);
+                    if(previous!=null) {
+                        int delta=minute-previous.intValue();
+                        int[] votes=directionVotes.computeIfAbsent(slotId,k->new int[2]);
+                        if(delta>5) votes[0]++; else if(delta< -5) votes[1]++;
                     }
-                    previous=minute;
                 }
             }
-            boolean ascending=hasSlotRange&&forward>=2&&forward>=backward*2;
-            boolean descending=hasSlotRange&&backward>=2&&backward>=forward*2;
+            Set<String> ascendingSlots=new HashSet<>(),descendingSlots=new HashSet<>();
+            for(Map.Entry<String,int[]> entry:directionVotes.entrySet()) {
+                YandexScreenParser.Candidate slot=slotCards.get(entry.getKey());
+                int start=slotStart(slot),end=slotEnd(slot);
+                if(start<0||end<=start) continue;
+                int forward=entry.getValue()[0],backward=entry.getValue()[1];
+                if(forward>=2&&forward>=backward*2) ascendingSlots.add(entry.getKey());
+                if(backward>=2&&backward>=forward*2) descendingSlots.add(entry.getKey());
+            }
 
             Set<String> discard=new HashSet<>();
-            if(ascending||descending) for(Observation observation:observations) {
-                int extreme=-1;
-                for(YandexScreenParser.Candidate candidate:observation.candidates) {
-                    if(!eligibleRow(candidate,singleSlot,slotStart,slotEnd,hasSlotRange)) continue;
+            if(!ascendingSlots.isEmpty()||!descendingSlots.isEmpty()) for(Observation observation:observations) {
+                Map<String,Integer> extremeBySlot=new HashMap<>();
+                for(YandexScreenParser.Candidate candidate:frameCandidates.get(observation.frameIndex)) {
+                    if(!eligibleRow(candidate,slotCards)) continue;
+                    String slotId=value(candidate,"slot_id"); if(slotId==null) continue;
+                    boolean ascending=ascendingSlots.contains(slotId),descending=descendingSlots.contains(slotId);
+                    if(!ascending&&!descending) continue;
                     int minute=orderMinute(candidate);
-                    String key=mergeKey(candidate,slotHint);
+                    String key=candidate.mergeKey();
                     if(oneFrameSequenceOutliers.contains(key)) continue;
                     SupportedCandidate supported=unique.get(key);
-                    if(extreme>=0 && supported!=null && supported.frames<=2
-                            && (ascending?minute<extreme-5:minute>extreme+5)) {
+                    Integer extreme=extremeBySlot.get(slotId);
+                    if(extreme!=null && supported!=null && supported.frames<=2
+                            && (ascending?minute<extreme.intValue()-5:minute>extreme.intValue()+5)) {
                         discard.add(key);
                         continue;
                     }
-                    extreme=extreme<0?minute:(ascending?Math.max(extreme,minute):Math.min(extreme,minute));
+                    extremeBySlot.put(slotId,extreme==null?minute:(ascending
+                        ?Math.max(extreme.intValue(),minute):Math.min(extreme.intValue(),minute)));
                 }
             }
 
@@ -200,16 +242,15 @@ public final class VideoImportProcessor {
             Map<String,Set<String>> coObserved=new HashMap<>();
             for(Observation observation:observations) {
                 Set<String> frameRows=new HashSet<>();
-                for(YandexScreenParser.Candidate candidate:observation.candidates)
-                    if(eligibleRow(candidate,singleSlot,slotStart,slotEnd,hasSlotRange))
-                        frameRows.add(mergeKey(candidate,slotHint));
+                for(YandexScreenParser.Candidate candidate:frameCandidates.get(observation.frameIndex))
+                    if(eligibleRow(candidate,slotCards)) frameRows.add(candidate.mergeKey());
                 for(String a:frameRows) for(String b:frameRows) if(!a.equals(b))
                     coObserved.computeIfAbsent(a,k->new HashSet<>()).add(b);
             }
             for(Map.Entry<String,SupportedCandidate> entry:unique.entrySet())
                 if("ORDER_LIST_ROW".equals(entry.getValue().candidate.candidateType)
                         &&!discard.contains(entry.getKey())
-                        &&eligibleRow(entry.getValue().candidate,singleSlot,slotStart,slotEnd,hasSlotRange)) rows.add(entry);
+                        &&eligibleRow(entry.getValue().candidate,slotCards)) rows.add(entry);
             for(int i=0;i<rows.size();i++) for(int j=i+1;j<rows.size();j++) {
                 Map.Entry<String,SupportedCandidate> a=rows.get(i),b=rows.get(j);
                 YandexScreenParser.Candidate ca=a.getValue().candidate,cb=b.getValue().candidate;
@@ -230,10 +271,10 @@ public final class VideoImportProcessor {
                 YandexScreenParser.Candidate candidate=entry.getValue().candidate;
                 if(discard.contains(entry.getKey())) continue;
                 if("ORDER_LIST_ROW".equals(candidate.candidateType)
-                        &&!eligibleRow(candidate,singleSlot,slotStart,slotEnd,hasSlotRange)) continue;
+                        &&!eligibleRow(candidate,slotCards)) continue;
                 result.add(candidate);
             }
-            reconcileSingleWeakOrderOutlier(result,unique);
+            reconcileWeakOrderOutliers(result,unique,frameCandidates,slotCards);
             return Collections.unmodifiableList(result);
         }
 
@@ -242,63 +283,58 @@ public final class VideoImportProcessor {
          * are stable. Drop it only when the other rows independently repeat and
          * removing exactly that candidate makes both the slot count and total match.
          */
-        private void reconcileSingleWeakOrderOutlier(List<YandexScreenParser.Candidate> candidates,
-                                                       Map<String,SupportedCandidate> evidence) {
-            YandexScreenParser.Candidate slot=null;
-            Set<String> slotIds=new HashSet<>();
-            for(SupportedCandidate supported:evidence.values()) {
-                YandexScreenParser.Candidate candidate=supported.candidate;
-                if(!"SLOT_DETAIL".equals(candidate.candidateType)||value(candidate,"slot_id")==null) continue;
-                slotIds.add(value(candidate,"slot_id")); slot=candidate;
-            }
-            if(slotIds.size()!=1||slot==null) return;
-            Integer declared=parseInteger(value(slot,"slot_order_count"));
-            Long total=parseLong(value(slot,"slot_total_kopecks"));
-            if(declared==null||declared<1||total==null||total<0) return;
+        private void reconcileWeakOrderOutliers(List<YandexScreenParser.Candidate> candidates,
+                Map<String,SupportedCandidate> evidence,Map<Integer,List<YandexScreenParser.Candidate>> frames,
+                Map<String,YandexScreenParser.Candidate> slots) {
+            for(Map.Entry<String,YandexScreenParser.Candidate> slotEntry:slots.entrySet()) {
+                String slotId=slotEntry.getKey(); YandexScreenParser.Candidate slot=slotEntry.getValue();
+                Integer declared=parseInteger(value(slot,"slot_order_count"));
+                Long total=parseLong(value(slot,"slot_total_kopecks"));
+                if(declared==null||declared<1||total==null||total<0) continue;
+                List<YandexScreenParser.Candidate> rows=new ArrayList<>(); long sum=0; boolean valid=true;
+                for(YandexScreenParser.Candidate candidate:candidates)
+                    if("ORDER_LIST_ROW".equals(candidate.candidateType)&&slotId.equals(value(candidate,"slot_id"))) {
+                        Long amount=parseLong(value(candidate,"amount_kopecks"));
+                        if(amount==null||amount<0) { valid=false; break; }
+                        rows.add(candidate); sum+=amount;
+                    }
+                if(!valid||rows.size()!=declared+1) continue;
 
-            List<YandexScreenParser.Candidate> rows=new ArrayList<>();
-            long sum=0;
-            for(YandexScreenParser.Candidate candidate:candidates) if("ORDER_LIST_ROW".equals(candidate.candidateType)) {
-                Long amount=parseLong(value(candidate,"amount_kopecks"));
-                if(amount==null||amount<0) return;
-                rows.add(candidate); sum+=amount;
-            }
-            if(rows.size()!=declared+1) return;
-
-            YandexScreenParser.Candidate removable=null;int matches=0;
-            for(int i=0;i<rows.size();i++) {
-                YandexScreenParser.Candidate row=rows.get(i);
-                SupportedCandidate support=null;
-                for(SupportedCandidate possible:evidence.values()) if(possible.candidate==row) { support=possible; break; }
-                if(support==null||support.frames>1) continue;
-                boolean allOtherRowsRepeat=true,allOtherRowsSeenTwice=true;
-                long amount=parseLong(value(row,"amount_kopecks"));
-                for(int j=0;j<rows.size();j++) if(j!=i) {
-                    YandexScreenParser.Candidate other=rows.get(j); SupportedCandidate otherSupport=null;
-                    for(SupportedCandidate possible:evidence.values()) if(possible.candidate==other) { otherSupport=possible; break; }
-                    if(otherSupport==null||otherSupport.frames<3) allOtherRowsRepeat=false;
-                    if(otherSupport==null||otherSupport.frames<2) { allOtherRowsSeenTwice=false; break; }
+                YandexScreenParser.Candidate removable=null;int matches=0;
+                for(int i=0;i<rows.size();i++) {
+                    YandexScreenParser.Candidate row=rows.get(i);
+                    SupportedCandidate support=evidence.get(row.mergeKey());
+                    if(support==null||support.frames>1) continue;
+                    boolean allOtherRowsRepeat=true,allOtherRowsSeenTwice=true;
+                    long amount=parseLong(value(row,"amount_kopecks"));
+                    for(int j=0;j<rows.size();j++) if(j!=i) {
+                        SupportedCandidate otherSupport=evidence.get(rows.get(j).mergeKey());
+                        if(otherSupport==null||otherSupport.frames<3) allOtherRowsRepeat=false;
+                        if(otherSupport==null||otherSupport.frames<2) { allOtherRowsSeenTwice=false; break; }
+                    }
+                    if((allOtherRowsRepeat||allOtherRowsSeenTwice
+                            &&isOneFrameTimeReversal(row,evidence,frames))
+                            &&rows.size()-1==declared&&sum-amount==total) { removable=row; matches++; }
                 }
-                if((allOtherRowsRepeat||allOtherRowsSeenTwice&&isOneFrameTimeReversal(row,value(slot,"slot_id"),evidence))
-                        &&rows.size()-1==declared&&sum-amount==total) { removable=row; matches++; }
+                if(matches==1) candidates.remove(removable);
             }
-            if(matches==1) candidates.remove(removable);
         }
 
-        private boolean isOneFrameTimeReversal(YandexScreenParser.Candidate row,String slotId,
-                                               Map<String,SupportedCandidate> evidence) {
-            String key=mergeKey(row,slotId);
+        private boolean isOneFrameTimeReversal(YandexScreenParser.Candidate row,
+                Map<String,SupportedCandidate> evidence,Map<Integer,List<YandexScreenParser.Candidate>> frames) {
+            String slotId=value(row,"slot_id"),key=row.mergeKey();
             int minute=orderMinute(row);
             for(Observation observation:observations) {
                 List<YandexScreenParser.Candidate> frameRows=new ArrayList<>();
-                for(YandexScreenParser.Candidate candidate:observation.candidates)
-                    if("ORDER_LIST_ROW".equals(candidate.candidateType)&&orderMinute(candidate)>=0)
+                for(YandexScreenParser.Candidate candidate:frames.get(observation.frameIndex))
+                    if("ORDER_LIST_ROW".equals(candidate.candidateType)&&orderMinute(candidate)>=0
+                            &&same(slotId,value(candidate,"slot_id")))
                         frameRows.add(candidate);
                 for(int i=1;i+1<frameRows.size();i++) {
-                    if(!key.equals(mergeKey(frameRows.get(i),slotId))) continue;
+                    if(!key.equals(frameRows.get(i).mergeKey())) continue;
                     YandexScreenParser.Candidate before=frameRows.get(i-1),after=frameRows.get(i+1);
-                    SupportedCandidate beforeSupport=evidence.get(mergeKey(before,slotId));
-                    SupportedCandidate afterSupport=evidence.get(mergeKey(after,slotId));
+                    SupportedCandidate beforeSupport=evidence.get(before.mergeKey());
+                    SupportedCandidate afterSupport=evidence.get(after.mergeKey());
                     if(beforeSupport==null||beforeSupport.frames<2||afterSupport==null||afterSupport.frames<2) continue;
                     int left=orderMinute(before),right=orderMinute(after);
                     if(left<minute-5&&right<minute-5 || left>minute+5&&right>minute+5) return true;
@@ -314,22 +350,48 @@ public final class VideoImportProcessor {
             try { return value==null?null:Long.valueOf(value); } catch(Exception invalid) { return null; }
         }
 
-        private static boolean eligibleRow(YandexScreenParser.Candidate candidate,String slotId,
-                                           int start,int end,boolean hasRange) {
+        private static boolean eligibleRow(YandexScreenParser.Candidate candidate,
+                                           Map<String,YandexScreenParser.Candidate> slots) {
             if(!"ORDER_LIST_ROW".equals(candidate.candidateType)) return false;
-            String rowSlot=value(candidate,"slot_id");
-            if(slotId!=null&&rowSlot!=null&&!slotId.equals(rowSlot)) return false;
             int minute=orderMinute(candidate);
-            return minute>=0&&(!hasRange||minute>=start&&minute<=end);
+            if(minute<0) return false;
+            YandexScreenParser.Candidate slot=slots.get(value(candidate,"slot_id"));
+            int start=slotStart(slot),end=slotEnd(slot);
+            return start<0||end<=start||minute>=start&&minute<=end;
         }
-        private static String mergeKey(YandexScreenParser.Candidate candidate,String slotHint) {
-            if("ORDER_LIST_ROW".equals(candidate.candidateType)&&slotHint!=null
-                    &&value(candidate,"slot_id")==null) {
-                String occurrence=value(candidate,"occurrence");
-                return "ORDER_LIST_ROW\n"+slotHint+"\n"+value(candidate,"order_time")+"\n"
-                    +(occurrence==null?"1":occurrence);
-            }
-            return candidate.mergeKey();
+        private static YandexScreenParser.Candidate withSlotId(YandexScreenParser.Candidate candidate,String slotId) {
+            List<YandexScreenParser.Field> fields=new ArrayList<>(candidate.fields);
+            fields.add(new YandexScreenParser.Field("slot_id","text",slotId));
+            return new YandexScreenParser.Candidate(candidate.candidateType,candidate.ruleScore,fields);
+        }
+        private static String slotForTime(Map<String,YandexScreenParser.Candidate> slots,int minute) {
+            if(minute<0) return null;
+            String match=null;
+            for(Map.Entry<String,YandexScreenParser.Candidate> entry:slots.entrySet())
+                if(slotMatchesTime(entry.getValue(),minute)) {
+                    if(match!=null) return null;
+                    match=entry.getKey();
+                }
+            return match;
+        }
+        private static boolean slotMatchesTime(YandexScreenParser.Candidate slot,int minute) {
+            if(slot==null||minute<0) return false;
+            int start=slotStart(slot),end=slotEnd(slot);
+            return start>=0&&end>start&&minute>=start&&minute<=end;
+        }
+        private static int slotStart(YandexScreenParser.Candidate slot) {
+            int value=minuteOfDateTime(value(slot,"started_at"));
+            return value>=0?value:orderMinuteValue(value(slot,"slot_start_time"));
+        }
+        private static int slotEnd(YandexScreenParser.Candidate slot) {
+            int value=minuteOfDateTime(value(slot,"completed_at"));
+            return value>=0?value:orderMinuteValue(value(slot,"slot_end_time"));
+        }
+        private static int orderMinuteValue(String value) {
+            if(value==null||!value.matches("\\d{2}:\\d{2}")) return -1;
+            try { int hour=Integer.parseInt(value.substring(0,2)),minute=Integer.parseInt(value.substring(3,5));
+                return hour<24&&minute<60?hour*60+minute:-1;
+            } catch(Exception ignored) { return -1; }
         }
         private static int orderMinute(YandexScreenParser.Candidate candidate) {
             String time=value(candidate,"order_time");

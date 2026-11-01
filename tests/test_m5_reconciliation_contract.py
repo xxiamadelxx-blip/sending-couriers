@@ -146,6 +146,20 @@ class M5ReconciliationTest(unittest.TestCase):
             "SELECT id,reward_kopecks,observed_at FROM orders WHERE id='pre-migration-row'").fetchone(),
             ("pre-migration-row", 10000, None))
 
+    def test_video_slot_identity_reaches_the_persisted_forecast_model(self):
+        writer = (ROOT / "m4/src/main/java/ru/courier/finance/M4ForecastFactWriter.java").read_text(encoding="utf8")
+        worker = (ROOT / "m4/src/main/java/ru/courier/finance/VideoImportWorker.java").read_text(encoding="utf8")
+        activity = (ROOT / "android/src/ru/courier/finance/MainActivity.java").read_text(encoding="utf8")
+        app = (ROOT / "web/app.mjs").read_text(encoding="utf8")
+        probe = (ROOT / "tests/m4probe/M4DeviceProbeActivity.java").read_text(encoding="utf8")
+        self.assertIn('.put("slotId",facts.slotId).put("slotOrderCount",facts.declaredCount)', writer)
+        self.assertIn('.put("forecastDays",facts.forecastDays)', worker)
+        self.assertIn('window.receiveVideoImport && window.receiveVideoImport(', activity)
+        self.assertIn('importDays(state.forecast,importedDays,source', app)
+        self.assertIn('persist({...state,forecast},true)', app)
+        self.assertIn('"347889490".equals(first.getString("slotId"))', probe)
+        self.assertIn('"347714773".equals(second.getString("slotId"))', probe)
+
     def test_period_snapshot_and_final_guarantee_stay_outside_order_aggregates(self):
         add_source(self.db, "sheet-finance", "xlsx", "5" * 64)
         self.db.execute("""INSERT INTO period_snapshots

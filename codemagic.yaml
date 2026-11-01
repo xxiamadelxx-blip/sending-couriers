@@ -1,0 +1,65 @@
+workflows:
+  m7-android-qa:
+    name: M7 Android QA APK
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      java: 17
+    cache:
+      cache_paths:
+        - ~/.gradle/caches
+    scripts:
+      - name: Set Android SDK location
+        script: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$SDK_ROOT" && test -d "$SDK_ROOT"
+          printf 'sdk.dir=%s\n' "$SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+      - name: Install Android 35 SDK packages
+        script: |
+          set -eu
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit 2>/dev/null || true)"
+          fi
+          test -n "$SDKMANAGER" && test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - name: Install pinned Gradle 8.9
+        script: |
+          set -euo pipefail
+          TOOL_DIR="$CM_BUILD_DIR/.codemagic-tools"
+          mkdir -p "$TOOL_DIR"
+          curl -fL 'https://services.gradle.org/distributions/gradle-8.9-bin.zip' -o "$TOOL_DIR/gradle-8.9-bin.zip"
+          printf '%s  %s\n' 'd725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab' "$TOOL_DIR/gradle-8.9-bin.zip" | shasum -a 256 -c -
+          unzip -q -o "$TOOL_DIR/gradle-8.9-bin.zip" -d "$TOOL_DIR"
+      - name: Download and verify pinned Russian and English OCR models
+        script: |
+          set -euo pipefail
+          mkdir -p m4-models/tessdata
+          BASE='https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd'
+          curl -fL "$BASE/rus.traineddata" -o m4-models/tessdata/rus.traineddata
+          curl -fL "$BASE/eng.traineddata" -o m4-models/tessdata/eng.traineddata
+          test "$(git hash-object m4-models/tessdata/rus.traineddata)" = 'b146cb2263acbc6383f8e92ea0ce759537687bb8'
+          test "$(git hash-object m4-models/tessdata/eng.traineddata)" = 'bbef4675053b5b468cdb477053e28b1c698ba08e'
+          test "$(wc -c < m4-models/tessdata/rus.traineddata | tr -d ' ')" = '3861738'
+          test "$(wc -c < m4-models/tessdata/eng.traineddata | tr -d ' ')" = '4113088'
+      - name: Run parser unit tests and build M7 QA APK
+        script: |
+          set -euo pipefail
+          "$CM_BUILD_DIR/.codemagic-tools/gradle-8.9/bin/gradle" --no-daemon :app:testDebugUnitTest :app:assembleM4Qa
+      - name: Verify M7 components and APK signature
+        script: |
+          set -euo pipefail
+          APK='app/build/outputs/apk/m4Qa/app-m4Qa.apk'
+          AAPT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}/build-tools/35.0.0/aapt"
+          APKSIGNER="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}/build-tools/35.0.0/apksigner"
+          test -s "$APK"
+          "$AAPT" dump badging "$APK" | grep "package: name='ru.courier.finance.m4qa"
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml | grep -E 'M7CaptureActivity|M7ScreenCaptureService|FOREGROUND_SERVICE_MEDIA_PROJECTION|POST_NOTIFICATIONS'
+          unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
+          "$APKSIGNER" verify --verbose "$APK"
+          shasum -a 256 "$APK"
+    artifacts:
+      - app/build/outputs/apk/m4Qa/app-m4Qa.apk

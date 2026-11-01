@@ -329,12 +329,16 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void ready() { runOnUiThread(() -> { if (launch != null) { root.removeView(launch); launch = null; } }); }
         @JavascriptInterface public void importVideo() {
             runOnUiThread(() -> {
-                try {
-                    Intent intent = new Intent();
-                    intent.setClassName(MainActivity.this, "ru.courier.finance.M4VideoImportActivity");
-                    intent.putExtra("m4.returnResult", true);
-                    startActivityForResult(intent, IMPORT_VIDEO);
-                } catch (Exception e) { error("Импорт видео появится после обновления приложения."); }
+                new AlertDialog.Builder(MainActivity.this).setTitle("Источник отчёта")
+                    .setItems(new String[]{"Считать с экрана Яндекс Про","Выбрать видеофайл"},(dialog,which)->{
+                        try {
+                            Intent intent=new Intent();
+                            intent.setClassName(MainActivity.this,which==0
+                                ?"ru.courier.finance.M7CaptureActivity":"ru.courier.finance.M4VideoImportActivity");
+                            intent.putExtra("m4.returnResult",true);
+                            startActivityForResult(intent,IMPORT_VIDEO);
+                        } catch(Exception failure) { error("Не удалось открыть захват экрана или выбор видео."); }
+                    }).show();
             });
         }
         @JavascriptInterface public void importData() {
