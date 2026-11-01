@@ -2,7 +2,7 @@ import { emptyForecast, normalizeForecast, mergeForecast, forecastReport, weekPl
 export const RATE = 360;
 export const THRESHOLD = 1.8;
 export const SCHEMA_VERSION = 6;
-export const APP_VERSION = '1.7.16';
+export const APP_VERSION = '1.7.17';
 export const MIN_PAYMENT_HOURS = 80;
 export const PREMIUM_PACE = 2.8;
 export const PREMIUM_PERCENT = 5;
@@ -137,6 +137,14 @@ function normalizePaymentRules(input = []) {
 export function paymentTermsFor(state, period) {
   dateMillis(period);
   return (state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart <= period).at(-1) ?? DEFAULT_PAYMENT_TERMS;
+}
+export function paymentSettingsDraft(state, periodId) {
+  const period = periodFor(periodId);
+  // Start with the latest saved terms for this period, but make applying them
+  // to its earlier recorded hours an explicit Save action.
+  const latest = (state.settings?.paymentRules ?? [])
+    .filter(rule => rule.effectivePeriodStart >= period.start && rule.effectivePeriodStart <= period.end).at(-1);
+  return { ... (latest ?? paymentTermsFor(state, period.start)), effectivePeriodStart: period.start };
 }
 export function setPaymentTerms(state, input) {
   const rule = normalizePaymentRule(input);
@@ -363,7 +371,9 @@ export function calculate(state, id, asOf = null) {
   const hoursHundredths = entries.reduce((acc, e) => acc + Math.round((e.dailyHours ?? 0) * 100), 0);
   const hours = pendingCount || !hoursRecorded ? null : hoursHundredths / 100;
   const orders = pendingCount || !ordersRecorded ? null : entries.reduce((acc, e) => acc + (e.dailyOrders ?? 0), 0);
-  const base = hours == null ? null : ratedBase(state,entries);
+  const rateBreakdown = hours == null ? [] : ratedHours(state, entries)
+    .map(part => ({ hourlyRate: part.hourlyRate, hours: part.hundredths / 100, base: part.base }));
+  const base = hours == null ? null : Math.round(rateBreakdown.reduce((sum, part) => sum + Math.round(part.base * 100), 0)) / 100;
   const paidReward = latest ? sum('reward') : null;
   const tips = latest ? sum('tips') : null;
   const separateBonus = latest ? sum('separateBonus') : null;
@@ -389,7 +399,7 @@ export function calculate(state, id, asOf = null) {
     entries, latest, hours, orders, pace, terms, requiredOrders: hours == null ? null : requiredOrderCount(hoursHundredths,terms.basePace), hoursRecorded, ordersRecorded, pendingCount, matchedCounters, hiddenMinutes,
     dayCount: new Set(entries.map(e => e.date)).size,
     reserve: pace != null ? reserveMinutes(hours, orders, hiddenMinutes,terms.basePace) : null,
-    hourlyBase: base, paidReward, tips, separateBonus, pacePremium,
+    hourlyBase: base, rateBreakdown, paidReward, tips, separateBonus, pacePremium,
     tax: latest ? sum('tax') : null, parkCommission: latest ? sum('parkCommission') : null,
     grossUserIncome: base != null ? Math.round((base + tips + separateBonus) * 100) / 100 : null,
     estimatedYandexOwed: base != null ? Math.round((base - paidReward) * 100) / 100 : null,

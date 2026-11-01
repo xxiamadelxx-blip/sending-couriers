@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, updateSettings, setPaymentTerms, paymentTermsFor, calculate, calculatePremiumCycle, upsertEntry, mergeImport, markdownReport, periodFor } from '../web/core.mjs';
+import { emptyState, normalizeState, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft, calculate, calculatePremiumCycle, upsertEntry, mergeImport, markdownReport, periodFor } from '../web/core.mjs';
 const oldPeriod='2026-10-02',current='2026-10-16',next='2026-10-30';
 const rule=(from=current,overrides={})=>({effectivePeriodStart:from,hourlyRate:420,basePace:2.1,premiumPace:3.25,paceBonusPercent:7.5,cycleBonusPercent:8,...overrides});
 const add=(s,date,hours=10,orders=33)=>upsertEntry(s,{date,dailyHours:hours,dailyOrders:orders,reward:1000,tips:10,separateBonus:50,tax:77,parkCommission:123});
@@ -70,3 +70,24 @@ test('midperiod change preserves earlier hours, splits same-day slots, backup, a
  assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(s))).settings.paymentRules,s.settings.paymentRules);
 });
 function calculateDayFor(state,date){return calculate({...state,entries:state.entries.filter(e=>e.date===date)},periodFor(date).id,date).hourlyBase;}
+
+test('Nov 1 tariff can be explicitly applied to all 19 recorded hours from period start',()=>{
+ let s=emptyState();
+ s=add(s,'2026-10-31',17,36);
+ s=add(s,'2026-11-01',2,5);
+ s=setPaymentTerms(s,rule('2026-11-01',{hourlyRate:390,basePace:2.1}));
+ const split=calculate(s,next,'2026-11-01');
+ assert.equal(split.hours,19);
+ assert.equal(split.hourlyBase,6900);
+ assert.deepEqual(split.rateBreakdown.map(x=>[x.hours,x.hourlyRate,x.base]),[[17,360,6120],[2,390,780]]);
+ const draft=paymentSettingsDraft(s,next);
+ assert.equal(draft.effectivePeriodStart,'2026-10-30');
+ assert.equal(draft.hourlyRate,390);
+ assert.equal(draft.basePace,2.1);
+ s=setPaymentTerms(s,draft);
+ const all=calculate(s,next,'2026-11-01');
+ assert.equal(all.hourlyBase,7410);
+ assert.deepEqual(all.rateBreakdown.map(x=>[x.hours,x.hourlyRate,x.base]),[[19,390,7410]]);
+ assert.equal(all.terms.basePace,2.1);
+ assert.equal(calculate(s,'2026-10-16').hourlyBase,null);
+});

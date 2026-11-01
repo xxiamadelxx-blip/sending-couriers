@@ -3,7 +3,7 @@ import {
   calculate, calculateDay, newEntryId, hoursText, money, paceText, reserveText,
   upsertEntry, mergeImport, parseCycleIncomeReport, parseMoney, parseHours, markdownReport, deductionChecks,
   TAX_PERCENT_MIN, TAX_PERCENT_MAX, PARK_COMMISSION_PERCENT,
-  calculatePremiumCycle, updateSettings, setPaymentTerms, paymentTermsFor,
+  calculatePremiumCycle, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft,
   goalText, percentText, APP_VERSION
 } from './core.mjs';
 import { icon } from './icons.mjs';
@@ -226,7 +226,8 @@ function bindNavigation(rerender) {
 }
 function financeHint(s) {
   if (s.hours == null) return s.latest ? 'Выплаты сохранены. Введите часы за день — тогда появится расчёт дохода.' : 'Добавьте первый день — появятся ваши показатели.';
-  return `Оценка по введённым часам при итоговом темпе от ${goalText(s.terms.basePace)}.${s.hoursRecorded < s.entries.length ? ` Часы внесены для ${s.hoursRecorded} из ${s.entries.length} записей.` : ''}${s.hiddenMinutes ? ' Запас учитывает округление прежних часов до целого числа.' : ''}`;
+  const rates = s.rateBreakdown.map(part => `${hoursText(part.hours)} ч × ${money(part.hourlyRate)}/ч = ${money(part.base)}`).join('; ');
+  return `За часы: ${rates}. Оценка по введённым часам при итоговом темпе от ${goalText(s.terms.basePace)}.${s.hoursRecorded < s.entries.length ? ` Часы внесены для ${s.hoursRecorded} из ${s.entries.length} записей.` : ''}${s.hiddenMinutes ? ' Запас учитывает округление прежних часов до целого числа.' : ''}`;
 }
 function cycleBonusLabel(cycle, terms) {
   const rates = [...new Set([...cycle.breakdown.map(row => row.cycleBonusPercent), ...(cycle.openingPercent == null ? [] : [cycle.openingPercent])])];
@@ -379,10 +380,10 @@ function periodDetails() {
 function settings() {
   if(!leaveForecast())return;
   app.className = 'settings-page'; view = 'settings'; editingId = null;
-  const chosenDate = selectedPeriod === periodFor(today()).id ? today() : selectedPeriod;
-  const initial = paymentTermsFor(state, chosenDate);
+  const initial = paymentSettingsDraft(state, selectedPeriod);
+  const chosenDate = initial.effectivePeriodStart;
   const ruleHistory = () => state.settings.paymentRules.length ? `<details class="calculation payment-history"><summary>История условий</summary>${[...state.settings.paymentRules].reverse().map(rule => `<div class="payment-rule"><strong>С ${esc(formatDate(rule.effectivePeriodStart))}</strong><span>${esc(money(rule.hourlyRate))}/ч · темп ${goalText(rule.basePace)}</span><span>Темп ${goalText(rule.premiumPace)}: ${percentText(rule.paceBonusPercent)}% · 12 недель: ${percentText(rule.cycleBonusPercent)}%</span></div>`).join('')}</details>` : '';
-  app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><div class="date-box settings-date-box"><span id="paymentDateVisible">${esc(formatDate(chosenDate, true))}</span>${icon['chevron-down']}<input id="paymentPeriod" type="date" lang="ru" value="${esc(chosenDate)}" required></div><p class="hint">Ставка применяется с выбранного дня, в том числе внутри текущего периода.</p></div>
+  app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><div class="date-box settings-date-box"><span id="paymentDateVisible">${esc(formatDate(chosenDate, true))}</span>${icon['chevron-down']}<input id="paymentPeriod" type="date" lang="ru" value="${esc(chosenDate)}" required></div><p class="hint">По умолчанию начало периода. Поля показывают последние условия этого периода; после сохранения ставка пересчитает уже введённые часы с выбранной даты. Для настоящего изменения внутри периода укажите день изменения.</p></div>
     <div class="tariff-rate">${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}<span class="tariff-rate-unit">/ час</span></div>
     <details class="payment-more"><summary>Остальные условия${icons.down}</summary><div class="form-grid">
     ${field('basePace','Темп для оплаты',initial.basePace,{unit:'заказа/ч',full:true})}
