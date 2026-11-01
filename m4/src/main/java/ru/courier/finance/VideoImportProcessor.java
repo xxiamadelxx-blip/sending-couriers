@@ -326,7 +326,7 @@ public final class VideoImportProcessor {
                         int difference=Math.abs(minute-orderMinute(other));
                         if(difference<1||difference>10) continue;
                         SupportedCandidate strong=evidence.get(other.mergeKey());
-                        if(strong==null||strong.frames<Math.max(12,weak.frames*8)
+                        if(strong==null||strong.frames<Math.max(12,weak.frames*5)
                                 ||coObserved.getOrDefault(row.mergeKey(),Collections.<String>emptySet())
                                     .contains(other.mergeKey())) continue;
                         hasStrongReading=true; break;
