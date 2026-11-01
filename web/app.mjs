@@ -146,7 +146,8 @@ function refreshNativeForecasts() {
 function recoverStoredVideoEvidence() {
   if(!Native?.readVideoOrderEvidence||!state?.forecast?.days)return;
   const missing=Object.values(state.forecast.days).flatMap(day=>(day.videoSlots??[])
-    .filter(slot=>videoImportReceipt(state.forecast,slot.sourceHash,slot.slotId)?.rows<slot.orderCount)
+    .filter(slot=>{const receipt=videoImportReceipt(state.forecast,slot.sourceHash,slot.slotId);
+      return receipt&& (receipt.rows<slot.orderCount||receipt.paired<slot.orderCount);})
     .map(slot=>({date:day.date,hash:slot.sourceHash})));
   const hashes=[...new Set(missing.sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(row=>row.hash))];
   let forecast=state.forecast;

@@ -170,6 +170,22 @@ test('two video slots retain their separate rows under one confirmed daily count
  assert.equal(data.days[date].orderEvidence.length,2);
  assert.equal(videoImportReceipt(data,second,'slot-1').rows,1);
 });
+test('time recovery enriches the same 28 saved orders without recounting a day',()=>{
+ const date='2026-11-01',hash='c'.repeat(64),source=`video:${hash}`;
+ const slot={date,slotId:'348093482',source,sourceHash:hash,orders:28,ordersConfirmed:true};
+ const rows=Array.from({length:28},(_,i)=>({id:`video-order-${i}`,source,date,
+   visibleMin:720+i*20,acceptedMin:i<14?710+i*20:null,
+   deliveredMin:i<14?720+i*20:null,confirmed:i<14}));
+ let data=importDays(emptyForecast(),[{...slot,orderEvidence:rows}],source);
+ assert.equal(videoImportReceipt(data,hash,slot.slotId).paired,14);
+ const enriched=rows.map((row,i)=>({...row,acceptedMin:710+i*20,
+   deliveredMin:720+i*20,confirmed:true}));
+ data=restoreVideoOrderEvidence(data,hash,enriched);
+ assert.equal(videoImportReceipt(data,hash,slot.slotId).paired,28);
+ assert.equal(data.days[date].orders,28);
+ assert.equal(data.days[date].orderEvidence.length,28);
+ assert.equal(data.days[date].evidenceComplete,true);
+});
 test('window forecasts exclude pauses, preserve total counts and remain absent for total-only time',()=>{
  const d=history(),p=predict(d,'2026-10-01');assert.equal(p.intervalForecasts.length,2);assert.equal(p.intervalForecasts.reduce((n,w)=>n+w.central,0),p.central);assert.deepEqual(p.intervalForecasts.map(w=>[w.start,w.end]),[[540,840],[1020,1260]]);assert.deepEqual(predict(d,'2026-10-01',{workingMin:540}).intervalForecasts,[]);
 });

@@ -473,6 +473,8 @@ export function restoreVideoOrderEvidence(data,sourceHash,storedOrders,now=new D
       result=importDays(result,[{date:d.date,slotId:slot.slotId,slotOrderCount:slot.orderCount,
         orders:slot.orderCount,ordersConfirmed:true,completed:true,source,sourceHash,
         startedAt:slot.startedAt,completedAt:slot.completedAt,orderEvidence:rows,
+        evidenceComplete:rows.length===slot.orderCount
+          &&rows.every(row=>row.confirmed&&row.acceptedMin!=null&&row.deliveredMin!=null),
         timezone:d.timezone,zone:d.zone,precision:'unknown',workConfirmed:false}],source,now);
     }
   }

@@ -4,6 +4,24 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class YandexScreenParserTest {
+    @Test public void recoversOrderTimesFromRepeatedOcrEvenWhenCardAmountIsMissing() {
+        String card="Заказ\nИтого\nДетали\nСтатус\nЗавершён\nНомер заказа\n261101-2693515\n"
+            +"Начало\n2026.11.01 18:48\nЗавершение\n2026.11.01 19:05";
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("frame-a",card),new VideoOrderTimePairs.Frame("frame-b",card));
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        assertEquals(1,pairs.size());
+        assertEquals("2026-11-01T18:48",pairs.get(0).accepted);
+        assertEquals("2026-11-01T19:05",pairs.get(0).completed);
+        assertTrue(pairs.get(0).amounts.isEmpty());
+        assertEquals(2,pairs.get(0).frames);
+        assertTrue(VideoOrderTimePairs.extract(java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("same-frame",card),
+            new VideoOrderTimePairs.Frame("same-frame",card))).isEmpty());
+        assertTrue(VideoOrderTimePairs.extract(java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("frame-a",card),
+            new VideoOrderTimePairs.Frame("frame-b",card.replace("18:48","18:49")))).isEmpty());
+    }
     @Test public void recoversVisibleStartTimeWhenOnlyItsLabelIsUnreadable() {
         String card="Заказ\nИтого\n100,00 ₽\nДетали\nСтатус\nЗавершён\n"
             +"Номер заказа\n123456-1234567\nЕЕ Ще)\n2026.11.01 18:48\n"
