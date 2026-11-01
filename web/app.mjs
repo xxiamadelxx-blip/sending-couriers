@@ -3,7 +3,7 @@ import {
   calculate, calculateDay, newEntryId, hoursText, money, paceText, reserveText,
   upsertEntry, mergeImport, parseCycleIncomeReport, parseMoney, parseHours, markdownReport, deductionChecks,
   TAX_PERCENT_MIN, TAX_PERCENT_MAX, PARK_COMMISSION_PERCENT,
-  calculatePremiumCycle, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft,
+  calculatePremiumCycle, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft, applyPaymentTermsFromDate,
   goalText, percentText, APP_VERSION
 } from './core.mjs';
 import { icon } from './icons.mjs';
@@ -383,7 +383,7 @@ function settings() {
   const initial = paymentSettingsDraft(state, selectedPeriod);
   const chosenDate = initial.effectivePeriodStart;
   const ruleHistory = () => state.settings.paymentRules.length ? `<details class="calculation payment-history"><summary>История условий</summary>${[...state.settings.paymentRules].reverse().map(rule => `<div class="payment-rule"><strong>С ${esc(formatDate(rule.effectivePeriodStart))}</strong><span>${esc(money(rule.hourlyRate))}/ч · темп ${goalText(rule.basePace)}</span><span>Темп ${goalText(rule.premiumPace)}: ${percentText(rule.paceBonusPercent)}% · 12 недель: ${percentText(rule.cycleBonusPercent)}%</span></div>`).join('')}</details>` : '';
-  app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><div class="date-box settings-date-box"><span id="paymentDateVisible">${esc(formatDate(chosenDate, true))}</span>${icon['chevron-down']}<input id="paymentPeriod" type="date" lang="ru" value="${esc(chosenDate)}" required></div><p class="hint">По умолчанию начало периода. Поля показывают последние условия этого периода; после сохранения ставка пересчитает уже введённые часы с выбранной даты. Для настоящего изменения внутри периода укажите день изменения.</p></div>
+  app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><div class="date-box settings-date-box"><span id="paymentDateVisible">${esc(formatDate(chosenDate, true))}</span>${icon['chevron-down']}<input id="paymentPeriod" type="date" lang="ru" value="${esc(chosenDate)}" required></div><p class="hint">Выберите день, с которого действует тариф. Уже введённые часы пересчитаются с этой даты; каждый период покажет свой итог. Более поздние тарифы будут заменены.</p></div>
     <div class="tariff-rate">${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}<span class="tariff-rate-unit">/ час</span></div>
     <details class="payment-more"><summary>Остальные условия${icons.down}</summary><div class="form-grid">
     ${field('basePace','Темп для оплаты',initial.basePace,{unit:'заказа/ч',full:true})}
@@ -410,11 +410,9 @@ function settings() {
     catch (error) { event.target.value = state.settings.theme; $('#preferencesError').textContent = error.message; $('#preferencesError').hidden = false; feedback('error'); }
   });
   $('#paymentPeriod').addEventListener('change', event => {
-    const terms = paymentTermsFor(state,event.target.value);
-    for (const key of ['hourlyRate','basePace','premiumPace','paceBonusPercent','cycleBonusPercent','minimumHours','criticalPace']) $('#' + key).value = String(terms[key] ?? (key==='minimumHours'?80:terms.basePace)).replace('.',',');
+    // Changing the effective date must not erase a tariff the user just typed.
     $('#paymentEffectiveDate').textContent = `Выбрана дата: ${formatDate(event.target.value)}`;
     $('#paymentDateVisible').textContent = formatDate(event.target.value, true);
-    sizeRateInput();
     $('#paymentError').hidden = true;
   });
   $('#paymentForm').addEventListener('submit', event => {
@@ -427,7 +425,7 @@ function settings() {
         try { setPaymentTerms(state,{...base,effectivePeriodStart:rule.effectivePeriodStart,[key]:rule[key]}); }
         catch(error) { if(key!=='hourlyRate')$('.payment-more').open=true;$('#'+key).focus();throw error; }
       });
-      persist(setPaymentTerms(state,rule));
+      persist(applyPaymentTermsFromDate(state,rule));
       $('#paymentError').hidden = true; $('#paymentHistory').innerHTML = ruleHistory();
       notify(`Условия сохранены с ${formatDate(rule.effectivePeriodStart)}`);
     } catch (error) { $('#paymentError').textContent = error.message; $('#paymentError').hidden = false; feedback('error'); }
@@ -810,3 +808,4 @@ Native?.ready();
 
 // Refresh date boundaries on return from the background; never promise an exact background alarm.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{refreshNativeForecasts();persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});
+

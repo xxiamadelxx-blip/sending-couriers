@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft, calculate, calculatePremiumCycle, upsertEntry, mergeImport, markdownReport, periodFor } from '../web/core.mjs';
+import { emptyState, normalizeState, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft, applyPaymentTermsFromDate, calculate, calculatePremiumCycle, upsertEntry, mergeImport, markdownReport, periodFor } from '../web/core.mjs';
 const oldPeriod='2026-10-02',current='2026-10-16',next='2026-10-30';
 const rule=(from=current,overrides={})=>({effectivePeriodStart:from,hourlyRate:420,basePace:2.1,premiumPace:3.25,paceBonusPercent:7.5,cycleBonusPercent:8,...overrides});
 const add=(s,date,hours=10,orders=33)=>upsertEntry(s,{date,dailyHours:hours,dailyOrders:orders,reward:1000,tips:10,separateBonus:50,tax:77,parkCommission:123});
@@ -91,3 +91,25 @@ test('Nov 1 tariff can be explicitly applied to all 19 recorded hours from perio
  assert.equal(all.terms.basePace,2.1);
  assert.equal(calculate(s,'2026-10-16').hourlyBase,null);
 });
+
+test('on Nov 1 a tariff dated Oct 23 recalculates both periods and supersedes the later rule',()=>{
+ let s=emptyState();
+ for(const [date,hours] of [['2026-10-22',5],['2026-10-23',3],['2026-10-29',4],['2026-10-30',10],['2026-11-01',9]])
+   s=add(s,date,hours,Math.ceil(hours*2.1));
+ s=setPaymentTerms(s,rule('2026-11-01',{hourlyRate:420}));
+ const before=JSON.stringify(s.entries);
+ s=applyPaymentTermsFromDate(s,rule('2026-10-23',{hourlyRate:390,basePace:2.1}));
+ assert.equal(paymentTermsFor(s,'2026-10-22').hourlyRate,360);
+ assert.equal(paymentTermsFor(s,'2026-10-23').hourlyRate,390);
+ assert.equal(paymentTermsFor(s,'2026-11-01').hourlyRate,390);
+ assert.deepEqual(s.settings.paymentRules.map(r=>r.effectivePeriodStart),['2026-10-23']);
+ const october=calculate(s,'2026-10-16','2026-10-29');
+ const november=calculate(s,'2026-10-30','2026-11-01');
+ assert.equal(october.hours,12);
+ assert.equal(october.hourlyBase,4530);
+ assert.equal(november.hours,19);
+ assert.equal(november.hourlyBase,7410);
+ assert.equal(november.terms.basePace,2.1);
+ assert.equal(JSON.stringify(s.entries),before);
+});
+

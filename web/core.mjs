@@ -2,7 +2,7 @@ import { emptyForecast, normalizeForecast, mergeForecast, forecastReport, weekPl
 export const RATE = 360;
 export const THRESHOLD = 1.8;
 export const SCHEMA_VERSION = 6;
-export const APP_VERSION = '1.7.17';
+export const APP_VERSION = '1.7.18';
 export const MIN_PAYMENT_HOURS = 80;
 export const PREMIUM_PACE = 2.8;
 export const PREMIUM_PERCENT = 5;
@@ -149,6 +149,12 @@ export function paymentSettingsDraft(state, periodId) {
 export function setPaymentTerms(state, input) {
   const rule = normalizePaymentRule(input);
   return updateSettings(state, {paymentRules:[...(state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart !== rule.effectivePeriodStart),rule]});
+}
+export function applyPaymentTermsFromDate(state, input) {
+  const rule = normalizePaymentRule(input);
+  // A tariff correction replaces later rules. Older history remains intact;
+  // a later tariff can still be entered explicitly after this one.
+  return updateSettings(state, {paymentRules:[...(state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart < rule.effectivePeriodStart),rule]});
 }
 export function goalText(number) { return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:3}).format(number); }
 export function percentText(number) { return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(number); }
@@ -669,3 +675,4 @@ export function markdownReport(state, id, exportDate = today()) {
     '- Если часы ещё не записаны, почасовая база, общий доход и остаток не определяются.', ''
   ].join('\n') + forecastReport(state.forecast ?? emptyForecast());
 }
+
