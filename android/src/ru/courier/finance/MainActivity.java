@@ -263,6 +263,13 @@ public final class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public String readState() { return storedState(); }
+        @JavascriptInterface public String readVideoOrderEvidence(String sourceSha256) {
+            try { return VideoForecastRecovery.read(factMirrorDatabase,sourceSha256); }
+            catch(Exception failure) {
+                Log.e("CourierM4","Video forecast recovery read failed: "+failure.getClass().getSimpleName());
+                return "{\"ok\":false,\"orders\":[]}";
+            }
+        }
         @JavascriptInterface public boolean writeState(String value) {
             try {
                 if (value == null || value.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) return false;

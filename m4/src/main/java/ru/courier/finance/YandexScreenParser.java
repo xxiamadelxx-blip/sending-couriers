@@ -351,6 +351,21 @@ public final class YandexScreenParser {
         String coefficient=valueAfter(lines,"коэффициент\\s+спроса|коэф(?:ф)?\\.?(?:\\s+спроса)?");
         String started=valueAfter(lines,"начало|время\\s+начала");
         String completed=valueAfter(lines,"завершение|окончание|время\\s+завершения");
+        String startedAt=parseDateTime(started),completedAt=parseDateTime(completed);
+        // OCR can corrupt the "Начало" label while leaving both visible
+        // timestamps intact. Only recover an earlier date when the explicit
+        // completion label anchors the later of exactly two dates on the card.
+        if(startedAt==null&&completedAt!=null) {
+            java.util.LinkedHashSet<String> dates=new java.util.LinkedHashSet<>();
+            for(String line:lines) {
+                String value=parseDateTime(line);
+                if(value!=null) dates.add(value);
+            }
+            if(dates.size()==2) {
+                String earlier=java.util.Collections.min(dates),later=java.util.Collections.max(dates);
+                if(later.equals(completedAt)&&earlier.compareTo(later)<0) startedAt=earlier;
+            }
+        }
 
         CandidateBuilder candidate=new CandidateBuilder("ORDER_DETAIL",0.92f);
         addText(candidate,"order_number",extractOrderId(orderNumber));
@@ -359,8 +374,8 @@ public final class YandexScreenParser {
         if(totalKopecks==null) totalKopecks=hocrOrderDetailTotal(hocr);
         addMoney(candidate,"total_kopecks",totalKopecks);
         addDecimal(candidate,"demand_coefficient",parseDecimal(coefficient));
-        addDateTime(candidate,"started_at",parseDateTime(started));
-        addDateTime(candidate,"completed_at",parseDateTime(completed));
+        addDateTime(candidate,"started_at",startedAt);
+        addDateTime(candidate,"completed_at",completedAt);
         addIfPresent(out,candidate);
     }
 

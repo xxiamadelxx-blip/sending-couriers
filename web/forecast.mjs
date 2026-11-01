@@ -371,8 +371,18 @@ export function importDays(data,rows,source='history',now=new Date().toISOString
           note:'Сумма отдельных подтверждённых видео-слотов за дату.'};
       }
       const dailyOrders=hasDailyTotal?old.orders:slots.reduce((sum,item)=>sum+item.orderCount,0);
-      const orderEvidence=hasDailyTotal?(old.orderEvidence??parsed.orderEvidence)
-        :mergeVideoEvidence(old?.ordersScope==='video_slots'?old.orderEvidence??[]:[],slotAdded?parsed.orderEvidence:[]);
+      // A confirmed day total owns the count, but must not discard the first
+      // observed RAW rows for that date. Keep existing XLSX RAW when present:
+      // without a common order number we cannot prove cross-source identity.
+      const oldEvidence=old?.orderEvidence??[];
+      const incomingEvidence=parsed.orderEvidence;
+      const videoOnlyOrEmpty=oldEvidence.every(row=>row.source?.startsWith('video:'));
+      const mergedEvidence=videoOnlyOrEmpty?mergeVideoEvidence(oldEvidence,incomingEvidence):oldEvidence;
+      const evidenceAdded=mergedEvidence.length>oldEvidence.length
+        ||videoOnlyOrEmpty&&mergedEvidence.some((row,i)=>row!==oldEvidence[i]);
+      const orderEvidence=hasDailyTotal
+        ?mergedEvidence
+        :mergeVideoEvidence(old?.ordersScope==='video_slots'?oldEvidence:[],slotAdded||evidenceAdded?incomingEvidence:[]);
       const merged={...(old??parsed),...parsed,
         source:hasDailyTotal?old.source:'video_slots',sourceHash:hasDailyTotal?old.sourceHash:fingerprint(slots.map(item=>[item.slotId,item.orderCount,item.sourceHash])),
         zone:old?.zone||parsed.zone,timezone:old?.timezone||parsed.timezone,
@@ -385,12 +395,13 @@ export function importDays(data,rows,source='history',now=new Date().toISOString
         exposureBlocks:old?.exposureBlocks?.length?old.exposureBlocks:parsed.exposureBlocks,
         appAccountedMin:old?.appAccountedMin??parsed.appAccountedMin,
         accountedConfirmed:old?.accountedConfirmed??parsed.accountedConfirmed,
-        evidenceComplete:hasDailyTotal?old.evidenceComplete:Boolean(orderEvidence.length===dailyOrders&&parsed.evidenceComplete),
+        evidenceComplete:hasDailyTotal?Boolean((old.evidenceComplete||parsed.evidenceComplete)
+          &&orderEvidence.length===dailyOrders):Boolean(orderEvidence.length===dailyOrders&&parsed.evidenceComplete),
         rawComplete:hasDailyTotal?old.rawComplete:orderEvidence.length===dailyOrders,
         sourceNotes:[...new Set([...(old?.sourceNotes??[]),...parsed.sourceNotes])].slice(0,20),
         manualTime:old?.manualTime??parsed.manualTime,confirmedAt:old?.confirmedAt??parsed.confirmedAt,
         importedAt:now,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
-      if(!slotAdded&&!slotConflictAdded&&!repairedLegacyConflict)continue;
+      if(!slotAdded&&!slotConflictAdded&&!repairedLegacyConflict&&!evidenceAdded)continue;
       days[parsed.date]=day(merged);changed++;conflicts+=days[parsed.date].conflicts.length;
       continue;
     }
@@ -433,13 +444,39 @@ export function videoImportReceipt(data,sourceHash=null,slotId=null) {
   for(const d of Object.values(data?.days??{})) for(const slot of d.videoSlots??[]) {
     if(sourceHash!=null&&slot.sourceHash!==sourceHash||slotId!=null&&slot.slotId!==slotId)continue;
     const source=`video:${slot.sourceHash}`;
-    const rows=(d.orderEvidence??[]).filter(row=>row.source===source).length;
+    const evidence=(d.orderEvidence??[]).filter(row=>row.source===source);
+    const rows=evidence.length;
+    const paired=evidence.filter(row=>row.acceptedMin!=null&&row.deliveredMin!=null&&row.confirmed).length;
     receipts.push({date:d.date,slotId:slot.slotId,sourceHash:slot.sourceHash,orders:slot.orderCount,
-      rows,dayOrders:d.orders,workConfirmed:d.workConfirmed===true,
+      rows,paired,dayOrders:d.orders,workConfirmed:d.workConfirmed===true,
       conflict:!!(d.conflicts?.length||d.sourceConflicts?.length||slot.conflicts?.length)});
   }
   receipts.sort((a,b)=>b.date.localeCompare(a.date)||b.slotId.localeCompare(a.slotId));
   return receipts[0]??null;
+}
+/** Rebuild forecast RAW from video orders already committed to Android SQLite. */
+export function restoreVideoOrderEvidence(data,sourceHash,storedOrders,now=new Date().toISOString()) {
+  if(!/^[0-9a-f]{64}$/.test(sourceHash)||!Array.isArray(storedOrders)||storedOrders.length>2000)
+    fail('Неверный источник сохранённых заказов видео.');
+  const source=`video:${sourceHash}`;
+  let result=data;
+  for(const d of Object.values(data.days)) {
+    const slots=(d.videoSlots??[]).filter(slot=>slot.sourceHash===sourceHash);
+    for(const slot of slots) {
+      const start=slot.startedAt?.match(/T(\d{2}):(\d{2})/),end=slot.completedAt?.match(/T(\d{2}):(\d{2})/);
+      const first=start?Number(start[1])*60+Number(start[2]):null;
+      const last=end?Number(end[1])*60+Number(end[2]):null;
+      const rows=storedOrders.filter(row=>row.date===d.date&&row.source===source
+        &&(slots.length===1||first!=null&&last!=null&&row.visibleMin!=null
+          &&row.visibleMin>=first&&row.visibleMin<=last));
+      if(!rows.length)continue;
+      result=importDays(result,[{date:d.date,slotId:slot.slotId,slotOrderCount:slot.orderCount,
+        orders:slot.orderCount,ordersConfirmed:true,completed:true,source,sourceHash,
+        startedAt:slot.startedAt,completedAt:slot.completedAt,orderEvidence:rows,
+        timezone:d.timezone,zone:d.zone,precision:'unknown',workConfirmed:false}],source,now);
+    }
+  }
+  return result;
 }
 export function syncSlots(data,entries) {
   // Only offer slot totals as unconfirmed observations. No inference of availability.

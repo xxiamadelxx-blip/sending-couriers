@@ -11,7 +11,7 @@ import {periodDayMarkup} from './period-day-view.mjs';
 import { feedback as emitFeedback } from './feedback.mjs';
 import { mountForecast } from './forecast-ui.mjs';
 import {prepareForecast,forecastKey} from './forecast-runtime.mjs';
-import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity, importDays, videoImportReceipt } from './forecast.mjs';
+import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity, importDays, videoImportReceipt, restoreVideoOrderEvidence } from './forecast.mjs';
 import { weatherCache, weatherParts, weatherSymbol, weatherDescription, weatherLocation } from './weather.mjs';
 import { intervalField, bindIntervals, intervalValue } from './interval-control.mjs';
 import { withSlotWorkingTime } from './slot-work.mjs';
@@ -95,7 +95,8 @@ window.receiveVideoImport = raw => {
       const saved=Native?normalizeState(JSON.parse(Native.readState())).forecast:state.forecast;
       for(const imported of importedDays) {
         const receipt=videoImportReceipt(saved,imported.sourceHash,imported.slotId);
-        if(!receipt||receipt.date!==imported.date||receipt.orders!==imported.orders)
+        if(!receipt||receipt.date!==imported.date||receipt.orders!==imported.orders
+            ||receipt.rows<(imported.orderEvidence?.length??0))
           throw new Error('Запись видео в истории прогноза не подтверждена. Результат сохранён для повторной проверки.');
       }
       acknowledge();
@@ -137,9 +138,27 @@ window.receiveNativeForecasts = raw => {
 function refreshNativeForecasts() {
   try {
     const imports=Native?.pendingVideoResults?.();if(imports)window.receivePendingVideoResults(imports);
+    recoverStoredVideoEvidence();
     const pending=Native?.pendingNativeForecasts?.();if(pending)window.receiveNativeForecasts(pending);
   }
   catch(error) { console.warn('Native forecast handoff failed:',error?.message??error); }
+}
+function recoverStoredVideoEvidence() {
+  if(!Native?.readVideoOrderEvidence||!state?.forecast?.days)return;
+  const missing=Object.values(state.forecast.days).flatMap(day=>(day.videoSlots??[])
+    .filter(slot=>videoImportReceipt(state.forecast,slot.sourceHash,slot.slotId)?.rows<slot.orderCount)
+    .map(slot=>({date:day.date,hash:slot.sourceHash})));
+  const hashes=[...new Set(missing.sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(row=>row.hash))];
+  let forecast=state.forecast;
+  for(const hash of hashes) {
+    const stored=JSON.parse(Native.readVideoOrderEvidence(hash));
+    if(stored.ok!==true||!Array.isArray(stored.orders))throw new Error('Не удалось прочитать сохранённые заказы видео.');
+    forecast=restoreVideoOrderEvidence(forecast,hash,stored.orders);
+  }
+  if(JSON.stringify(forecast.days)!==JSON.stringify(state.forecast.days)) {
+    persist({...state,forecast},true);
+    if(view==='forecast')forecastScreen?.refresh?.();
+  }
 }
 window.refreshNativeForecasts=refreshNativeForecasts;
 window.receiveWeather = text => {

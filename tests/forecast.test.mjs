@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,importDays,normalizeForecast,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,localClock,addDays,syncSlots,forecastClock,mergeForecast,videoImportReceipt} from '../web/forecast.mjs';
+import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,importDays,normalizeForecast,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,localClock,addDays,syncSlots,forecastClock,mergeForecast,videoImportReceipt,restoreVideoOrderEvidence} from '../web/forecast.mjs';
 import {emptyState,normalizeState,mergeImport,upsertEntry,calculate,forecastFinances,setPaymentTerms} from '../web/core.mjs';
 const profile=(data=emptyForecast(),patch={})=>saveProfile(data,{effectiveFrom:'2026-01-01',timezone:'Europe/Moscow',zone:'Test',outsidePayment:'UNKNOWN',week:Array.from({length:7},()=>({intervals:parseWindows('09:00–14:00;17:00–21:00'),accountedMin:840})),...patch},'2026-01-01T00:00:00Z');
 const confirmed=(date,orders=27)=>({date,orders,ordersConfirmed:true,precision:'intervals',intervals:[...parseWindows('09:00–14:00;17:00–21:00'),...parseWindows('07:00–09:00;14:00–17:00','UNAVAILABLE')],workConfirmed:true,appAccountedMin:840,accountedConfirmed:true});
@@ -132,11 +132,43 @@ test('video receipt survives persisted state reload and distinguishes rows from 
  const first=importDays(emptyForecast(),[imported],source,'2026-11-01T20:00:00Z');
  const saved=normalizeForecast(JSON.parse(JSON.stringify(first)));
  assert.deepEqual(videoImportReceipt(saved,hash,imported.slotId),{
-  date,slotId:imported.slotId,sourceHash:hash,orders:28,rows:28,
+  date,slotId:imported.slotId,sourceHash:hash,orders:28,rows:28,paired:0,
   dayOrders:28,workConfirmed:false,conflict:false});
  assert.equal(videoImportReceipt(saved,'b'.repeat(64),imported.slotId),null);
  assert.deepEqual(importDays(saved,[imported],source,'2026-11-01T20:01:00Z'),saved);
  assert.equal(predict(saved,'2026-11-02').comparableN,0,'unknown work must not train the hourly model');
+});
+test('an existing daily total no longer discards video rows, and old 0/28 state repairs from native facts',()=>{
+ const date='2026-11-01',hash='b'.repeat(64),source=`video:${hash}`;
+ const base=importDays(emptyForecast(),[{date,orders:28,ordersConfirmed:true,source:'manual'}],'manual');
+ const slot={date,slotId:'348093482',source,sourceHash:hash,orders:28,ordersConfirmed:true,
+  startedAt:'2026-11-01T09:58',completedAt:'2026-11-01T22:00'};
+ const rows=Array.from({length:28},(_,i)=>({id:`m5-${i}`,date,visibleMin:720+i*20,source,
+  acceptedMin:i<18?710+i*20:null,deliveredMin:i<18?720+i*20:null,confirmed:i<18}));
+ const direct=importDays(base,[{...slot,orderEvidence:rows}],source);
+ assert.equal(videoImportReceipt(direct,hash,slot.slotId).rows,28);
+ assert.equal(videoImportReceipt(direct,hash,slot.slotId).paired,18);
+ const broken=importDays(base,[slot],source);
+ assert.equal(videoImportReceipt(broken,hash,slot.slotId).rows,0);
+ const repaired=restoreVideoOrderEvidence(broken,hash,rows);
+ const saved=normalizeForecast(JSON.parse(JSON.stringify(repaired)));
+ assert.equal(videoImportReceipt(saved,hash,slot.slotId).rows,28);
+ assert.equal(videoImportReceipt(saved,hash,slot.slotId).paired,18);
+ assert.equal(saved.days[date].orders,28);
+ assert.deepEqual(restoreVideoOrderEvidence(saved,hash,rows).days,saved.days);
+ assert.equal(predict(saved,'2026-11-02').comparableN,0);
+});
+test('two video slots retain their separate rows under one confirmed daily count',()=>{
+ const date='2026-11-01',first='a'.repeat(64),second='b'.repeat(64);
+ let data=importDays(emptyForecast(),[{date,orders:2,ordersConfirmed:true,source:'manual'}]);
+ for(const [index,hash] of [first,second].entries()) {
+  const source=`video:${hash}`;
+  data=importDays(data,[{date,slotId:`slot-${index}`,sourceHash:hash,source,orders:1,
+   ordersConfirmed:true,orderEvidence:[{id:`order-${index}`,source,visibleMin:600+index*30}]}],source);
+ }
+ assert.equal(data.days[date].orders,2);
+ assert.equal(data.days[date].orderEvidence.length,2);
+ assert.equal(videoImportReceipt(data,second,'slot-1').rows,1);
 });
 test('window forecasts exclude pauses, preserve total counts and remain absent for total-only time',()=>{
  const d=history(),p=predict(d,'2026-10-01');assert.equal(p.intervalForecasts.length,2);assert.equal(p.intervalForecasts.reduce((n,w)=>n+w.central,0),p.central);assert.deepEqual(p.intervalForecasts.map(w=>[w.start,w.end]),[[540,840],[1020,1260]]);assert.deepEqual(predict(d,'2026-10-01',{workingMin:540}).intervalForecasts,[]);

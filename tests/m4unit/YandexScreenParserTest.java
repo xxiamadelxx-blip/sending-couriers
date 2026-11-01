@@ -4,6 +4,17 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class YandexScreenParserTest {
+    @Test public void recoversVisibleStartTimeWhenOnlyItsLabelIsUnreadable() {
+        String card="Заказ\nИтого\n100,00 ₽\nДетали\nСтатус\nЗавершён\n"
+            +"Номер заказа\n123456-1234567\nЕЕ Ще)\n2026.11.01 18:48\n"
+            +"Завершение\n2026.11.01 19:05";
+        YandexScreenParser.Candidate detail=find(YandexScreenParser.parse(card),"ORDER_DETAIL");
+        assertEquals("2026-11-01T18:48",field(detail,"started_at"));
+        assertEquals("2026-11-01T19:05",field(detail,"completed_at"));
+        String ambiguous=card+"\n2026.11.01 20:00";
+        detail=find(YandexScreenParser.parse(ambiguous),"ORDER_DETAIL");
+        assertNull(field(detail,"started_at"));
+    }
     @Test public void classifiesRussianOrdersScreenAndExtractsOrderDetailCandidates() {
         YandexScreenParser.Result result=YandexScreenParser.parse(
             "Заказ\nИтого\n123,45 ₽\nДетали\nСтатус\nЗавершён\n"
