@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,importDays,normalizeForecast,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,localClock,addDays,syncSlots,forecastClock,mergeForecast} from '../web/forecast.mjs';
+import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,importDays,normalizeForecast,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,localClock,addDays,syncSlots,forecastClock,mergeForecast,videoImportReceipt} from '../web/forecast.mjs';
 import {emptyState,normalizeState,mergeImport,upsertEntry,calculate,forecastFinances,setPaymentTerms} from '../web/core.mjs';
 const profile=(data=emptyForecast(),patch={})=>saveProfile(data,{effectiveFrom:'2026-01-01',timezone:'Europe/Moscow',zone:'Test',outsidePayment:'UNKNOWN',week:Array.from({length:7},()=>({intervals:parseWindows('09:00–14:00;17:00–21:00'),accountedMin:840})),...patch},'2026-01-01T00:00:00Z');
 const confirmed=(date,orders=27)=>({date,orders,ordersConfirmed:true,precision:'intervals',intervals:[...parseWindows('09:00–14:00;17:00–21:00'),...parseWindows('07:00–09:00;14:00–17:00','UNAVAILABLE')],workConfirmed:true,appAccountedMin:840,accountedConfirmed:true});
@@ -122,6 +122,21 @@ test('default-equivalent old payment rules can restore after new optional rule f
 });
 test('invalid forecast record fields reject before state replacement',()=>{
  const data=history();assert.throws(()=>saveDay(data,{date:'2026-10-01',orders:true}));assert.throws(()=>normalizeForecast({...data,evaluations:[{id:'bad',forecastId:'x',factDate:'2026-10-01',factRevision:1,evaluatedAt:'2026-10-02T00:00:00Z',fact:'<img src=x>',signedError:0,absoluteError:0}]}));
+});
+test('video receipt survives persisted state reload and distinguishes rows from the slot total',()=>{
+ const date='2026-11-01',hash='a'.repeat(64),source=`video:${hash}`;
+ const imported={date,slotId:'341234567',source,sourceHash:hash,orders:28,slotOrderCount:28,
+  ordersConfirmed:true,completed:true,workConfirmed:false,workingMin:null,precision:'unknown',
+  orderEvidence:Array.from({length:28},(_,i)=>({id:`video-row-${i}`,visibleMin:480+i,
+   source,confidence:'LIST_ROW_CROSSCHECKED',confirmed:false}))};
+ const first=importDays(emptyForecast(),[imported],source,'2026-11-01T20:00:00Z');
+ const saved=normalizeForecast(JSON.parse(JSON.stringify(first)));
+ assert.deepEqual(videoImportReceipt(saved,hash,imported.slotId),{
+  date,slotId:imported.slotId,sourceHash:hash,orders:28,rows:28,
+  dayOrders:28,workConfirmed:false,conflict:false});
+ assert.equal(videoImportReceipt(saved,'b'.repeat(64),imported.slotId),null);
+ assert.deepEqual(importDays(saved,[imported],source,'2026-11-01T20:01:00Z'),saved);
+ assert.equal(predict(saved,'2026-11-02').comparableN,0,'unknown work must not train the hourly model');
 });
 test('window forecasts exclude pauses, preserve total counts and remain absent for total-only time',()=>{
  const d=history(),p=predict(d,'2026-10-01');assert.equal(p.intervalForecasts.length,2);assert.equal(p.intervalForecasts.reduce((n,w)=>n+w.central,0),p.central);assert.deepEqual(p.intervalForecasts.map(w=>[w.start,w.end]),[[540,840],[1020,1260]]);assert.deepEqual(predict(d,'2026-10-01',{workingMin:540}).intervalForecasts,[]);

@@ -427,6 +427,20 @@ export function importDays(data,rows,source='history',now=new Date().toISOString
   if(!changed && data.imports.some(i=>i.id===id)) return data;
   return {...data,days,imports:[...data.imports.filter(i=>i.id!==id),{id,source,at:now,days:rows.length,changed,conflicts,parserVersion:'history-2',status:conflicts?'REVIEW':'IMPORTED'}]};
 }
+/** Read a video receipt from the persisted forecast day, never from an OCR dialog. */
+export function videoImportReceipt(data,sourceHash=null,slotId=null) {
+  const receipts=[];
+  for(const d of Object.values(data?.days??{})) for(const slot of d.videoSlots??[]) {
+    if(sourceHash!=null&&slot.sourceHash!==sourceHash||slotId!=null&&slot.slotId!==slotId)continue;
+    const source=`video:${slot.sourceHash}`;
+    const rows=(d.orderEvidence??[]).filter(row=>row.source===source).length;
+    receipts.push({date:d.date,slotId:slot.slotId,sourceHash:slot.sourceHash,orders:slot.orderCount,
+      rows,dayOrders:d.orders,workConfirmed:d.workConfirmed===true,
+      conflict:!!(d.conflicts?.length||d.sourceConflicts?.length||slot.conflicts?.length)});
+  }
+  receipts.sort((a,b)=>b.date.localeCompare(a.date)||b.slotId.localeCompare(a.slotId));
+  return receipts[0]??null;
+}
 export function syncSlots(data,entries) {
   // Only offer slot totals as unconfirmed observations. No inference of availability.
   const byDate=new Map();
@@ -534,3 +548,4 @@ export function forecastReport(data) {
     'Оценки ревизий:',...data.evaluations.slice(-60).map(e=>`- ${e.id}; факт v${e.factRevision}=${e.fact}; ошибка=${e.signedError}; в диапазоне=${e.covered}; до начала работы=${e.prospective}.`),
     'Персональные профили, полные снимки и журнал импорта находятся в JSON-копии. Сценарии не входят в обучение.',''].join('\n');
 }
+

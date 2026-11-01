@@ -11,7 +11,7 @@ import {periodDayMarkup} from './period-day-view.mjs';
 import { feedback as emitFeedback } from './feedback.mjs';
 import { mountForecast } from './forecast-ui.mjs';
 import {prepareForecast,forecastKey} from './forecast-runtime.mjs';
-import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity, importDays } from './forecast.mjs';
+import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity, importDays, videoImportReceipt } from './forecast.mjs';
 import { weatherCache, weatherParts, weatherSymbol, weatherDescription, weatherLocation } from './weather.mjs';
 import { intervalField, bindIntervals, intervalValue } from './interval-control.mjs';
 import { withSlotWorkingTime } from './slot-work.mjs';
@@ -91,13 +91,20 @@ window.receiveVideoImport = raw => {
       const importedDays=Array.isArray(result.forecastDays)?result.forecastDays:[result.forecastDay];
       const forecast=importDays(state.forecast,importedDays,source,new Date().toISOString());
       persist({...state,forecast},true);
+      // Verify the stored state, not just the in-memory forecast or the OCR report.
+      const saved=Native?normalizeState(JSON.parse(Native.readState())).forecast:state.forecast;
+      for(const imported of importedDays) {
+        const receipt=videoImportReceipt(saved,imported.sourceHash,imported.slotId);
+        if(!receipt||receipt.date!==imported.date||receipt.orders!==imported.orders)
+          throw new Error('Запись видео в истории прогноза не подтверждена. Результат сохранён для повторной проверки.');
+      }
       acknowledge();
       if (view === 'forecast') forecastScreen?.refresh?.();
       else openForecast('today');
-      notify(`Видео импортировано: ${result.importedOrderCount} заказов. Прогноз открыт, данные сохранены.`);
+      notify(`Видео сохранено в прогнозе: ${result.importedOrderCount} заказов. Подтверждено чтением из хранилища.`);
     } else if (result.duplicate) { notify(result.forecastFactMessage||'Это видео уже обработано.'); acknowledge(); }
     else { notify(result.forecastFactMessage||`Разобрано кадров: ${result.frames}; извлечённые факты не прошли сверку и не записаны в прогноз.`); acknowledge(); }
-  } catch { notify('Импорт видео завершился без читаемого результата.'); }
+  } catch(error) { notify(error?.message||'Импорт видео завершился без читаемого результата.'); }
 };
 window.receivePendingVideoResults = raw => {
   try {

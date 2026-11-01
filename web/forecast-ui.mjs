@@ -1,4 +1,4 @@
-import {emptyForecast,profileFor,planDay,parseWindows,windowsText,saveTimeline,workingMinutes,currentProfile,forecastClock,addDays,minuteLabel,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,parseMinute,saveForecastHours} from './forecast.mjs';
+import {emptyForecast,profileFor,planDay,parseWindows,windowsText,saveTimeline,workingMinutes,currentProfile,forecastClock,addDays,minuteLabel,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,parseMinute,saveForecastHours,videoImportReceipt} from './forecast.mjs';
 import {parseForecastFile,applyHistory,importSummary} from './forecast-import.mjs';
 import {forecastFinances,calculateScenario,money,hoursText,formatDate,periodLabel,paymentTermsFor} from './core.mjs';
 import {durationField,bindDurations,syncDuration} from './duration-control.mjs';
@@ -39,11 +39,12 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
     bindDurations(root);bindIntervals(root);nav();window.scrollTo(0,0);
   }
   function simpleView() {
-    const f=data(),date=current().date,own=f.plans[date];
+    const f=data(),date=current().date,own=f.plans[date],receipt=videoImportReceipt(f);
     let plan;try{plan=planDay(f,date);}catch(error){if(!/Ночная работа пересекает следующий день/.test(error.message))throw error;plan={};}
     const slot=own?.slotMin??f.weekConfig?.slotMin??plan.slotMin??plan.accountedMin??840;
     const work=own?.workingMin??f.weekConfig?.workingMin??plan.workingMin??480;
     shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><div class="forecast-band forecast-insufficient" id="simpleRange" role="status"></div></section>
+      ${receipt?`<section class="detail-card" id="videoImportReceipt" aria-label="Сохранённое видео"><h2>Видео за ${esc(formatDate(receipt.date))}</h2><p>В истории прогноза сохранён слот: ${receipt.orders} заказов. Отдельных строк этого видео в истории: ${receipt.rows} из ${receipt.orders}.</p><p>${receipt.conflict?'Есть расхождение источников — проверьте историю.':receipt.workConfirmed?'Рабочее время подтверждено в истории.':'Рабочее время видео не подтвердило.'}</p></section>`:''}
       <section class="detail-card forecast-simple-plan"><h2>Моё время</h2>${durationField('todaySlotHours','Слот',slot)}${durationField('todayWorkHours','Из них буду работать',work)}<p class="forecast-work-note">Время простоя не считается активной работой.</p><p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
       <div class="forecast-import-actions"><button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><button class="button outline forecast-import-button" id="importForecastVideo" type="button">Импортировать видео</button></div><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
     // Approved visual text only. Keep both inputs, their original IDs and
