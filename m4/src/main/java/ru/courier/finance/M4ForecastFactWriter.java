@@ -145,8 +145,8 @@ public final class M4ForecastFactWriter {
                     identifiedSlots.put(id,prior==null?candidate:prior.mergeMissingFields(candidate));
                 }
             } else if("ORDER_LIST_ROW".equals(candidate.candidateType)) rows.add(candidate);
-            else if("ORDER_DETAIL".equals(candidate.candidateType)) details.add(candidate);
         }
+        details.addAll(crossCheckedOrderDetails(analysis));
         if(identifiedSlots.isEmpty()) throw new IllegalArgumentException("Не распознана карточка слота с числом заказов; факты не записаны.");
         // A slot card without a readable ID can enrich an identified card only
         // when its date/range or count/total points to that card uniquely.
@@ -169,6 +169,41 @@ public final class M4ForecastFactWriter {
             extracted.add(extractSlot(analysis,slotEntry.getValue(),slotRows,details));
         }
         return extracted;
+    }
+
+    /** Order-card times enter forecast facts only after independent frame support. */
+    private static List<YandexScreenParser.Candidate> crossCheckedOrderDetails(
+            VideoImportProcessor.Result analysis) {
+        List<VideoOrderTimePairs.Frame> frames=new ArrayList<>();
+        for(VideoImportProcessor.Observation observation:analysis.observations)
+            frames.add(new VideoOrderTimePairs.Frame(observation.frameSha256,observation.ocrText,
+                observation.candidates));
+        List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        Map<String,VideoOrderTimePairs.Pair> byOrderNumber=new LinkedHashMap<>();
+        Set<String> conflicts=new HashSet<>();
+        for(VideoOrderTimePairs.Pair pair:pairs) {
+            if(pair.orderNumber==null||pair.amount==null) continue;
+            VideoOrderTimePairs.Pair previous=byOrderNumber.get(pair.orderNumber);
+            if(previous==null) byOrderNumber.put(pair.orderNumber,pair);
+            else if(!previous.accepted.equals(pair.accepted)||!previous.completed.equals(pair.completed))
+                conflicts.add(pair.orderNumber);
+            else if(pair.frames>previous.frames) byOrderNumber.put(pair.orderNumber,pair);
+        }
+        List<YandexScreenParser.Candidate> details=new ArrayList<>();
+        for(Map.Entry<String,VideoOrderTimePairs.Pair> entry:byOrderNumber.entrySet()) {
+            if(conflicts.contains(entry.getKey())) continue;
+            VideoOrderTimePairs.Pair pair=entry.getValue();
+            List<YandexScreenParser.Field> fields=new ArrayList<>();
+            fields.add(new YandexScreenParser.Field("order_number","text",pair.orderNumber));
+            fields.add(new YandexScreenParser.Field("status","text","COMPLETED"));
+            fields.add(new YandexScreenParser.Field("started_at","datetime",pair.accepted));
+            fields.add(new YandexScreenParser.Field("completed_at","datetime",pair.completed));
+            fields.add(new YandexScreenParser.Field("total_kopecks","integer",pair.amount));
+            fields.add(new YandexScreenParser.Field("time_pair_confidence","integer",
+                String.valueOf(pair.timeConfidence)));
+            details.add(new YandexScreenParser.Candidate("ORDER_DETAIL",0.92f,fields));
+        }
+        return details;
     }
 
     private static boolean slotCardMatches(YandexScreenParser.Candidate partial,YandexScreenParser.Candidate full) {

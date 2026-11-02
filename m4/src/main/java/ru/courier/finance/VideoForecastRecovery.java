@@ -19,20 +19,17 @@ import org.json.JSONObject;
 /** Read already committed video orders for a durable forecast handoff. */
 public final class VideoForecastRecovery {
     private static final ZoneId MOSCOW=ZoneId.of("Europe/Moscow");
-    private static final String RECOVERY_VERSION="ocr-time-pairs-v3";
+    private static final String RECOVERY_VERSION="ocr-time-pairs-v5";
     private VideoForecastRecovery() {}
 
-    /** Repair missing timestamps from the video's immutable OCR frames once per recovery version. */
+    /** Recompute from immutable OCR frames on each read so old reports cannot mask parser fixes. */
     public static String reconcileAndRead(Context context,CourierDatabase store,String hash) throws Exception {
         validate(hash);
         SharedPreferences prefs=context.getSharedPreferences("m4-video-time-recovery",Context.MODE_PRIVATE);
         String key=RECOVERY_VERSION+":"+hash;
-        String report=prefs.getString(key,null);
-        if(report==null) {
-            report=reconcile(context,store,hash).toString();
-            if(!prefs.edit().putString(key,report).commit())
-                throw new IllegalStateException("Recovery report could not be saved");
-        }
+        String report=reconcile(context,store,hash).toString();
+        if(!prefs.edit().putString(key,report).commit())
+            throw new IllegalStateException("Recovery report could not be saved");
         return new JSONObject(read(store,hash)).put("recovery",new JSONObject(report)).toString();
     }
 
@@ -101,10 +98,14 @@ public final class VideoForecastRecovery {
     private static JSONObject applyPairs(CourierDatabase store,String hash,
                                          List<VideoOrderTimePairs.Frame> frames,int savedDetails) throws Exception {
         List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
-        Map<String,VideoOrderTimePairs.Pair> byCompletion=new HashMap<>();
-        for(VideoOrderTimePairs.Pair pair:pairs) byCompletion.put(pair.completed,pair);
+        Map<String,List<VideoOrderTimePairs.Pair>> byCompletion=new HashMap<>();
+        Map<String,List<VideoOrderTimePairs.Pair>> byOrderNumber=new HashMap<>();
+        for(VideoOrderTimePairs.Pair pair:pairs) {
+            byCompletion.computeIfAbsent(pair.completed,k->new ArrayList<>()).add(pair);
+            if(pair.orderNumber!=null) byOrderNumber.computeIfAbsent(pair.orderNumber,k->new ArrayList<>()).add(pair);
+        }
         SQLiteDatabase db=store.getWritableDatabase();
-        Map<String,Integer> counts=new HashMap<>();
+        Map<String,Integer> counts=new HashMap<>(),orderNumberCounts=new HashMap<>();
         List<String[]> rows=new ArrayList<>();
         String source="video:"+hash;
         try(Cursor cursor=db.rawQuery(
@@ -117,25 +118,65 @@ public final class VideoForecastRecovery {
                 if(date==null||visible==null) continue;
                 String end=String.format(java.util.Locale.ROOT,"%sT%02d:%02d",date,visible/60,visible%60);
                 counts.put(end,counts.containsKey(end)?counts.get(end)+1:1);
+                String orderNumber=cursor.getString(5);
+                if(orderNumber!=null) orderNumberCounts.put(orderNumber,
+                    orderNumberCounts.containsKey(orderNumber)?orderNumberCounts.get(orderNumber)+1:1);
                 rows.add(new String[]{cursor.getString(0),end,cursor.getString(3),cursor.getString(4),
-                    cursor.getString(5),cursor.isNull(6)?null:cursor.getString(6)});
+                    orderNumber,cursor.isNull(6)?null:cursor.getString(6)});
             }
         }
-        int recovered=0;
+        int recovered=0,alreadyComplete=0;
+        int matchedByOrderId=0,matchedByUniqueCompletion=0,ambiguousMatches=0,unmatchedPairs=0;
         db.beginTransaction();
         try {
             for(String[] row:rows) {
-                VideoOrderTimePairs.Pair pair=byCompletion.get(row[1]);
-                if(pair==null||counts.get(row[1])!=1||row[2]!=null||row[3]!=null) continue;
-                if(row[4]!=null&&!pair.orderNumbers.contains(row[4])) continue;
-                if(!pair.amounts.isEmpty()&&(row[5]==null||!pair.amounts.contains(row[5]))) continue;
+                if(row[2]!=null&&row[3]!=null) { alreadyComplete++;continue; }
+                VideoOrderTimePairs.Pair pair=null;boolean matchedById=false;
+                if(row[4]!=null&&orderNumberCounts.get(row[4])==1) {
+                    List<VideoOrderTimePairs.Pair> exact=byOrderNumber.get(row[4]);
+                    if(exact!=null&&exact.size()==1&&row[1].equals(exact.get(0).completed)) {
+                        pair=exact.get(0);matchedById=true;
+                    }
+                }
+                if(pair==null) {
+                    List<VideoOrderTimePairs.Pair> completionPairs=byCompletion.get(row[1]);
+                    if(completionPairs==null||completionPairs.isEmpty()) { unmatchedPairs++;continue; }
+                    if(counts.get(row[1])!=1) { ambiguousMatches++;continue; }
+                    List<VideoOrderTimePairs.Pair> compatible=new ArrayList<>();
+                    for(VideoOrderTimePairs.Pair candidate:completionPairs) {
+                        if(row[4]!=null&&candidate.orderNumber!=null&&!candidate.orderNumber.equals(row[4])) continue;
+                        compatible.add(candidate);
+                    }
+                    if(compatible.size()>1&&row[5]!=null) {
+                        List<VideoOrderTimePairs.Pair> amountMatches=new ArrayList<>();
+                        for(VideoOrderTimePairs.Pair candidate:compatible)
+                            if(row[5].equals(candidate.amount)||candidate.amounts.contains(row[5])) amountMatches.add(candidate);
+                        if(amountMatches.size()==1) compatible=amountMatches;
+                    }
+                    if(compatible.size()!=1) { ambiguousMatches++;continue; }
+                    pair=compatible.get(0);
+                }
+                boolean orderIdMatches=row[4]!=null&&!pair.orderNumbers.isEmpty()
+                    &&pair.orderNumbers.contains(row[4]);
+                if(row[4]!=null&&!pair.orderNumbers.isEmpty()&&!orderIdMatches) continue;
+                // Multi-frame time evidence is independent of the list's reward:
+                // tips and demand coefficients can make the displayed amounts differ.
+                // A single-frame pair still needs a second anchor before it is used.
+                if(pair.frames<2&&!orderIdMatches
+                        &&(row[5]==null||!pair.amounts.contains(row[5]))) continue;
                 String accepted=toUtc(pair.accepted),completed=toUtc(pair.completed);
                 ContentValues values=new ContentValues();
-                values.put("accepted_at",accepted);values.put("completed_at",completed);
+                if(row[2]==null) values.put("accepted_at",accepted);
+                if(row[3]==null) values.put("completed_at",completed);
                 values.put("confidence","confirmed");values.put("precision","ocr_time_pair_crosschecked");
                 values.put("updated_at",Instant.now().toString());
-                recovered+=db.update("orders",values,"id=? AND source_id=? AND accepted_at IS NULL AND completed_at IS NULL",
+                int updated=db.update("orders",values,"id=? AND source_id=? AND (accepted_at IS NULL OR completed_at IS NULL)",
                     new String[]{row[0],source});
+                recovered+=updated;
+                if(updated>0) {
+                    if(matchedById) matchedByOrderId++;
+                    else matchedByUniqueCompletion++;
+                }
             }
             if(recovered>0) {
                 ContentValues audit=new ContentValues();
@@ -150,7 +191,9 @@ public final class VideoForecastRecovery {
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
         return new JSONObject().put("frames",frames.size()).put("savedDetails",savedDetails)
-            .put("timePairs",pairs.size()).put("newRows",recovered).put("status","CHECKED");
+            .put("timePairs",pairs.size()).put("alreadyComplete",alreadyComplete).put("newRows",recovered)
+            .put("matchedByOrderId",matchedByOrderId).put("matchedByUniqueCompletion",matchedByUniqueCompletion)
+            .put("ambiguousMatches",ambiguousMatches).put("unmatchedPairs",unmatchedPairs).put("status","CHECKED");
     }
 
     private static String toUtc(String local) {

@@ -379,10 +379,10 @@ public final class VideoImportProcessor {
                                            Map<String,YandexScreenParser.Candidate> slots) {
             if(!"ORDER_LIST_ROW".equals(candidate.candidateType)) return false;
             int minute=orderMinute(candidate);
-            if(minute<0) return false;
-            YandexScreenParser.Candidate slot=slots.get(value(candidate,"slot_id"));
-            int start=slotStart(slot),end=slotEnd(slot);
-            return start<0||end<=start||minute>=start&&minute<=end;
+            // Keep a readable row even when the slot's own OCR time range may
+            // be wrong. The fact writer validates slot windows before writing;
+            // dropping the candidate here would hide the evidence from review.
+            return minute>=0;
         }
         private static YandexScreenParser.Candidate withSlotId(YandexScreenParser.Candidate candidate,String slotId) {
             List<YandexScreenParser.Field> fields=new ArrayList<>(candidate.fields);
@@ -498,15 +498,17 @@ public final class VideoImportProcessor {
                     if(cached==null) {
                         TesseractOcrEngine.Recognition recognized=ocr.recognize(frame);
                         YandexScreenParser.Result parsed=YandexScreenParser.parse(recognized.text,recognized.hocrText);
-                        if(looksLikeOrderCard(recognized.text)) {
-                            int top=Math.round(frame.getHeight()*0.30f);
-                            int bottom=Math.round(frame.getHeight()*0.79f);
-                            Bitmap focused=Bitmap.createBitmap(frame,0,top,frame.getWidth(),bottom-top);
-                            try {
-                                TesseractOcrEngine.Recognition detail=ocr.recognizeFocused(focused);
-                                parsed=YandexScreenParser.withFocusedOrderDetail(parsed,detail.text,detail.hocrText);
-                            } finally { focused.recycle(); }
-                        }
+                        // The first OCR pass can miss the word "Детали" on exactly
+                        // the frames where a second pass is needed. Always inspect
+                        // the card region; the parser accepts only a complete order
+                        // ID, completed status and chronological timestamp pair.
+                        int top=Math.round(frame.getHeight()*0.30f);
+                        int bottom=Math.round(frame.getHeight()*0.79f);
+                        Bitmap focused=Bitmap.createBitmap(frame,0,top,frame.getWidth(),bottom-top);
+                        try {
+                            TesseractOcrEngine.Recognition detail=ocr.recognizeFocused(focused);
+                            parsed=YandexScreenParser.withFocusedOrderDetail(parsed,detail.text,detail.hocrText);
+                        } finally { focused.recycle(); }
                         String reviewPath=parsed.reviewRequired?saveUnknownFrame(context,sourceHash,timestamp,frame):null;
                         if(reviewPath!=null) previewFiles.add(new File(context.getFilesDir(),reviewPath));
                         cached=new CachedRecognition(recognized.text,recognized.confidence,parsed,reviewPath);
@@ -525,14 +527,6 @@ public final class VideoImportProcessor {
             retriever.release();
             if(!complete) for(File image:previewFiles) image.delete();
         }
-    }
-
-    private static boolean looksLikeOrderCard(String text) {
-        if(text==null) return false;
-        String value=text.toLowerCase(Locale.ROOT);
-        return value.contains("детали")&&(value.contains("номер заказа")
-            ||value.contains("коэффициент спроса")
-            ||value.contains("заказ")&&value.contains("завершение"));
     }
 
     public static String normalizedMime(String mimeType,String displayName) {
