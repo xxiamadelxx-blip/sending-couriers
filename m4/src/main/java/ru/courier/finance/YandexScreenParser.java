@@ -157,6 +157,7 @@ public final class YandexScreenParser {
         if(primary==null||focusedText==null||focusedText.isEmpty()) return primary;
         Result focused=parse("Заказ\n"+focusedText,focusedHocr);
         List<Candidate> accepted=new ArrayList<>(primary.candidates);
+        boolean changed=false;
         for(Candidate detail:focused.candidates) {
             if(!"ORDER_DETAIL".equals(detail.candidateType)
                     ||!"COMPLETED".equals(fieldValue(detail,"status"))) continue;
@@ -189,8 +190,9 @@ public final class YandexScreenParser {
             if(conflicting) continue;
             accepted.removeIf(prior->"ORDER_DETAIL".equals(prior.candidateType));
             accepted.add(detail);
+            changed=true;
         }
-        return accepted.size()==primary.candidates.size()?primary
+        return !changed?primary
             :new Result(primary.screenType,primary.reviewRequired,primary.reason,accepted);
     }
 
