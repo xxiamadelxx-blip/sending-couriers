@@ -588,10 +588,10 @@ public final class YandexScreenParserTest {
         assertEquals(1,((Integer)fact(facts,"recoveredOrderRows")).intValue());
     }
 
-    @Test public void refusesMissingRowRecoveryWhenDetailSubtotalDoesNotReconcile() throws Exception {
-        String slot="Слот: 300,00 ₽\n341234567\n3 заказа · 3 км\nЗаказы 300,00 ₽\n"
-            +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
-        String list="Яндекс Про\nЗаказы\n11:20 100,00 ₽ >\n11:40 100,00 ₽ >";
+    @Test public void keepsVerifiedListMoneyWhenCardSubtotalDoesNotReconcile() throws Exception {
+        String slot="Слот: 300,00 ₽\\n341234567\\n3 заказа · 3 км\\nЗаказы 300,00 ₽\\n"
+            +"Начало 2026.10.17 07:30\\nЗавершение 2026.10.17 22:00";
+        String list="Яндекс Про\\nЗаказы\\n11:20 100,00 ₽ >\\n11:40 100,00 ₽ >";
         VideoImportProcessor.Result video=videoWith(slot,list,
             detailCard("261017-1111111","10:55","11:20","100,00 ₽"),
             detailCard("261017-2222222","10:58","11:20","100,00 ₽"),
@@ -605,12 +605,20 @@ public final class YandexScreenParserTest {
         }
         assertEquals("all three distinct completed cards should be observed",3,observedDetails);
         assertTrue("the third card's 99 ₽ payout must be read without rounding",thirdAmountRead);
-        try {
-            extractFacts(video);
-            throw new AssertionError("expected strict detail subtotal rejection");
-        } catch(java.lang.reflect.InvocationTargetException expected) {
-            assertTrue(expected.getCause() instanceof IllegalArgumentException);
-        }
+
+        Object facts=extractFacts(video);
+        java.util.List<?> orders=(java.util.List<?>)fact(facts,"orders");
+        assertEquals(3,orders.size());
+        assertEquals(30000L,((Long)fact(facts,"rowAmountKopecks")).longValue());
+        assertEquals(3,((java.util.List<?>)fact(facts,"deliveries")).size());
+        Object third=null;
+        for(Object order:orders)
+            if("261017-3333333".equals(fact(order,"orderNumber"))) third=order;
+        assertNotNull("time pair must attach despite a different card amount",third);
+        assertTrue((Boolean)fact(third,"confirmedDelivery"));
+        assertEquals(10000L,((Long)fact(third,"amountKopecks")).longValue());
+        assertEquals(685,((Integer)fact(third,"acceptedMinute")).intValue());
+        assertEquals(700,((Integer)fact(third,"deliveredMinute")).intValue());
     }
 
     @Test public void refusesSlotWhenOrderSubtotalAndTipsDoNotMatchDisplayedGross() throws Exception {
