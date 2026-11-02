@@ -379,10 +379,10 @@ public final class VideoImportProcessor {
                                            Map<String,YandexScreenParser.Candidate> slots) {
             if(!"ORDER_LIST_ROW".equals(candidate.candidateType)) return false;
             int minute=orderMinute(candidate);
-            if(minute<0) return false;
-            YandexScreenParser.Candidate slot=slots.get(value(candidate,"slot_id"));
-            int start=slotStart(slot),end=slotEnd(slot);
-            return start<0||end<=start||minute>=start&&minute<=end;
+            // Keep a readable row even when the slot's own OCR time range may
+            // be wrong. The fact writer validates slot windows before writing;
+            // dropping the candidate here would hide the evidence from review.
+            return minute>=0;
         }
         private static YandexScreenParser.Candidate withSlotId(YandexScreenParser.Candidate candidate,String slotId) {
             List<YandexScreenParser.Field> fields=new ArrayList<>(candidate.fields);

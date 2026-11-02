@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v14";
+    public static final String VERSION = "yandex-pro-video-extract-v15";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -152,11 +152,12 @@ public final class YandexScreenParser {
         return parse(ocrText,null);
     }
 
-    /** Use a second OCR reading only when it is a complete, independently identified order card. */
+    /** Prefer a complete card-region reading over conflicting full-screen OCR fields. */
     public static Result withFocusedOrderDetail(Result primary,String focusedText,String focusedHocr) {
         if(primary==null||focusedText==null||focusedText.isEmpty()) return primary;
         Result focused=parse("Заказ\n"+focusedText,focusedHocr);
         List<Candidate> accepted=new ArrayList<>(primary.candidates);
+        boolean changed=false;
         for(Candidate detail:focused.candidates) {
             if(!"ORDER_DETAIL".equals(detail.candidateType)
                     ||!"COMPLETED".equals(fieldValue(detail,"status"))) continue;
@@ -167,24 +168,42 @@ public final class YandexScreenParser {
                 start=LocalDateTime.parse(fieldValue(detail,"started_at"));
                 end=LocalDateTime.parse(fieldValue(detail,"completed_at"));
             } catch(Exception incomplete) { continue; }
-            if(!end.isAfter(start)||!end.toLocalDate().equals(start.toLocalDate())) continue;
+            java.time.Duration duration=java.time.Duration.between(start,end);
+            if(duration.isNegative()||duration.isZero()||duration.compareTo(java.time.Duration.ofHours(12))>0) continue;
+            Integer focusedIdConfidence=integerField(detail,"order_number_confidence");
+            Integer focusedTimeConfidence=integerField(detail,"time_pair_confidence");
             boolean conflicting=false;
             for(Candidate prior:primary.candidates) if("ORDER_DETAIL".equals(prior.candidateType)) {
                 String priorNumber=fieldValue(prior,"order_number");
-                if(priorNumber!=null&&priorNumber.matches("[0-9]{6}-[0-9]{4,}")
-                        &&!priorNumber.equals(number)) conflicting=true;
+                if(priorNumber!=null&&priorNumber.matches("[0-9]{6}-[0-9]{4,}")&&!priorNumber.equals(number)) {
+                    Integer priorConfidence=integerField(prior,"order_number_confidence");
+                    if(focusedIdConfidence==null||focusedIdConfidence<80
+                            ||priorConfidence!=null&&focusedIdConfidence<=priorConfidence) conflicting=true;
+                }
                 String priorEnd=fieldValue(prior,"completed_at");
-                if(priorEnd!=null&&!priorEnd.equals(fieldValue(detail,"completed_at"))) conflicting=true;
+                if(priorEnd!=null&&!priorEnd.equals(fieldValue(detail,"completed_at"))) {
+                    Integer priorConfidence=integerField(prior,"time_pair_confidence");
+                    if(focusedTimeConfidence==null||focusedTimeConfidence<80
+                            ||priorConfidence!=null&&focusedTimeConfidence<=priorConfidence) conflicting=true;
+                }
             }
-            if(!conflicting) accepted.add(detail);
+            if(conflicting) continue;
+            accepted.removeIf(prior->"ORDER_DETAIL".equals(prior.candidateType));
+            accepted.add(detail);
+            changed=true;
         }
-        return accepted.size()==primary.candidates.size()?primary
+        return !changed?primary
             :new Result(primary.screenType,primary.reviewRequired,primary.reason,accepted);
     }
 
     private static String fieldValue(Candidate candidate,String name) {
         for(Field field:candidate.fields) if(name.equals(field.name)) return field.value;
         return null;
+    }
+
+    private static Integer integerField(Candidate candidate,String name) {
+        try { String value=fieldValue(candidate,name);return value==null?null:Integer.valueOf(value); }
+        catch(NumberFormatException invalid) { return null; }
     }
 
     /** Parses regular OCR text plus optional Tesseract hOCR word coordinates. */
@@ -411,7 +430,11 @@ public final class YandexScreenParser {
         }
 
         CandidateBuilder candidate=new CandidateBuilder("ORDER_DETAIL",0.92f);
-        addText(candidate,"order_number",extractOrderId(orderNumber));
+        String extractedOrderNumber=extractOrderId(orderNumber);
+        addText(candidate,"order_number",extractedOrderNumber);
+        Integer orderNumberConfidence=hocrOrderNumberConfidence(hocr,extractedOrderNumber);
+        if(orderNumberConfidence!=null)
+            candidate.add("order_number_confidence","integer",String.valueOf(orderNumberConfidence));
         addText(candidate,"status",normalizeStatus(status));
         Long totalKopecks=parseLabeledMoney(total);
         if(totalKopecks==null) totalKopecks=hocrOrderDetailTotal(hocr);
@@ -419,7 +442,51 @@ public final class YandexScreenParser {
         addDecimal(candidate,"demand_coefficient",parseDecimal(coefficient));
         addDateTime(candidate,"started_at",startedAt);
         addDateTime(candidate,"completed_at",completedAt);
+        Integer startConfidence=hocrDateTimeConfidence(hocr,"начало|время\\s+начала",startedAt);
+        Integer endConfidence=hocrDateTimeConfidence(hocr,"завершение|окончание|время\\s+завершения",completedAt);
+        if(startConfidence!=null&&endConfidence!=null)
+            candidate.add("time_pair_confidence","integer",String.valueOf(Math.min(startConfidence,endConfidence)));
         addIfPresent(out,candidate);
+    }
+
+    /** Confidence of the date/time digits beside a recognized hOCR label. */
+    private static Integer hocrDateTimeConfidence(String hocr,String labelRegex,String expected) {
+        if(expected==null||hocr==null||hocr.isEmpty()) return null;
+        Pattern labelPattern=Pattern.compile("^(?:"+labelRegex+")$",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+        List<HocrWord> words=parseHocrWords(hocr);
+        List<HocrWord> labels=new ArrayList<>(),dates=new ArrayList<>(),times=new ArrayList<>();
+        for(HocrWord word:words) {
+            String normalized=normalize(word.text).replaceAll("[^\\p{L} ]","").trim();
+            if(labelPattern.matcher(normalized).matches()) labels.add(word);
+            String token=word.text.replaceAll("[^0-9:./-]","");
+            if(token.matches("20[0-9]{2}[./-][0-9]{2}[./-][0-9]{2}")) dates.add(word);
+            if(token.matches("[0-9]{1,2}[:.][0-9]{2}")) times.add(word);
+        }
+        int bestDistance=Integer.MAX_VALUE;Integer bestConfidence=null;
+        for(HocrWord label:labels) for(HocrWord date:dates) for(HocrWord time:times) {
+            int rowDistance=Math.abs(date.centerY()-time.centerY());
+            if(rowDistance>Math.max(12,(date.height()+time.height())/2+5)) continue;
+            String parsed=parseDateTime(date.text+" "+time.text);
+            if(!expected.equals(parsed)) continue;
+            int center=(date.centerY()+time.centerY())/2;
+            int labelDistance=Math.abs(center-label.centerY());
+            if(labelDistance>Math.max(48,label.height()*3)) continue;
+            int confidence=Math.min(date.confidence,time.confidence);
+            if(confidence>0&&labelDistance<bestDistance) {
+                bestDistance=labelDistance;bestConfidence=confidence;
+            }
+        }
+        return bestConfidence;
+    }
+
+    private static Integer hocrOrderNumberConfidence(String hocr,String expected) {
+        if(expected==null||hocr==null||hocr.isEmpty()) return null;
+        int best=0;
+        for(HocrWord word:parseHocrWords(hocr)) {
+            String number=extractOrderId(word.text);
+            if(expected.equals(number)&&word.confidence>best) best=word.confidence;
+        }
+        return best>0?best:null;
     }
 
     private static String addSlotDetail(String[] lines,String hocr,List<Candidate> out) {

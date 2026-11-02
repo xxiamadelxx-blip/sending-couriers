@@ -116,12 +116,13 @@ public final class M4DeviceProbeActivity extends Activity {
                 throw new AssertionError("forecast writer did not accept the exact synthetic order: "+forecast.message);
             verifyPartialAggregate();
             verifyContinuousTwoSlotImport();
+            verifyAmountIndependentTimePersistence();
             verifyM5CrossSourceDeduplication();
             String date=forecast.forecastDay.getString("date");
             boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
                 .putString("source",forecast.source).putString("date",date).commit();
             if(!saved) throw new AssertionError("restart verification marker could not be saved");
-            show("M4 FORECAST WRITE PASS\nM4 CONTINUOUS TWO-SLOT PASS\nM5 CROSS-SOURCE RECONCILIATION PASS\n"
+            show("M4 FORECAST WRITE PASS\nM4 AMOUNT-INDEPENDENT TIME PERSISTENCE PASS\nM4 CONTINUOUS TWO-SLOT PASS\nM5 CROSS-SOURCE RECONCILIATION PASS\n"
                 +"33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
         } catch(Throwable error) {
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
@@ -146,6 +147,50 @@ public final class M4DeviceProbeActivity extends Activity {
         if(focusedReads.get()<1||result.uniqueCandidateCount("ORDER_DETAIL")!=1)
             throw new AssertionError("focused OCR was gated by unreadable full-frame text: calls="
                 +focusedReads.get()+", details="+result.uniqueCandidateCount("ORDER_DETAIL"));
+    }
+
+    private void verifyAmountIndependentTimePersistence() throws Exception {
+        String date="2026.10.17";
+        String slot="Слот: 200,00 ₽\n341234567\n2 заказа · 2 км\nЗаказы 200,00 ₽\n"
+            +"Начало\n"+date+" 07:30\nЗавершение\n"+date+" 22:00";
+        String list="Яндекс Про\nЗаказы\n11:20 100,00 ₽ >\n11:40 100,00 ₽ >";
+        String first="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\nКоэффициент спроса 1.0\n"
+            +"Номер заказа 261017-1111111\nНачало "+date+" 10:55\nЗавершение "+date+" 11:20";
+        String second="Заказ\nИтого 99,00 ₽\nДетали\nСтатус Завершён\nКоэффициент спроса 1.0\n"
+            +"Номер заказа 261017-3333333\nНачало "+date+" 11:25\nЗавершение "+date+" 11:40";
+        String hash=UUID.randomUUID().toString().replace("-","")+"00000000000000000000000000000000";
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result(hash,7000,7000,java.util.Arrays.asList(
+            observation(0,"mismatch-slot",slot),observation(1,"mismatch-list",list),
+            observation(2,"card-one-a",first),observation(3,"card-one-b",first),
+            observation(4,"card-two-a",second),observation(5,"card-two-b",second)),6);
+        M4ForecastFactWriter.ImportResult imported=M4ForecastFactWriter.importFacts(this,video);
+        if(!imported.accepted||imported.duplicate||imported.orderCount!=2||imported.visibleOrderRows!=2)
+            throw new AssertionError("different card payout blocked list import: "+imported.message);
+
+        CourierDatabase store=new CourierDatabase(this);
+        SQLiteDatabase db=store.getReadableDatabase();
+        try {
+            String source="video:"+hash;
+            long[] totals=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0),"
+                +"COUNT(accepted_at),COUNT(completed_at) FROM orders WHERE source_id=?",source);
+            if(totals[0]!=2||totals[1]!=20000||totals[2]!=2||totals[3]!=2)
+                throw new AssertionError("mismatched card payout changed list money or lost persisted times: "
+                    +"rows="+totals[0]+", listKopecks="+totals[1]+", accepted="+totals[2]+", completed="+totals[3]);
+            boolean foundFirst=false,foundSecond=false;
+            try(Cursor cursor=db.rawQuery("SELECT accepted_at,completed_at,reward_kopecks FROM orders "
+                    +"WHERE source_id=? ORDER BY completed_at",new String[]{source})) {
+                while(cursor.moveToNext()) {
+                    String accepted=cursor.getString(0),completed=cursor.getString(1);
+                    long reward=cursor.getLong(2);
+                    if(accepted!=null&&completed!=null&&accepted.contains("10:55")&&completed.contains("11:20")
+                            &&reward==10000) foundFirst=true;
+                    if(accepted!=null&&completed!=null&&accepted.contains("11:25")&&completed.contains("11:40")
+                            &&reward==10000) foundSecond=true;
+                }
+            }
+            if(!foundFirst||!foundSecond)
+                throw new AssertionError("SQLite does not contain both exact acceptance/completion pairs at list amounts");
+        } finally { db.close();store.close(); }
     }
 
     private void verifyForecastAfterRestart() {

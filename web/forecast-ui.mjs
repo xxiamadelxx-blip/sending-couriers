@@ -49,7 +49,7 @@ export function mountForecast({root,getState,commit,heading,nav,leave,notify,Nat
       :receipt&&recovery?.hash===receipt.sourceHash
         ?recovery.status==='NO_SAVED_VIDEO'
           ?'Исходные OCR-кадры этого видео не найдены в приложении.'
-          :`Повторная проверка: OCR-кадров ${Number(recovery.frames)||0}, сохранённых карточек ${Number(recovery.savedDetails)||0}, пар времени ${Number(recovery.timePairs)||0}, добавлено времён заказов ${Number(recovery.newRows)||0}.`
+          :`Перепроверка сохранённых кадров: ${Number(recovery.frames)||0}; карточек ${Number(recovery.savedDetails)||0}; пар времени ${Number(recovery.timePairs)||0}. В истории уже заполнены обе отметки у ${Number(recovery.alreadyComplete)||0} из ${receipt.orders} заказов; добавлено ${Number(recovery.newRows)||0}. Совпало по номеру ${Number(recovery.matchedByOrderId)||0}, по единственному времени завершения ${Number(recovery.matchedByUniqueCompletion)||0}; неоднозначных совпадений ${Number(recovery.ambiguousMatches)||0}.`
         :'';
     const shownTime=value=>value==null?'не распознано':minuteLabel(value);
     let plan;try{plan=planDay(f,date);}catch(error){if(!/Ночная работа пересекает следующий день/.test(error.message))throw error;plan={};}

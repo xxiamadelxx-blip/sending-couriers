@@ -31,6 +31,14 @@ public final class YandexScreenParserTest {
         String conflicting=focused.replace("123456-7654321","123456-9999999");
         assertEquals(primary.candidates.size(),
             YandexScreenParser.withFocusedOrderDetail(primary,conflicting,null).candidates.size());
+        String focusedHocr="<div class='ocr_page' title='bbox 0 0 720 1608'>"
+            +hocrWord("123456-9999999",430,500,650,525)
+            +hocrWord("Начало",31,700,125,720)+hocrWord("2026.10.18",443,700,578,720)
+            +hocrWord("13:17",593,700,661,720)+hocrWord("Завершение",31,760,193,785)
+            +hocrWord("2026.10.18",443,760,578,785)+hocrWord("13:27",593,760,661,785)+"</div>";
+        YandexScreenParser.Candidate replaced=find(
+            YandexScreenParser.withFocusedOrderDetail(primary,conflicting,focusedHocr),"ORDER_DETAIL");
+        assertEquals("123456-9999999",field(replaced,"order_number"));
     }
     @Test public void focusedCardSurvivesAnUnreadablePrimaryScreen() {
         String unreadable="22:55 LTE 60%\nОткуда\nулица\n100,00 ₽\n";
@@ -93,17 +101,102 @@ public final class YandexScreenParserTest {
         assertEquals("2026-11-01T18:48",pairs.get(0).accepted);
         assertEquals(3,pairs.get(0).frames);
         assertEquals(2,pairs.get(0).amounts.size());
+        assertEquals("261101-2693515",pairs.get(0).orderNumber);
+        assertEquals("10000",pairs.get(0).amount);
+    }
+    @Test public void duplicateCompletionMinuteKeepsDistinctOrdersAndVotesOutNoisyId() {
+        String first="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 261101-2693515\nНачало 2026.11.01 18:48\nЗавершение 2026.11.01 19:05";
+        String firstNoisyId=first.replace("261101-2693515","261101-2693516");
+        String second=first.replace("261101-2693515","261101-5848847")
+            .replace("18:48","18:52");
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("a",first),new VideoOrderTimePairs.Frame("b",firstNoisyId),
+            new VideoOrderTimePairs.Frame("c",first),new VideoOrderTimePairs.Frame("d",second),
+            new VideoOrderTimePairs.Frame("e",second));
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        assertEquals(2,pairs.size());
+        assertTrue(pairs.stream().anyMatch(pair->"261101-2693515".equals(pair.orderNumber)
+            &&"2026-11-01T18:48".equals(pair.accepted)));
+        assertTrue(pairs.stream().anyMatch(pair->"261101-5848847".equals(pair.orderNumber)
+            &&"2026-11-01T18:52".equals(pair.accepted)));
+    }
+    @Test public void competingTimeReadingsForOneOrderStayAmbiguous() {
+        String end="2026-11-01T19:05";
+        java.util.List<VideoOrderTimePairs.Frame> oneFrameEach=java.util.Arrays.asList(
+            frameWithDetail("a",timeCard("2026-11-01T18:48",end)),
+            frameWithDetail("b",timeCard("2026-11-01T18:49",end)));
+        assertTrue(VideoOrderTimePairs.extract(oneFrameEach).isEmpty());
+        java.util.List<VideoOrderTimePairs.Frame> tiedRepeatedReadings=java.util.Arrays.asList(
+            frameWithDetail("a",timeCard("2026-11-01T18:48",end)),
+            frameWithDetail("b",timeCard("2026-11-01T18:48",end)),
+            frameWithDetail("c",timeCard("2026-11-01T18:49",end)),
+            frameWithDetail("d",timeCard("2026-11-01T18:49",end)));
+        assertTrue(VideoOrderTimePairs.extract(tiedRepeatedReadings).isEmpty());
+    }
+    @Test public void forecastWriterDoesNotUseOneLowConfidenceCardAsOrderTime() throws Exception {
+        String slot="Слот: 100,00 ₽\n341234567\n1 заказ\nЗаказы 100,00 ₽\n"
+            +"Начало 2026.11.01 09:00\nЗавершение 2026.11.01 22:00";
+        String list="Яндекс Про\nЗаказы\n12:03 100,00 ₽ >";
+        String card="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 261101-2693515\nНачало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
+        java.util.List<VideoImportProcessor.Observation> observations=java.util.Arrays.asList(
+            observation(0,"slot",slot),observation(1,"list",list),observation(2,"card",card));
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("a".repeat(64),1,1500,observations,3);
+        Object facts=extractFacts(video);
+        java.util.List<?> orders=(java.util.List<?>)fact(facts,"orders");
+        assertEquals(1,orders.size());
+        assertFalse((Boolean)fact(orders.get(0),"confirmedDelivery"));
+    }
+    @Test public void forecastWriterKeepsTimesWhenCardAmountDiffersFromVerifiedList() throws Exception {
+        String slot="Слот: 100,00 ₽\n341234567\n1 заказ\nЗаказы 100,00 ₽\n"
+            +"Начало 2026.11.01 09:00\nЗавершение 2026.11.01 22:00";
+        String list="Яндекс Про\nЗаказы\n12:03 100,00 ₽ >";
+        String card="Заказ\nИтого 120,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 261101-2693515\nНачало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
+        Object facts=extractFacts(videoWith(slot,list,card));
+        java.util.List<?> orders=(java.util.List<?>)fact(facts,"orders");
+        assertEquals(1,orders.size());
+        Object order=orders.get(0);
+        assertTrue((Boolean)fact(order,"confirmedDelivery"));
+        assertEquals("261101-2693515",fact(order,"orderNumber"));
+        assertEquals(10000L,((Long)fact(order,"amountKopecks")).longValue());
+        assertEquals(711,((Integer)fact(order,"acceptedMinute")).intValue());
+        assertEquals(723,((Integer)fact(order,"deliveredMinute")).intValue());
+    }
+    @Test public void forecastWriterKeepsTimesWhenCardAmountIsMissing() throws Exception {
+        String slot="Слот: 100,00 ₽\n341234567\n1 заказ\nЗаказы 100,00 ₽\n"
+            +"Начало 2026.11.01 09:00\nЗавершение 2026.11.01 22:00";
+        String list="Яндекс Про\nЗаказы\n12:03 100,00 ₽ >";
+        String card="Заказ\nИтого\nДетали\nСтатус\nЗавершён\nНомер заказа\n261101-2693515\n"
+            +"Начало\n2026.11.01 11:51\nЗавершение\n2026.11.01 12:03";
+        Object facts=extractFacts(videoWith(slot,list,card));
+        java.util.List<?> orders=(java.util.List<?>)fact(facts,"orders");
+        assertEquals(1,orders.size());
+        Object order=orders.get(0);
+        assertTrue((Boolean)fact(order,"confirmedDelivery"));
+        assertEquals(10000L,((Long)fact(order,"amountKopecks")).longValue());
+        assertEquals(711,((Integer)fact(order,"acceptedMinute")).intValue());
+        assertEquals(723,((Integer)fact(order,"deliveredMinute")).intValue());
     }
     @Test public void oneFramePairRequiresOrderIdAndAmountAndCanCrossMidnight() {
         String card="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\n"
             +"Номер заказа 261101-2693515\nНачало 2026.11.01 23:55\n"
             +"Завершение 2026.11.02 00:05";
+        assertTrue(VideoOrderTimePairs.extract(java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("low-confidence",card))).isEmpty());
+        String hocr="<div class='ocr_page' title='bbox 0 0 720 1608'>"
+            +hocrWord("Начало",31,1073,125,1093)+hocrWord("2026.11.01",443,1073,578,1094)
+            +hocrWord("23:55",593,1073,661,1094)+hocrWord("Завершение",31,1191,193,1215)
+            +hocrWord("2026.11.02",443,1191,578,1212)+hocrWord("00:05",593,1191,661,1212)+"</div>";
+        YandexScreenParser.Result parsed=YandexScreenParser.parse(card,hocr);
         java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
-            new VideoOrderTimePairs.Frame("one",card));
+            new VideoOrderTimePairs.Frame("one",card,parsed.candidates));
         java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
         assertEquals(1,pairs.size());
         assertEquals("2026-11-02T00:05",pairs.get(0).completed);
         assertEquals(1,pairs.get(0).frames);
+        assertEquals(95,pairs.get(0).timeConfidence);
         assertTrue(VideoOrderTimePairs.extract(java.util.Arrays.asList(
             new VideoOrderTimePairs.Frame("one",card.replace("Номер заказа 261101-2693515\n","")))).isEmpty());
     }
@@ -155,6 +248,14 @@ public final class YandexScreenParserTest {
         for(YandexScreenParser.Candidate detail:video.uniqueCandidates())
             if("ORDER_DETAIL".equals(detail.candidateType)) orderNumbers.add(field(detail,"order_number"));
         assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("123456-1234567","765432-7654321")),orderNumbers);
+    }
+
+    @Test public void keepsOrderRowOutsideNoisySlotRangeForReview() {
+        String slot="Слот: 100,00 ₽\n341234567\n1 заказ\nЗаказы 100,00 ₽\n"
+            +"Начало 2026.11.01 09:00\nЗавершение 2026.11.01 10:00";
+        String row="Яндекс Про\nЗаказы\n12:30 100,00 ₽ >";
+        VideoImportProcessor.Result video=videoWith(slot,row);
+        assertEquals(1,video.uniqueCandidateCount("ORDER_LIST_ROW"));
     }
 
     @Test public void extractsSlotAndVisibleOrderRowsWithoutAddingUnseenOrders() {
@@ -487,29 +588,36 @@ public final class YandexScreenParserTest {
         assertEquals(1,((Integer)fact(facts,"recoveredOrderRows")).intValue());
     }
 
-    @Test public void refusesMissingRowRecoveryWhenDetailSubtotalDoesNotReconcile() throws Exception {
-        String slot="Слот: 300,00 ₽\n341234567\n3 заказа · 3 км\nЗаказы 300,00 ₽\n"
+    @Test public void keepsVerifiedListMoneyWhenCardSubtotalDoesNotReconcile() throws Exception {
+        String slot="Слот: 200,00 ₽\n341234567\n2 заказа · 2 км\nЗаказы 200,00 ₽\n"
             +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
         String list="Яндекс Про\nЗаказы\n11:20 100,00 ₽ >\n11:40 100,00 ₽ >";
         VideoImportProcessor.Result video=videoWith(slot,list,
             detailCard("261017-1111111","10:55","11:20","100,00 ₽"),
-            detailCard("261017-2222222","10:58","11:20","100,00 ₽"),
             detailCard("261017-3333333","11:25","11:40","99,00 ₽"));
         int observedDetails=0;
-        boolean thirdAmountRead=false;
+        boolean mismatchedCardAmountRead=false;
         for(YandexScreenParser.Candidate detail:video.uniqueCandidates()) if("ORDER_DETAIL".equals(detail.candidateType)) {
             observedDetails++;
             if("261017-3333333".equals(field(detail,"order_number")))
-                thirdAmountRead="9900".equals(field(detail,"total_kopecks"));
+                mismatchedCardAmountRead="9900".equals(field(detail,"total_kopecks"));
         }
-        assertEquals("all three distinct completed cards should be observed",3,observedDetails);
-        assertTrue("the third card's 99 ₽ payout must be read without rounding",thirdAmountRead);
-        try {
-            extractFacts(video);
-            throw new AssertionError("expected strict detail subtotal rejection");
-        } catch(java.lang.reflect.InvocationTargetException expected) {
-            assertTrue(expected.getCause() instanceof IllegalArgumentException);
-        }
+        assertEquals("both distinct completed cards should be observed",2,observedDetails);
+        assertTrue("the second card's 99 ₽ payout must be read without rounding",mismatchedCardAmountRead);
+
+        Object facts=extractFacts(video);
+        java.util.List<?> orders=(java.util.List<?>)fact(facts,"orders");
+        assertEquals(2,orders.size());
+        assertEquals(20000L,((Long)fact(facts,"rowAmountKopecks")).longValue());
+        assertEquals(2,((java.util.List<?>)fact(facts,"deliveries")).size());
+        Object second=null;
+        for(Object order:orders)
+            if("261017-3333333".equals(fact(order,"orderNumber"))) second=order;
+        assertNotNull("time pair must attach despite a different card amount",second);
+        assertTrue((Boolean)fact(second,"confirmedDelivery"));
+        assertEquals(10000L,((Long)fact(second,"amountKopecks")).longValue());
+        assertEquals(685,((Integer)fact(second,"acceptedMinute")).intValue());
+        assertEquals(700,((Integer)fact(second,"deliveredMinute")).intValue());
     }
 
     @Test public void refusesSlotWhenOrderSubtotalAndTipsDoNotMatchDisplayedGross() throws Exception {
@@ -717,8 +825,25 @@ public final class YandexScreenParserTest {
     private static VideoImportProcessor.Result videoWith(String slot,String list,String... details) {
         java.util.List<VideoImportProcessor.Observation> observations=new java.util.ArrayList<>();
         observations.add(observation(0,"slot",slot)); observations.add(observation(1,"list",list));
-        for(int i=0;i<details.length;i++) observations.add(observation(i+2,"detail-"+i,details[i]));
+        for(int i=0;i<details.length;i++) {
+            observations.add(observation(i*2+2,"detail-"+i+"-a",details[i]));
+            observations.add(observation(i*2+3,"detail-"+i+"-b",details[i]));
+        }
         return new VideoImportProcessor.Result("a".repeat(64),1,5000,observations,observations.size());
+    }
+
+    private static VideoOrderTimePairs.Frame frameWithDetail(String hash,YandexScreenParser.Candidate detail) {
+        return new VideoOrderTimePairs.Frame(hash,"карточка заказа",java.util.Collections.singletonList(detail));
+    }
+
+    private static YandexScreenParser.Candidate timeCard(String accepted,String completed) {
+        java.util.List<YandexScreenParser.Field> fields=java.util.Arrays.asList(
+            new YandexScreenParser.Field("order_number","text","261101-2693515"),
+            new YandexScreenParser.Field("total_kopecks","integer","10000"),
+            new YandexScreenParser.Field("started_at","datetime",accepted),
+            new YandexScreenParser.Field("completed_at","datetime",completed),
+            new YandexScreenParser.Field("time_pair_confidence","integer","95"));
+        return new YandexScreenParser.Candidate("ORDER_DETAIL",0.92f,fields);
     }
 
     private static String detailCard(String id,String start,String end,String total) {

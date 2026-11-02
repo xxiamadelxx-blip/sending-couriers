@@ -1,7 +1,19 @@
 name: M4 offline video OCR
 on:
   push:
-    branches: [release/forecast-video-upload-20261101, m4/offline-video-ocr-20261029, m4/forecast-video-result-screen-20261031, m4/continuous-video-multislot-20261031, m5/cross-source-reconciliation-20261031, m6/process-recovery-20261031]
+    branches: [release/forecast-video-upload-20261101, m4/offline-video-ocr-20261029, m4/forecast-video-result-screen-20261031, m4/continuous-video-multislot-20261031, m5/cross-source-reconciliation-20261031, m6/process-recovery-20261031, fix/android-ocr-recovery-20261102, release/forecast-shift-control-20261102]
+    paths:
+      - '.github/workflows/m4-offline-video-ocr.yml'
+      - '.github/scripts/m4-offline-video-probe.sh'
+      - 'android/**'
+      - 'app/**'
+      - 'm4/**'
+      - 'tests/**'
+      - 'web/**'
+      - 'build.gradle'
+      - 'gradle/**'
+      - 'build.py'
+      - 'package.json'
   workflow_dispatch:
 permissions:
   contents: read
@@ -167,11 +179,11 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           OUT="$RUNNER_TEMP/courier-transfer-release"
           test -s "$APK"
-          "$BT/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.transfer' versionCode='39' versionName='1.7.25'"
+          "$BT/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.transfer' versionCode='41' versionName='1.7.27'"
           mkdir -p "$OUT"
-          "$BT/zipalign" -f -p 4 "$APK" "$OUT/Courier-Finance-Transfer-1.7.25-unsigned.apk"
+          "$BT/zipalign" -f -p 4 "$APK" "$OUT/Courier-Finance-Transfer-1.7.27-unsigned.apk"
           cp "$BT/lib/apksigner.jar" "$OUT/apksigner.jar"
-          sha256sum "$OUT/Courier-Finance-Transfer-1.7.25-unsigned.apk"
+          sha256sum "$OUT/Courier-Finance-Transfer-1.7.27-unsigned.apk"
       - name: Publish APK and Android signer for local owner signing
         uses: actions/upload-artifact@v4
         with:

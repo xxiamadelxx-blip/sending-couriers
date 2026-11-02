@@ -145,8 +145,8 @@ public final class M4ForecastFactWriter {
                     identifiedSlots.put(id,prior==null?candidate:prior.mergeMissingFields(candidate));
                 }
             } else if("ORDER_LIST_ROW".equals(candidate.candidateType)) rows.add(candidate);
-            else if("ORDER_DETAIL".equals(candidate.candidateType)) details.add(candidate);
         }
+        details.addAll(crossCheckedOrderDetails(analysis));
         if(identifiedSlots.isEmpty()) throw new IllegalArgumentException("Не распознана карточка слота с числом заказов; факты не записаны.");
         // A slot card without a readable ID can enrich an identified card only
         // when its date/range or count/total points to that card uniquely.
@@ -169,6 +169,42 @@ public final class M4ForecastFactWriter {
             extracted.add(extractSlot(analysis,slotEntry.getValue(),slotRows,details));
         }
         return extracted;
+    }
+
+    /** Order-card times enter forecast facts only after independent frame support. */
+    private static List<YandexScreenParser.Candidate> crossCheckedOrderDetails(
+            VideoImportProcessor.Result analysis) {
+        List<VideoOrderTimePairs.Frame> frames=new ArrayList<>();
+        for(VideoImportProcessor.Observation observation:analysis.observations)
+            frames.add(new VideoOrderTimePairs.Frame(observation.frameSha256,observation.ocrText,
+                observation.candidates));
+        List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        Map<String,VideoOrderTimePairs.Pair> byOrderNumber=new LinkedHashMap<>();
+        Set<String> conflicts=new HashSet<>();
+        for(VideoOrderTimePairs.Pair pair:pairs) {
+            if(pair.orderNumber==null||pair.accepted==null||pair.completed==null) continue;
+            VideoOrderTimePairs.Pair previous=byOrderNumber.get(pair.orderNumber);
+            if(previous==null) byOrderNumber.put(pair.orderNumber,pair);
+            else if(!previous.accepted.equals(pair.accepted)||!previous.completed.equals(pair.completed))
+                conflicts.add(pair.orderNumber);
+            else if(pair.frames>previous.frames) byOrderNumber.put(pair.orderNumber,pair);
+        }
+        List<YandexScreenParser.Candidate> details=new ArrayList<>();
+        for(Map.Entry<String,VideoOrderTimePairs.Pair> entry:byOrderNumber.entrySet()) {
+            if(conflicts.contains(entry.getKey())) continue;
+            VideoOrderTimePairs.Pair pair=entry.getValue();
+            List<YandexScreenParser.Field> fields=new ArrayList<>();
+            fields.add(new YandexScreenParser.Field("order_number","text",pair.orderNumber));
+            fields.add(new YandexScreenParser.Field("status","text","COMPLETED"));
+            fields.add(new YandexScreenParser.Field("started_at","datetime",pair.accepted));
+            fields.add(new YandexScreenParser.Field("completed_at","datetime",pair.completed));
+            if(pair.amount!=null)
+                fields.add(new YandexScreenParser.Field("total_kopecks","integer",pair.amount));
+            fields.add(new YandexScreenParser.Field("time_pair_confidence","integer",
+                String.valueOf(pair.timeConfidence)));
+            details.add(new YandexScreenParser.Candidate("ORDER_DETAIL",0.92f,fields));
+        }
+        return details;
     }
 
     private static boolean slotCardMatches(YandexScreenParser.Candidate partial,YandexScreenParser.Candidate full) {
@@ -286,7 +322,6 @@ public final class M4ForecastFactWriter {
                 if(orderTotal<0) throw new IllegalArgumentException("Чаевые превышают итог карточки слота; факты не записаны.");
             } else orderTotal=facts.slotAmountKopecks;
         }
-        reconcileCompleteOrderDetails(facts,details,orderTotal);
 
         for(YandexScreenParser.Candidate row:rows) {
             String rowSlot=field(row,"slot_id");
@@ -321,42 +356,6 @@ public final class M4ForecastFactWriter {
                 throw new IllegalArgumentException("Две строки имеют одинаковую идентичность заказа; факты не записаны.");
         }
         return facts;
-    }
-
-    /**
-     * When the video contains one complete, uniquely identified card for every
-     * order in the slot, reconcile those observed payouts even if one card could
-     * not be joined to the scrolling list by its OCR amount. A complete set of
-     * cards with a conflicting subtotal is an import error, not a partial RAW list.
-     */
-    private static void reconcileCompleteOrderDetails(Facts facts,List<YandexScreenParser.Candidate> details,
-                                                       Long expectedOrderTotal) {
-        if(expectedOrderTotal==null) return;
-        Map<String,Long> totals=new HashMap<>();
-        java.util.Set<String> cardsWithUnknownAmount=new java.util.HashSet<>();
-        for(YandexScreenParser.Candidate detail:details) {
-            if(!"COMPLETED".equals(field(detail,"status"))) continue;
-            String number=field(detail,"order_number");
-            LocalDateTime start=parseLocal(field(detail,"started_at")),end=parseLocal(field(detail,"completed_at"));
-            if(number==null||start==null||end==null||!end.isAfter(start)
-                    ||!facts.date.equals(start.toLocalDate().toString())
-                    ||!facts.date.equals(end.toLocalDate().toString())) continue;
-            int startMinute=start.getHour()*60+start.getMinute(),endMinute=end.getHour()*60+end.getMinute();
-            if(startMinute<facts.slotStartMinute||endMinute>facts.slotEndMinute) continue;
-            Long amount=parseLong(field(detail,"total_kopecks"));
-            if(amount==null||amount<0) cardsWithUnknownAmount.add(number);
-            else totals.put(number,amount);
-        }
-        java.util.Set<String> completeIds=new java.util.HashSet<>(totals.keySet());
-        completeIds.addAll(cardsWithUnknownAmount);
-        if(completeIds.size()!=facts.declaredCount) return;
-        if(!cardsWithUnknownAmount.isEmpty())
-            throw new IllegalArgumentException("Карточки подтверждают все заказы слота, но сумма одной или нескольких карточек не распознана; факты не записаны.");
-        long subtotal=0;
-        try { for(Long amount:totals.values()) subtotal=Math.addExact(subtotal,amount); }
-        catch(ArithmeticException overflow) { throw new IllegalArgumentException("Итог карточек заказов не прошёл проверку; факты не записаны."); }
-        if(subtotal!=expectedOrderTotal)
-            throw new IllegalArgumentException("Сумма карточек завершённых заказов не совпала с итогом карточки слота; факты не записаны.");
     }
 
     /**
@@ -418,25 +417,47 @@ public final class M4ForecastFactWriter {
     private static void attachOrderDetails(Facts facts,List<YandexScreenParser.Candidate> details) {
         Map<Integer,List<OrderFact>> byMinute=new HashMap<>();
         for(OrderFact order:facts.orders) byMinute.computeIfAbsent(order.visibleMinute,k->new ArrayList<>()).add(order);
-        Map<Integer,Integer> nextOccurrence=new HashMap<>();
-        java.util.Set<String> attachedOrderNumbers=new java.util.HashSet<>();
+        Set<String> attachedOrderNumbers=new HashSet<>();
         for(YandexScreenParser.Candidate detail:details) {
             if(!"COMPLETED".equals(field(detail,"status"))) continue;
             String orderNumber=field(detail,"order_number"),startText=field(detail,"started_at"),endText=field(detail,"completed_at");
             LocalDateTime start=parseLocal(startText),end=parseLocal(endText);
             if(orderNumber==null||start==null||end==null||!facts.date.equals(start.toLocalDate().toString())
                     ||!facts.date.equals(end.toLocalDate().toString())||!end.isAfter(start)
-                    ||!attachedOrderNumbers.add(orderNumber)) continue;
+                    ||attachedOrderNumbers.contains(orderNumber)) continue;
+            int startMinute=start.getHour()*60+start.getMinute();
             int minute=end.getHour()*60+end.getMinute();
-            List<OrderFact> matches=byMinute.get(minute); if(matches==null) continue;
-            int position=nextOccurrence.containsKey(minute)?nextOccurrence.get(minute):0;
-            Long amount=parseLong(field(detail,"total_kopecks"));
-            while(position<matches.size()&&(matches.get(position).confirmedDelivery
-                    ||amount==null||matches.get(position).amountKopecks!=amount)) position++;
-            if(position>=matches.size()) continue;
-            OrderFact order=matches.get(position); nextOccurrence.put(minute,position+1);
-            order.orderNumber=orderNumber; order.startedAt=startText; order.completedAt=endText;
-            order.acceptedMinute=start.getHour()*60+start.getMinute(); order.deliveredMinute=minute; order.confirmedDelivery=true;
+            if(startMinute<facts.slotStartMinute||minute>facts.slotEndMinute) continue;
+            List<OrderFact> matches=byMinute.get(minute);
+            if(matches==null) continue;
+            List<OrderFact> available=new ArrayList<>();
+            for(OrderFact row:matches) if(!row.confirmedDelivery) available.add(row);
+            if(available.isEmpty()) continue;
+
+            OrderFact order=null;
+            List<OrderFact> idMatches=new ArrayList<>();
+            for(OrderFact row:available) if(orderNumber.equals(row.orderNumber)) idMatches.add(row);
+            if(idMatches.size()==1) order=idMatches.get(0);
+            else if(idMatches.size()>1) continue;
+
+            // Time evidence is independent of payout. Amount helps only when
+            // multiple list rows share the same completion minute.
+            if(order==null&&available.size()==1) order=available.get(0);
+            if(order==null) {
+                Long amount=parseLong(field(detail,"total_kopecks"));
+                if(amount!=null&&amount>=0) {
+                    List<OrderFact> amountMatches=new ArrayList<>();
+                    for(OrderFact row:available) if(row.amountKopecks==amount) amountMatches.add(row);
+                    if(amountMatches.size()==1) order=amountMatches.get(0);
+                }
+            }
+            if(order==null) continue;
+
+            attachedOrderNumbers.add(orderNumber);
+            order.orderNumber=orderNumber;
+            order.startedAt=startText; order.completedAt=endText;
+            order.acceptedMinute=startMinute; order.deliveredMinute=minute;
+            order.confirmedDelivery=true;
             facts.deliveries.add(order);
         }
     }
