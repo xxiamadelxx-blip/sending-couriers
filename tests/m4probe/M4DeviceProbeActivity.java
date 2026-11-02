@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 10588)
-Total output lines: 624
-
 package ru.courier.finance;
 
 import android.app.Activity;
@@ -294,7 +291,35 @@ public final class M4DeviceProbeActivity extends Activity {
                 "09:59","23:15",times28,10000);
             M4ForecastFactWriter.ImportResult repeated=M4ForecastFactWriter.importFacts(this,second);
             if(!repeated.accepted||repeated.needsReview||repeated.suppressedOrderRows!=11)
-      …588 tokens truncated…00\n";
+                throw new AssertionError("second video source duplicated the same 11/1100 day: "+repeated.message);
+            long[] raw28=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders "
+                +"WHERE date='2026-10-28'");
+            long[] aggregate28=counts(db,"SELECT COUNT(*),COALESCE(SUM(order_count),0) "
+                +"FROM active_aggregate_order_counts WHERE date='2026-10-28'");
+            long baseAggregates=counts(db,"SELECT COUNT(*),0 FROM aggregate_order_counts WHERE date='2026-10-28'")[0];
+            if(raw28[0]!=11||raw28[1]!=110000||aggregate28[0]!=1||aggregate28[1]!=11||baseAggregates!=3)
+                throw new AssertionError("M5 11/1100 reconciliation mismatch: RAW="+raw28[0]+"/"+raw28[1]
+                    +", activeAggregate="+aggregate28[0]+"/"+aggregate28[1]+", retainedSources="+baseAggregates);
+
+            String xlsx18="m5-xlsx-20261018";
+            seedSource(db,xlsx18,repeatHex('c'),"xlsx");
+            seedDailyAggregate(db,"m5-day-20261018",xlsx18,"2026-10-18",2);
+            seedRawRows(db,xlsx18,"2026-10-18",new String[]{"18:57","18:57"},10000);
+            VideoImportProcessor.Result sameMinute=syntheticVideo(repeatHex('d'),"2026-10-18","778899001",
+                "09:00","23:00",new String[]{"18:57","18:57"},10000);
+            M4ForecastFactWriter.ImportResult two=M4ForecastFactWriter.importFacts(this,sameMinute);
+            long rawSameMinute=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders "
+                +"WHERE date='2026-10-18' AND source_id=?",xlsx18)[0];
+            if(!two.accepted||two.suppressedOrderRows!=2||rawSameMinute!=2)
+                throw new AssertionError("two distinct 18:57 orders were collapsed or copied");
+        } finally { db.close(); store.close(); }
+    }
+
+    private void verifyContinuousTwoSlotImport() throws Exception {
+        String evening="Слот: 200,00 ₽\n347889490\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
+            +"Начало\n2026.10.31 17:49\nЗавершение\n2026.10.31 22:00\n";
+        String morning="Слот: 200,00 ₽\n347714773\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
+            +"Начало\n2026.10.31 12:01\nЗавершение\n2026.10.31 15:00\n";
         String eveningRows="Яндекс Про\nЗаказы\n20:19 100,00 ₽ >\n20:29 100,00 ₽ >\n";
         String adjustments="Доход\n18:00–22:00\nПлановый слот\n1 805 ₽\n14:52\nДругое\n-2,36 ₽\n";
         String morningRows="Яндекс Про\nЗаказы\n12:24 100,00 ₽ >\n12:37 100,00 ₽ >\n";
