@@ -2632,9 +2632,9 @@ html,body {
 #app#app :is(h1,h2,h3,strong,b,button,label,summary,dt,dd,.meter-value,.major-amount,.amount,.hero-pace strong,.gauge-label strong,.income-parts strong,.payouts strong,.premium-teasers strong,.period-day-figures strong,.cycle-bonus-metrics strong,.period-facts dd,.forecast-number,.forecast-subnumber,.period-norm-stat strong,.slot-live-summary strong,.detail-amount,.day-meters,.day-meter strong,.import-stats strong,.duration-heading output,.tariff-rate input) { font-weight:600!important; }
 #app#app :is(.home-eyebrow,.income-hero h2,.home-premiums .card-heading,.period-days-heading h2,.forecast-eyebrow,.cycle-header h2,.income-parts span,.payouts h2) { letter-spacing:0!important; }
 /* Preserve the existing five-tab bar and center action geometry. */
-#app#app .bottom-nav { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 66px minmax(0,1fr) minmax(0,1fr); gap:3px; padding:7px calc(10px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(10px + var(--safe-left)); overflow:visible; background:var(--nav-surface)!important; border-top:1px solid var(--line); box-shadow:none!important; }
-#app#app .nav-item { position:relative; min-width:0; min-height:57px; padding:6px 2px; border:0; border-radius:17px; background:transparent; color:var(--muted); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11px; font-weight:500; letter-spacing:0; line-height:1.1; }
-#app#app .nav-item svg { width:23px; height:23px; color:inherit; }
+#app#app .bottom-nav { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 64px minmax(0,1fr) minmax(0,1fr); gap:4px; padding:8px calc(12px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(12px + var(--safe-left)); overflow:visible; background:var(--nav-surface)!important; border-top:1px solid var(--line); box-shadow:none!important; }
+#app#app .nav-item { position:relative; min-width:0; min-height:56px; padding:8px 4px; border:0; border-radius:17px; background:transparent; color:var(--muted); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:500; letter-spacing:0; line-height:1.1; }
+#app#app .nav-item svg { width:18px; height:18px; color:inherit; }
 #app#app .nav-item span { max-width:100%; font-size:11px; line-height:1.15; white-space:nowrap; overflow:hidden; }
 #app#app .nav-item.active { border-radius:17px; background:var(--primary-bg); color:var(--primary-ink); font-weight:600; }
 #app#app .nav-item.active::before { content:none!important; display:none!important; }
@@ -2643,5 +2643,5 @@ html,body {
 @media(max-width:374px) {
   #app#app .nav-item { font-size:10px; }
   #app#app .nav-item span { font-size:10px; }
-  #app#app .bottom-nav { padding-left:calc(7px + var(--safe-left)); padding-right:calc(7px + var(--safe-right)); }
+  #app#app .bottom-nav { padding-left:calc(8px + var(--safe-left)); padding-right:calc(8px + var(--safe-right)); }
 }
