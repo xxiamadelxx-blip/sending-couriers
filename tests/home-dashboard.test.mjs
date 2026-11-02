@@ -51,3 +51,25 @@ test('SHIFT CONTROL finish uses route markers, one orange accent, 4px-derived ca
   assert.equal((icons.match(/stroke-width=\\"1\.5\\"/g)??[]).length,20);
   assert.match(forecast,/Пока мало данных/);assert.match(app,/aria-label="Открыть историю изменений"/);
 });
+
+
+test('Settings exposes the payout target, a single expandable secondary section, system theme and changelog',()=>{
+  const settings=app.slice(app.indexOf('function settings()'),app.indexOf('function field('));
+  assert.match(settings,/field\('basePace','Цель темпа для выплаты'/);
+  assert.match(settings,/<details class="payment-more"><summary>Остальные условия<\/summary>/);
+  assert.match(settings,/<option value="system"/);
+  assert.match(settings,/id="showChangelog"/);
+  assert.match(app,/systemThemeQuery\?\.addEventListener/);
+});
+
+test('Add Slot validates its money fields, previews accrual live and returns with a confirmation',()=>{
+  const form=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption('));
+  assert.match(form,/field\('tips', 'Чаевые'/);
+  assert.match(form,/field\('tax', 'Налог'/);
+  assert.match(form,/field\('parkCommission', 'Комиссия парка'/);
+  assert.match(form,/refreshInlineValidation\(\); refreshDeductions\(\); refreshSlotPreview\(\)/);
+  assert.match(form,/accruedIncome\(base,tips,tax,commission\)/);
+  assert.match(form,/Часы × ставка \+ чаевые − удержания/);
+  assert.match(form,/\.focus\(\);throw new Error\('Исправьте значения/);
+  assert.match(form,/notify\('Запись сохранена'\)/);
+});
