@@ -40,6 +40,36 @@ wait_for_m4_probe() {
     if grep -Fq "$success_marker" <<<"$probe_log"; then
       timeout 20s adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
       screen=$(timeout 5s adb shell cat "$window" 2>/dev/null || true)
+      if ! grep -Fq "$success_marker" <<<"$screen" \
+          && grep -Fq "Quickstep isn't responding" <<<"$screen" \
+          && grep -Fq 'resource-id="android:id/aerr_wait"' <<<"$screen"; then
+        tap_coords=$(python3 - "$window" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+for node in root.iter("node"):
+    if node.attrib.get("resource-id") == "android:id/aerr_wait":
+        bounds = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
+        if bounds:
+            x1, y1, x2, y2 = map(int, bounds.groups())
+            print((x1+x2)//2, (y1+y2)//2)
+            break
+PY
+)
+        if [[ -n "$tap_coords" ]]; then
+          read -r tap_x tap_y <<<"$tap_coords"
+          echo "Quickstep ANR dialog covers the app; tapping its Wait action, then rechecking the Activity marker."
+          adb shell input tap "$tap_x" "$tap_y"
+          for retry in $(seq 1 8); do
+            sleep 2
+            timeout 15s adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
+            screen=$(timeout 5s adb shell cat "$window" 2>/dev/null || true)
+            if grep -Fq "$success_marker" <<<"$screen"; then
+              printf '%s\n' "$screen"
+              return 0
+            fi
+          done
+        fi
+      fi
       if grep -Fq "$success_marker" <<<"$screen"; then
         printf '%s\n' "$screen"
         return 0
@@ -48,7 +78,6 @@ wait_for_m4_probe() {
       printf '%s\n' "$probe_log" | tail -80
       fail_with_diagnostics
       return 1
-    fi
     if grep -Fq "$failure_marker" <<<"$probe_log"; then
       printf '%s\n' "$probe_log" | tail -100
       fail_with_diagnostics
