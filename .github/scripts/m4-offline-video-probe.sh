@@ -78,6 +78,7 @@ PY
       printf '%s\n' "$probe_log" | tail -80
       fail_with_diagnostics
       return 1
+    fi
     if grep -Fq "$failure_marker" <<<"$probe_log"; then
       printf '%s\n' "$probe_log" | tail -100
       fail_with_diagnostics
