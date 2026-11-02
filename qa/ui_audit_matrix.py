@@ -178,7 +178,7 @@ def main():
                 device.wait_node('Смена ещё не записана', 20)
                 assert_empty_home(capture(f'00-empty-cancelled-{suffix}'))
                 device.tap_node('Период')
-                device.tap_node('Записи периода')
+                device.tap_visible_node('Записи периода')
                 device.wait_node('Пока нет записей', 20)
                 assert_empty_history(capture(f'00-empty-history-{suffix}'))
                 preview_json_import(suffix)
@@ -221,7 +221,7 @@ def main():
 
     if args.focus == 'content':
         device.tap_node('Период')
-        device.tap_node('Записи периода')
+        device.tap_visible_node('Записи периода')
         root = capture('01-empty-history-360-dark')
         assert device.find_node(root, 'Пока нет записей') is not None
     else:
@@ -304,7 +304,7 @@ def main():
                 continue
             device.tap_node('Период')
             capture('period-' + suffix)
-            device.tap_node('Записи периода')
+            device.tap_visible_node('Записи периода')
             root = capture('history-' + suffix)
             # Android 35 is fixed at 480 dpi (3 px per dp). Edit affordances
             # must be at least 48 dp high, not merely readable text labels.
