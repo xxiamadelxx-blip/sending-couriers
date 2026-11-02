@@ -40,8 +40,8 @@ if uses_workmanager and (ROOT / 'app/build.gradle').is_file():
     if not gradle:
         raise SystemExit('This AndroidX build needs Gradle 8.9+. Install Gradle and retry.')
     if args.variant == 'transferRelease':
-        task = ':app:assembleTransferRelease'
-        gradle_apk = ROOT / 'app/build/outputs/apk/transfer/release/app-transfer-release-unsigned.apk'
+        task = ':app:assembleTransfer'
+        gradle_apk = ROOT / 'app/build/outputs/apk/transfer/app-transfer-unsigned.apk'
     else:
         task = ':app:assembleRelease'
         gradle_apk = ROOT / 'app/build/outputs/apk/release/app-release-unsigned.apk'
