@@ -29,6 +29,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Android-only probe for video frame extraction, local OCR, and structured review candidates. */
 public final class M4DeviceProbeActivity extends Activity {
@@ -98,6 +99,7 @@ public final class M4DeviceProbeActivity extends Activity {
                     +", orders="+orders+", slot="+slotCandidate+", rowCount="+orderRows
                     +", rowTotal="+rowTotal+", repeatedTimeRows="+repeatedTimeRows
                     +", slotTotal="+slotTotal+", slotOrderCount="+slotOrderCount);
+            verifyFocusedPass(video);
             VideoImportDatabase database=new VideoImportDatabase(this);
             String probeImportId="m4v_"+result.sourceSha256.substring(0,32);
             database.deleteImport(probeImportId);
@@ -124,6 +126,26 @@ public final class M4DeviceProbeActivity extends Activity {
         } catch(Throwable error) {
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
+    }
+
+    private void verifyFocusedPass(File video) throws Exception {
+        AtomicInteger focusedReads=new AtomicInteger();
+        String card="Итого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 123456-7654321\nНачало 2026.10.18 13:17\n"
+            +"Завершение 2026.10.18 13:27";
+        VideoImportProcessor.Result result=VideoImportProcessor.processFile(this,video,"video/mp4","focused-test.mp4",
+            new VideoImportProcessor.Ocr() {
+                @Override public TesseractOcrEngine.Recognition recognize(android.graphics.Bitmap bitmap) {
+                    return new TesseractOcrEngine.Recognition("",0f,"");
+                }
+                @Override public TesseractOcrEngine.Recognition recognizeFocused(android.graphics.Bitmap bitmap) {
+                    focusedReads.incrementAndGet();
+                    return new TesseractOcrEngine.Recognition(card,0.99f,"");
+                }
+            },null);
+        if(focusedReads.get()<1||result.uniqueCandidateCount("ORDER_DETAIL")!=1)
+            throw new AssertionError("focused OCR was gated by unreadable full-frame text: calls="
+                +focusedReads.get()+", details="+result.uniqueCandidateCount("ORDER_DETAIL"));
     }
 
     private void verifyForecastAfterRestart() {
