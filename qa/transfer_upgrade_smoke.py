@@ -12,7 +12,21 @@ parser.add_argument('--new', type=Path, required=True)
 args = parser.parse_args()
 
 device.PACKAGE = 'ru.courier.finance.transfer'
-device.ACTIVITY = device.PACKAGE + '/.MainActivity'
+def launch_transfer():
+    """Resolve the installed transfer variant's real launcher component."""
+    output = device.adb(
+        'shell', 'cmd', 'package', 'resolve-activity', '--brief',
+        '-a', 'android.intent.action.MAIN',
+        '-c', 'android.intent.category.LAUNCHER',
+        '-p', device.PACKAGE,
+    )
+    device.ACTIVITY = next(
+        (line.strip() for line in output.splitlines()
+         if line.strip().startswith(device.PACKAGE + '/')),
+        None,
+    )
+    assert device.ACTIVITY, f"No launcher activity resolved for {device.PACKAGE}: {output}"
+    device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
 device.OUT = device.ROOT / 'qa-results' / 'ui-transfer-upgrade'
 device.OUT.mkdir(parents=True, exist_ok=True)
 
@@ -22,11 +36,11 @@ device.adb('shell', 'wm', 'density', '480')
 device.adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
 
 device.adb('install', str(args.old.resolve()))
-device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+launch_transfer()
 device.wait_home(45)
 device.add_slot(hours=4, orders=8, reward=1200)
 device.tap_node('Период')
-device.tap_node('Записи периода')
+device.tap_visible_node('Записи периода')
 def assert_slot_visible(root, phase):
     """Check the same factual slot across either old inline or new split labels.
 
@@ -44,10 +58,10 @@ assert_slot_visible(device.dump('before-update'), 'before-update')
 # Android rejects this update if the signing certificate or package changes.
 device.adb('install', '-r', str(args.new.resolve()))
 device.adb('shell', 'am', 'force-stop', device.PACKAGE)
-device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+launch_transfer()
 device.wait_home(45)
 device.tap_node('Период')
-device.tap_node('Записи периода')
+device.tap_visible_node('Записи периода')
 assert_slot_visible(device.dump('after-update'), 'after-update')
 device.screenshot('after-update')
 
