@@ -7,7 +7,7 @@ const qa=await readFile(new URL('../qa/ui_audit_matrix.py',import.meta.url),'utf
 
 test('UI M1: slot edit form groups hours and money without discarding any existing field',()=>{
  const section=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
- for(const name of ['Время и заказы','Начисления и удержания'])assert.ok(section.includes(name));
+ for(const name of ['Время и заказы','Выплата, чаевые и удержания'])assert.ok(section.includes(name));
  for(const key of ['dailyHours','dailyOrders','reward','tax','parkCommission','tips','separateBonus'])assert.match(section,new RegExp("field\\('"+key+"'"));
  assert.match(css,/\.form-section-heading\{grid-column:1\/-1/);
  assert.match(css,/\.form-page \.save-area \.button\.primary\{min-height:55px/);
@@ -24,7 +24,7 @@ test('UI M1: slot history keeps editable ID and complete monetary rows',()=>{
  const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
  assert.ok(section.includes('class="day-money"'));
  assert.ok(!section.includes('class="day-money" role="group"'), 'Android must expose each monetary row after transfer upgrade');
- for(const v of ['Вознаграждение','Чаевые','Отдельные бонусы','Итог на экране'])assert.ok(section.includes(v));
+ for(const v of ['Выплачено','Чаевые','Отдельные бонусы','Итог на экране'])assert.ok(section.includes(v));
  assert.ok(section.includes('data-entry="${esc(e.id)}"'));
 });
 test('UI M2: empty-state navigation must wait for rendered home and history, not nav buttons alone',()=>{
@@ -174,7 +174,7 @@ test('approved History: day reward plus full per-slot fields and separate edit b
  assert.match(section,/class="day-summary"/);
  assert.match(section,/class="day-summary-reward"/);
  assert.match(section,/money\(d\.paidReward\)/);
- for(const label of ['Вознаграждение','Чаевые','Отдельные бонусы','Итог на экране','Отработано','Заказов']) {
+ for(const label of ['Выплачено','Чаевые','Отдельные бонусы','Итог на экране','Отработано','Заказов']) {
    assert.ok(section.includes(label), 'missing existing entry field or label: '+label);
  }
  assert.ok(section.includes('data-entry="${esc(e.id)}"'));

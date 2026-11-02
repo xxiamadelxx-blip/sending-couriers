@@ -8,8 +8,9 @@ test('pace premium uses the exact 2.8 boundary and only the hourly base', () => 
   let state = add(core.emptyState(), '2026-10-02', 10, 28, { reward: 1000, tips: 100, separateBonus: 200 });
   let result = core.calculate(state, '2026-10-02');
   assert.equal(result.pacePremium, 180);
+  assert.equal(result.accruedIncome, 3700);
   assert.equal(result.grossUserIncome, 3900);
-  assert.equal(result.estimatedYandexOwed, 2600);
+  assert.equal(result.estimatedYandexOwed, 2700);
   assert.equal(result.paidReward, 1000);
   state = add(state, '2026-10-03', 0.01, 0);
   result = core.calculate(state, '2026-10-02');

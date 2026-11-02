@@ -12,11 +12,11 @@ const period = '2026-10-02';
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/pace-report-2026-10-13.json', import.meta.url), 'utf8'));
 const reportState = () => normalizeState(structuredClone(fixture));
 
-test('13 October report shows 1.808 orders/hour and 33 minutes despite a blank rest-day order field', () => {
+test('13 October report shows 1.81 orders/hour and 33 minutes despite a blank rest-day order field', () => {
   const state = reportState(), before = JSON.stringify(state);
   const s = calculate(state, period);
   assert.equal(s.hours, 120); assert.equal(s.orders, 217);
-  assert.equal(paceText(s.pace), '1,808');
+  assert.equal(paceText(s.pace), '1,81');
   assert.equal(s.reserve, 33); assert.equal(reserveText(s.reserve), '0 ч 33 мин');
   assert.equal(s.matchedCounters, false);
   assert.equal(s.hoursRecorded, 9); assert.equal(s.ordersRecorded, 8);
@@ -32,7 +32,7 @@ test('partial totals survive JSON reload and import; manually entering zero only
   const imported = mergeImport(emptyState(), JSON.parse(JSON.stringify(original)));
   for (const state of [reloaded, imported]) {
     assert.equal(state.entries.find(e => e.date === '2026-10-10').dailyOrders, null);
-    assert.equal(paceText(calculate(state, period).pace), '1,808');
+    assert.equal(paceText(calculate(state, period).pace), '1,81');
     assert.equal(calculate(state, period).reserve, 33);
   }
   const rest = original.entries.find(e => e.date === '2026-10-10');
@@ -50,7 +50,7 @@ test('separately entered hours and orders use their period totals without exclud
   state = upsertEntry(state, { date: '2026-10-16', dailyHours: 100, dailyOrders: 1000 });
   const s = calculate(state, period);
   assert.equal(s.hours, 8.5); assert.equal(s.orders, 20);
-  assert.equal(paceText(s.pace), '2,353'); assert.equal(s.reserve, 156);
+  assert.equal(paceText(s.pace), '2,35'); assert.equal(s.reserve, 156);
   assert.equal(s.matchedCounters, false);
   const allOrdersMissing = reportState();
   allOrdersMissing.entries.forEach(e => { e.dailyOrders = null; });
@@ -59,7 +59,7 @@ test('separately entered hours and orders use their period totals without exclud
 });
 
 test('partial totals retain the exact 1.8 threshold and no negative or infinite reserve', () => {
-  for (const [lastOrders, pace, minutes] of [[15, '1,792', 0], [16, '1,800', 0], [17, '1,808', 33]]) {
+  for (const [lastOrders, pace, minutes] of [[15, '1,79', 0], [16, '1,80', 0], [17, '1,81', 33]]) {
     const state = reportState();
     state.entries.at(-1).dailyOrders = lastOrders;
     const s = calculate(state, period);
@@ -75,7 +75,7 @@ test('partial totals retain the exact 1.8 threshold and no negative or infinite 
 
 test('Markdown exports the computed partial pace and explains missing counters without replacing them', () => {
   const md = markdownReport(reportState(), period, '2026-10-13');
-  assert.match(md, /Текущий темп: 1,808 заказа\/ч/);
+  assert.match(md, /Текущий темп: 1,81 заказа\/ч/);
   assert.match(md, /Можно без заказов до 1,80: 0 ч 33 мин/);
   assert.match(md, /Темп и запас рассчитаны по введённым итогам; часть дневных часов или заказов не заполнена/);
   assert.match(md, /\| 2026-10-10 \| 14 \| — \|/);
