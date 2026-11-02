@@ -171,11 +171,16 @@ public final class M4DeviceProbeActivity extends Activity {
         SQLiteDatabase db=store.getReadableDatabase();
         try {
             String source="video:"+hash;
-            long[] totals=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0),"
-                +"COUNT(accepted_at),COUNT(completed_at) FROM orders WHERE source_id=?",source);
-            if(totals[0]!=2||totals[1]!=20000||totals[2]!=2||totals[3]!=2)
-                throw new AssertionError("mismatched card payout changed list money or lost persisted times: "
-                    +"rows="+totals[0]+", listKopecks="+totals[1]+", accepted="+totals[2]+", completed="+totals[3]);
+            try(Cursor summary=db.rawQuery("SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0),"
+                    +"COUNT(accepted_at),COUNT(completed_at) FROM orders WHERE source_id=?",new String[]{source})) {
+                if(!summary.moveToFirst()) throw new AssertionError("mismatched card import wrote no SQLite summary");
+                long rawRows=summary.getLong(0),listKopecks=summary.getLong(1);
+                long acceptedCount=summary.getLong(2),completedCount=summary.getLong(3);
+                if(rawRows!=2||listKopecks!=20000||acceptedCount!=2||completedCount!=2)
+                    throw new AssertionError("mismatched card payout changed list money or lost persisted times: "
+                        +"rows="+rawRows+", listKopecks="+listKopecks+", accepted="+acceptedCount
+                        +", completed="+completedCount);
+            }
             boolean foundFirst=false,foundSecond=false;
             try(Cursor cursor=db.rawQuery("SELECT accepted_at,completed_at,reward_kopecks FROM orders "
                     +"WHERE source_id=? ORDER BY completed_at",new String[]{source})) {
