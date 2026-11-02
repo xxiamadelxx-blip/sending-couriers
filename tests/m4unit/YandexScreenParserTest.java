@@ -4,6 +4,21 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class YandexScreenParserTest {
+    @Test public void recoversTimePairFromSavedLayoutCandidateWhenPlainOcrLostLabels() {
+        java.util.List<YandexScreenParser.Field> fields=java.util.Arrays.asList(
+            new YandexScreenParser.Field("status","text","COMPLETED"),
+            new YandexScreenParser.Field("order_number","text","261101-1680964"),
+            new YandexScreenParser.Field("started_at","datetime","2026-11-01T20:25"),
+            new YandexScreenParser.Field("completed_at","datetime","2026-11-01T20:38"));
+        YandexScreenParser.Candidate saved=new YandexScreenParser.Candidate("ORDER_DETAIL",0.92f,fields);
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("pixel-a","Карточка без читаемых меток",java.util.Arrays.asList(saved)),
+            new VideoOrderTimePairs.Frame("pixel-b","Карточка без читаемых меток",java.util.Arrays.asList(saved)));
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        assertEquals(1,pairs.size());
+        assertEquals("2026-11-01T20:25",pairs.get(0).accepted);
+        assertEquals("2026-11-01T20:38",pairs.get(0).completed);
+    }
     @Test public void recoversOrderTimesFromRepeatedOcrEvenWhenCardAmountIsMissing() {
         String card="Заказ\nИтого\nДетали\nСтатус\nЗавершён\nНомер заказа\n261101-2693515\n"
             +"Начало\n2026.11.01 18:48\nЗавершение\n2026.11.01 19:05";

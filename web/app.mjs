@@ -141,7 +141,11 @@ function refreshNativeForecasts() {
     recoverStoredVideoEvidence();
     const pending=Native?.pendingNativeForecasts?.();if(pending)window.receiveNativeForecasts(pending);
   }
-  catch(error) { console.warn('Native forecast handoff failed:',error?.message??error); }
+  catch(error) {
+    console.warn('Native forecast handoff failed:',error?.message??error);
+    window.videoRecoveryStatus={status:'ERROR',error:error?.message??String(error)};
+    if(view==='forecast')forecastScreen?.refresh?.();
+  }
 }
 function recoverStoredVideoEvidence() {
   if(!Native?.readVideoOrderEvidence||!state?.forecast?.days)return;
@@ -153,13 +157,14 @@ function recoverStoredVideoEvidence() {
   let forecast=state.forecast;
   for(const hash of hashes) {
     const stored=JSON.parse(Native.readVideoOrderEvidence(hash));
-    if(stored.ok!==true||!Array.isArray(stored.orders))throw new Error('Не удалось прочитать сохранённые заказы видео.');
+    if(stored.ok!==true||!Array.isArray(stored.orders))throw new Error(`Не удалось прочитать заказы видео (${stored.error??'ошибка чтения'}).`);
+    window.videoRecoveryStatus={...stored.recovery,hash};
     forecast=restoreVideoOrderEvidence(forecast,hash,stored.orders);
   }
   if(JSON.stringify(forecast.days)!==JSON.stringify(state.forecast.days)) {
     persist({...state,forecast},true);
     if(view==='forecast')forecastScreen?.refresh?.();
-  }
+  } else if(hashes.length&&view==='forecast')forecastScreen?.refresh?.();
 }
 window.refreshNativeForecasts=refreshNativeForecasts;
 window.receiveWeather = text => {

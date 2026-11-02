@@ -14,7 +14,11 @@ public final class VideoOrderTimePairs {
 
     public static final class Frame {
         public final String hash,text;
-        public Frame(String hash,String text) { this.hash=hash;this.text=text; }
+        public final List<YandexScreenParser.Candidate> savedCandidates;
+        public Frame(String hash,String text) { this(hash,text,new ArrayList<>()); }
+        public Frame(String hash,String text,List<YandexScreenParser.Candidate> savedCandidates) {
+            this.hash=hash;this.text=text;this.savedCandidates=savedCandidates;
+        }
     }
 
     public static final class Pair {
@@ -40,7 +44,9 @@ public final class VideoOrderTimePairs {
         Map<String,Map<String,Support>> byCompletion=new HashMap<>();
         for(Frame frame:frames) {
             if(frame.hash==null||frame.text==null||frame.text.length()>20000) continue;
-            for(YandexScreenParser.Candidate candidate:YandexScreenParser.parse(frame.text).candidates) {
+            List<YandexScreenParser.Candidate> candidates=new ArrayList<>(frame.savedCandidates);
+            candidates.addAll(YandexScreenParser.parse(frame.text).candidates);
+            for(YandexScreenParser.Candidate candidate:candidates) {
                 if(!"ORDER_DETAIL".equals(candidate.candidateType)
                         ||!"COMPLETED".equals(field(candidate,"status"))) continue;
                 String start=field(candidate,"started_at"),end=field(candidate,"completed_at");

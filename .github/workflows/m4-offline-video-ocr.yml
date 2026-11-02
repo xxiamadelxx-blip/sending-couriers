@@ -167,11 +167,11 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           OUT="$RUNNER_TEMP/courier-transfer-release"
           test -s "$APK"
-          "$BT/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.transfer' versionCode='36' versionName='1.7.22'"
+          "$BT/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.transfer' versionCode='37' versionName='1.7.23'"
           mkdir -p "$OUT"
-          "$BT/zipalign" -f -p 4 "$APK" "$OUT/Courier-Finance-Transfer-1.7.22-unsigned.apk"
+          "$BT/zipalign" -f -p 4 "$APK" "$OUT/Courier-Finance-Transfer-1.7.23-unsigned.apk"
           cp "$BT/lib/apksigner.jar" "$OUT/apksigner.jar"
-          sha256sum "$OUT/Courier-Finance-Transfer-1.7.22-unsigned.apk"
+          sha256sum "$OUT/Courier-Finance-Transfer-1.7.23-unsigned.apk"
       - name: Publish APK and Android signer for local owner signing
         uses: actions/upload-artifact@v4
         with:
@@ -180,11 +180,13 @@ jobs:
           retention-days: 1
           if-no-files-found: error
       - name: Enable KVM group permissions for Android emulator
+        if: contains(github.event.head_commit.message, '[android-probe]')
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Run offline video OCR probe in Android emulator
+        if: contains(github.event.head_commit.message, '[android-probe]')
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -195,7 +197,7 @@ jobs:
           emulator-boot-timeout: 600
           script: bash .github/scripts/m4-offline-video-probe.sh
       - name: Save synthetic Android screenshot evidence
-        if: always()
+        if: always() && contains(github.event.head_commit.message, '[android-probe]')
         uses: actions/upload-artifact@v4
         with:
           name: m4-android-screenshots-${{ github.sha }}

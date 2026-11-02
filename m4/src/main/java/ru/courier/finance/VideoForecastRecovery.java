@@ -19,7 +19,7 @@ import org.json.JSONObject;
 /** Read already committed video orders for a durable forecast handoff. */
 public final class VideoForecastRecovery {
     private static final ZoneId MOSCOW=ZoneId.of("Europe/Moscow");
-    private static final String RECOVERY_VERSION="ocr-time-pairs-v1";
+    private static final String RECOVERY_VERSION="ocr-time-pairs-v2";
     private VideoForecastRecovery() {}
 
     /** Repair missing timestamps from the video's immutable OCR frames once per recovery version. */
@@ -27,27 +27,58 @@ public final class VideoForecastRecovery {
         validate(hash);
         SharedPreferences prefs=context.getSharedPreferences("m4-video-time-recovery",Context.MODE_PRIVATE);
         String key=RECOVERY_VERSION+":"+hash;
-        if(!prefs.getBoolean(key,false)&&reconcile(context,store,hash))
-            prefs.edit().putBoolean(key,true).commit();
-        return read(store,hash);
+        String report=prefs.getString(key,null);
+        if(report==null) {
+            report=reconcile(context,store,hash).toString();
+            if(!prefs.edit().putString(key,report).commit())
+                throw new IllegalStateException("Recovery report could not be saved");
+        }
+        return new JSONObject(read(store,hash)).put("recovery",new JSONObject(report)).toString();
     }
 
-    private static boolean reconcile(Context context,CourierDatabase store,String hash) throws Exception {
+    private static JSONObject reconcile(Context context,CourierDatabase store,String hash) throws Exception {
         VideoImportDatabase evidence=new VideoImportDatabase(context);
         List<VideoOrderTimePairs.Frame> frames=new ArrayList<>();
+        Map<String,VideoOrderTimePairs.Frame> byObservation=new HashMap<>();
+        int savedDetails=0;
         try {
             try(Cursor cursor=evidence.getReadableDatabase().rawQuery(
-                    "SELECT o.frame_sha256,o.ocr_text FROM m4_screen_observations o "
+                    "SELECT o.id,o.frame_sha256,o.ocr_text FROM m4_screen_observations o "
                     +"JOIN m4_video_imports v ON v.id=o.import_id "
                     +"WHERE v.source_sha256=? ORDER BY o.frame_index LIMIT 601",
                     new String[]{hash})) {
                 while(cursor.moveToNext()) {
                     if(frames.size()>=600) throw new IllegalStateException("Video OCR frame limit exceeded");
-                    frames.add(new VideoOrderTimePairs.Frame(cursor.getString(0),cursor.getString(1)));
+                    VideoOrderTimePairs.Frame frame=new VideoOrderTimePairs.Frame(cursor.getString(1),cursor.getString(2));
+                    frames.add(frame);byObservation.put(cursor.getString(0),frame);
+                }
+            }
+            try(Cursor cursor=evidence.getReadableDatabase().rawQuery(
+                    "SELECT c.observation_id,c.candidate_json FROM m4_extracted_candidates c "
+                    +"JOIN m4_screen_observations o ON o.id=c.observation_id "
+                    +"JOIN m4_video_imports v ON v.id=o.import_id "
+                    +"WHERE v.source_sha256=? AND c.candidate_type='ORDER_DETAIL' LIMIT 3001",
+                    new String[]{hash})) {
+                while(cursor.moveToNext()) {
+                    if(savedDetails>=3000) throw new IllegalStateException("Saved detail limit exceeded");
+                    VideoOrderTimePairs.Frame frame=byObservation.get(cursor.getString(0));
+                    if(frame==null) continue;
+                    try {
+                        JSONObject value=new JSONObject(cursor.getString(1));
+                        JSONObject fields=value.getJSONObject("fields");
+                        List<YandexScreenParser.Field> parsed=new ArrayList<>();
+                        for(java.util.Iterator<String> names=fields.keys();names.hasNext();) {
+                            String name=names.next();JSONObject field=fields.getJSONObject(name);
+                            parsed.add(new YandexScreenParser.Field(name,field.getString("type"),field.getString("value")));
+                        }
+                        frame.savedCandidates.add(new YandexScreenParser.Candidate("ORDER_DETAIL",0.92f,parsed));
+                        savedDetails++;
+                    } catch(org.json.JSONException malformed) { /* Keep immutable OCR text as fallback. */ }
                 }
             }
         } finally { evidence.close(); }
-        if(frames.isEmpty()) return false;
+        if(frames.isEmpty()) return new JSONObject().put("frames",0).put("savedDetails",0)
+            .put("timePairs",0).put("newRows",0).put("status","NO_SAVED_VIDEO");
         List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
         Map<String,VideoOrderTimePairs.Pair> byCompletion=new HashMap<>();
         for(VideoOrderTimePairs.Pair pair:pairs) byCompletion.put(pair.completed,pair);
@@ -97,7 +128,8 @@ public final class VideoForecastRecovery {
             }
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
-        return true;
+        return new JSONObject().put("frames",frames.size()).put("savedDetails",savedDetails)
+            .put("timePairs",pairs.size()).put("newRows",recovered).put("status","CHECKED");
     }
 
     private static String toUtc(String local) {

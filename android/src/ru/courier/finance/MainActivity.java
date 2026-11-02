@@ -267,7 +267,7 @@ public final class MainActivity extends Activity {
             try { return VideoForecastRecovery.reconcileAndRead(MainActivity.this,factMirrorDatabase,sourceSha256); }
             catch(Exception failure) {
                 Log.e("CourierM4","Video forecast recovery read failed: "+failure.getClass().getSimpleName());
-                return "{\"ok\":false,\"orders\":[]}";
+                return "{\"ok\":false,\"orders\":[],\"error\":\""+failure.getClass().getSimpleName()+"\"}";
             }
         }
         @JavascriptInterface public boolean writeState(String value) {
