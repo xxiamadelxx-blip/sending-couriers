@@ -41,6 +41,18 @@ destination = ROOT / 'build/native-probe'
 destination.mkdir(parents=True, exist_ok=True)
 classpath = os.pathsep.join(str(p.resolve()) for p in [classes, args.json_jar, android_jar])
 compiler = [shutil.which('javac')] if shutil.which('javac') else ['java', 'com.sun.tools.javac.Main']
+# NativeBridge is exercised on the host JVM with Android stubs. WorkManager queueing
+# is an Android runtime side effect and is verified by the emulator workflow, so
+# replace only these two scheduler entry points with no-ops in this host probe.
+scheduler_stub = destination / 'ForecastAutomation.java'
+scheduler_stub.write_text("""package ru.courier.finance;
+import android.content.Context;
+public final class ForecastAutomation {
+    public static void scheduleDaily(Context context, String serializedState) {}
+    public static void enqueueEvaluation(Context context) {}
+}
+""", encoding='utf-8')
+subprocess.run([*compiler, '-encoding', 'UTF-8', '-cp', classpath, '-d', str(destination), str(scheduler_stub)], check=True)
 subprocess.run([*compiler, '-encoding', 'UTF-8', '-cp', classpath, '-d', str(destination), str(ROOT / 'tests/NativeStateProbe.java')], check=True)
 verification = ROOT / 'verification/1.7.11'
 verification.mkdir(parents=True, exist_ok=True)
@@ -57,6 +69,7 @@ report = {
     'scenarios': ['schema1-still-writable', 'schema2-still-writable', 'schema3-still-writable', 'schema4-still-writable', 'schema5-still-writable', 'schema6-forecast-same-date-slots-pay-rules-theme-cycle-exact-readback', 'native-black-and-day-palette',
         'malformed-and-future-reject-before-commit', 'entry-and-utf8-byte-limits', 'commit-failure-returned'],
     'storageIO': 'SharedPreferences test double', 'androidRuntimeTested': False,
+    'hostTestDoubles': ['ForecastAutomation.scheduleDaily and enqueueEvaluation no-op; WorkManager is exercised in Android emulator checks'],
     'output': output.strip()
 }
 (verification / 'native-results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
