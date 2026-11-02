@@ -23,7 +23,6 @@ platforms += sorted(args.sdk.glob('android-35-ext*/android.jar'))
 android_jar = next((p for p in platforms if p.is_file()), None)
 if android_jar is None:
     raise SystemExit('Android platform 35 is required; pass --sdk.')
-gradle_classes = ROOT / 'app/intermediates/javac/release/compileReleaseJavaWithJavac/classes'
 gradle_classes = ROOT / 'app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes'
 bridge_relative = Path('ru/courier/finance/MainActivity$NativeBridge.class')
 classes = gradle_classes if (gradle_classes / bridge_relative).is_file() else ROOT / 'build/classes'
