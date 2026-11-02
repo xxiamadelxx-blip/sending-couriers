@@ -1,6 +1,7 @@
 package ru.courier.finance;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -54,7 +55,8 @@ public final class VideoOrderTimePairs {
                 LocalDateTime accepted,completed;
                 try { accepted=LocalDateTime.parse(start);completed=LocalDateTime.parse(end); }
                 catch(Exception invalid) { continue; }
-                if(!completed.isAfter(accepted)||!accepted.toLocalDate().equals(completed.toLocalDate())) continue;
+                Duration duration=Duration.between(accepted,completed);
+                if(duration.isNegative()||duration.isZero()||duration.compareTo(Duration.ofHours(12))>0) continue;
                 Support support=byCompletion.computeIfAbsent(end,k->new HashMap<>())
                     .computeIfAbsent(start,k->new Support());
                 support.frames.add(frame.hash);
@@ -65,12 +67,19 @@ public final class VideoOrderTimePairs {
         }
         List<Pair> pairs=new ArrayList<>();
         for(Map.Entry<String,Map<String,Support>> entry:byCompletion.entrySet()) {
-            // Two interpretations of the same completion minute are ambiguous.
-            if(entry.getValue().size()!=1) continue;
-            Map.Entry<String,Support> one=entry.getValue().entrySet().iterator().next();
-            Support support=one.getValue();
-            if(support.frames.size()<2||support.amounts.size()>1) continue;
-            pairs.add(new Pair(one.getKey(),entry.getKey(),support.orderNumbers,support.amounts,support.frames.size()));
+            Map.Entry<String,Support> winner=null;
+            boolean tied=false;
+            for(Map.Entry<String,Support> candidate:entry.getValue().entrySet()) {
+                if(winner==null||candidate.getValue().frames.size()>winner.getValue().frames.size()) {
+                    winner=candidate;tied=false;
+                } else if(candidate.getValue().frames.size()==winner.getValue().frames.size()) tied=true;
+            }
+            if(winner==null||tied) continue;
+            Support support=winner.getValue();
+            // One clear frame is acceptable only when its order ID and amount
+            // give the later list-row reconciliation two independent anchors.
+            if(support.frames.size()<2&&(support.orderNumbers.size()!=1||support.amounts.size()!=1)) continue;
+            pairs.add(new Pair(winner.getKey(),entry.getKey(),support.orderNumbers,support.amounts,support.frames.size()));
         }
         return pairs;
     }

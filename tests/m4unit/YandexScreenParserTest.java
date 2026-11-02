@@ -32,6 +32,20 @@ public final class YandexScreenParserTest {
         assertEquals(primary.candidates.size(),
             YandexScreenParser.withFocusedOrderDetail(primary,conflicting,null).candidates.size());
     }
+    @Test public void focusedCardSurvivesAnUnreadablePrimaryScreen() {
+        String unreadable="22:55 LTE 60%\nОткуда\nулица\n100,00 ₽\n";
+        String card="Итого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 261101-2693515\nНачало 2026.11.01 18:48\n"
+            +"Завершение 2026.11.01 19:05";
+        YandexScreenParser.Result primary=YandexScreenParser.parse(unreadable);
+        assertEquals(0,primary.candidates.size());
+        YandexScreenParser.Result recovered=YandexScreenParser.withFocusedOrderDetail(primary,card,null);
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("a",unreadable,recovered.candidates),
+            new VideoOrderTimePairs.Frame("b",unreadable,recovered.candidates));
+        assertEquals(1,VideoOrderTimePairs.extract(frames).size());
+        assertEquals("2026-11-01T19:05",VideoOrderTimePairs.extract(frames).get(0).completed);
+    }
     @Test public void recoversTimePairFromSavedLayoutCandidateWhenPlainOcrLostLabels() {
         java.util.List<YandexScreenParser.Field> fields=java.util.Arrays.asList(
             new YandexScreenParser.Field("status","text","COMPLETED"),
@@ -64,6 +78,34 @@ public final class YandexScreenParserTest {
         assertTrue(VideoOrderTimePairs.extract(java.util.Arrays.asList(
             new VideoOrderTimePairs.Frame("frame-a",card),
             new VideoOrderTimePairs.Frame("frame-b",card.replace("18:48","18:49")))).isEmpty());
+    }
+    @Test public void timePairUsesMajorityStartAndKeepsAmountNoiseAsSeparateEvidence() {
+        String base="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 261101-2693515\n";
+        String winner=base+"Начало 2026.11.01 18:48\nЗавершение 2026.11.01 19:05";
+        String outlier=base+"Начало 2026.11.01 18:49\nЗавершение 2026.11.01 19:05";
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("a",winner),new VideoOrderTimePairs.Frame("b",winner),
+            new VideoOrderTimePairs.Frame("c",winner.replace("100,00","101,00")),
+            new VideoOrderTimePairs.Frame("d",outlier));
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        assertEquals(1,pairs.size());
+        assertEquals("2026-11-01T18:48",pairs.get(0).accepted);
+        assertEquals(3,pairs.get(0).frames);
+        assertEquals(2,pairs.get(0).amounts.size());
+    }
+    @Test public void oneFramePairRequiresOrderIdAndAmountAndCanCrossMidnight() {
+        String card="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 261101-2693515\nНачало 2026.11.01 23:55\n"
+            +"Завершение 2026.11.02 00:05";
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("one",card));
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        assertEquals(1,pairs.size());
+        assertEquals("2026-11-02T00:05",pairs.get(0).completed);
+        assertEquals(1,pairs.get(0).frames);
+        assertTrue(VideoOrderTimePairs.extract(java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("one",card.replace("Номер заказа 261101-2693515\n","")))).isEmpty());
     }
     @Test public void recoversVisibleStartTimeWhenOnlyItsLabelIsUnreadable() {
         String card="Заказ\nИтого\n100,00 ₽\nДетали\nСтатус\nЗавершён\n"

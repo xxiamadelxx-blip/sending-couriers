@@ -19,7 +19,7 @@ import org.json.JSONObject;
 /** Read already committed video orders for a durable forecast handoff. */
 public final class VideoForecastRecovery {
     private static final ZoneId MOSCOW=ZoneId.of("Europe/Moscow");
-    private static final String RECOVERY_VERSION="ocr-time-pairs-v3";
+    private static final String RECOVERY_VERSION="ocr-time-pairs-v4";
     private VideoForecastRecovery() {}
 
     /** Repair missing timestamps from the video's immutable OCR frames once per recovery version. */
@@ -126,15 +126,22 @@ public final class VideoForecastRecovery {
         try {
             for(String[] row:rows) {
                 VideoOrderTimePairs.Pair pair=byCompletion.get(row[1]);
-                if(pair==null||counts.get(row[1])!=1||row[2]!=null||row[3]!=null) continue;
-                if(row[4]!=null&&!pair.orderNumbers.contains(row[4])) continue;
-                if(!pair.amounts.isEmpty()&&(row[5]==null||!pair.amounts.contains(row[5]))) continue;
+                if(pair==null||counts.get(row[1])!=1||(row[2]!=null&&row[3]!=null)) continue;
+                boolean orderIdMatches=row[4]!=null&&!pair.orderNumbers.isEmpty()
+                    &&pair.orderNumbers.contains(row[4]);
+                if(row[4]!=null&&!pair.orderNumbers.isEmpty()&&!orderIdMatches) continue;
+                // Multi-frame time evidence is independent of the list's reward:
+                // tips and demand coefficients can make the displayed amounts differ.
+                // A single-frame pair still needs a second anchor before it is used.
+                if(pair.frames<2&&!orderIdMatches
+                        &&(row[5]==null||!pair.amounts.contains(row[5]))) continue;
                 String accepted=toUtc(pair.accepted),completed=toUtc(pair.completed);
                 ContentValues values=new ContentValues();
-                values.put("accepted_at",accepted);values.put("completed_at",completed);
+                if(row[2]==null) values.put("accepted_at",accepted);
+                if(row[3]==null) values.put("completed_at",completed);
                 values.put("confidence","confirmed");values.put("precision","ocr_time_pair_crosschecked");
                 values.put("updated_at",Instant.now().toString());
-                recovered+=db.update("orders",values,"id=? AND source_id=? AND accepted_at IS NULL AND completed_at IS NULL",
+                recovered+=db.update("orders",values,"id=? AND source_id=? AND (accepted_at IS NULL OR completed_at IS NULL)",
                     new String[]{row[0],source});
             }
             if(recovered>0) {
