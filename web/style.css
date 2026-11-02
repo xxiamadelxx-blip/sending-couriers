@@ -514,7 +514,7 @@ input,select,textarea,.field input,.forecast-page .field input{border-radius:4px
 #homeDeck .home-focus::before{height:6px;background:var(--home-accent);inset:0 17px auto 0}
 #homeDeck .home-focus .rhythm{padding:28px 19px 16px}
 #homeDeck .home-focus .pace-hero{gap:8px}
-#homeDeck .home-focus .pace-hero h2{font-size:11px;letter-spacing:.15em;font-weight:800;text-transform:uppercase;color:var(--console-label)}
+#homeDeck .home-focus .pace-hero h2{font-size:12px;letter-spacing:0;font-weight:650;text-transform:none;color:var(--console-label)}
 #homeDeck .home-focus .hero-pace{color:var(--console-label);font-weight:600}
 #homeDeck .home-focus .hero-pace strong{font-family:ui-monospace,"Roboto Mono",monospace;font-size:clamp(43px,13vw,59px);color:var(--console-hero-ink);font-weight:900;letter-spacing:-.095em}
 #homeDeck .home-focus .hero-pace strong.compact{font-size:clamp(37px,10vw,46px)}
@@ -525,7 +525,7 @@ input,select,textarea,.field input,.forecast-page .field input{border-radius:4px
 #homeDeck .home-focus .meters{border-top:1px solid #62707a;border-bottom:1px solid #62707a;gap:10px}
 #homeDeck .home-focus .meter-value{font-size:clamp(25px,7vw,32px);color:var(--console-hero-ink);font-family:ui-monospace,monospace;font-weight:850;letter-spacing:-.06em}
 #homeDeck .home-focus .meter-value .unit{color:var(--console-label);font-size:.6em}
-#homeDeck .home-focus .meter-label{color:var(--console-label);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+#homeDeck .home-focus .meter-label{color:var(--console-label);font-size:12px;font-weight:600;text-transform:capitalize;letter-spacing:0}
 #homeDeck .home-focus .norm-row{color:var(--console-hero-ink)}
 #homeDeck .home-focus .reserve-line{color:var(--console-label)}
 #homeDeck .home-focus .payment-status{border-color:#46545f;color:var(--console-hero-ink);background:#11191f;padding:15px 19px}
@@ -547,7 +547,7 @@ input,select,textarea,.field input,.forecast-page .field input{border-radius:4px
 #homeDeck .calculation,#homeDeck .home-premiums .calculation{background:transparent}
 .home-empty{border:0;border-top:6px solid var(--home-accent);border-radius:3px;box-shadow:none;background:var(--console-hero);color:var(--console-hero-ink);padding:33px 22px 25px}
 .home-empty h2{color:var(--console-hero-ink);font-size:28px;font-weight:900;line-height:1.1;letter-spacing:-.04em}
-.home-empty .home-eyebrow{color:var(--signal-panel);letter-spacing:.2em;font-weight:900}
+.home-empty .home-eyebrow{color:var(--signal-panel);font-size:12px;letter-spacing:0;font-weight:650;text-transform:none}
 .home-empty-copy{color:var(--console-label)}
 .home-empty-symbol{background:var(--signal-panel);color:#171c1f;border-radius:2px;width:58px;height:58px}
 .home-empty .button{border-radius:4px}
@@ -859,10 +859,10 @@ dialog .button{margin:8px 0 0}
 .form-page .form-date-field{gap:6px}
 .form-page .form-date-field>label{
   color:var(--teal);
-  text-transform:uppercase;
-  letter-spacing:.095em;
-  font-size:11px;
-  font-weight:850;
+  text-transform:none;
+  letter-spacing:0;
+  font-size:12px;
+  font-weight:650;
 }
 .form-page .form-date-field .date-box{
   min-height:52px;
@@ -873,10 +873,10 @@ dialog .button{margin:8px 0 0}
 .form-page .form-date-field .form-period{margin-top:1px;color:var(--muted)}
 .form-page .form-section-heading{
   font-size:16px;
-  letter-spacing:.025em;
+  letter-spacing:0;
   line-height:1.25;
-  font-weight:900;
-  text-transform:uppercase;
+  font-weight:750;
+  text-transform:none;
   margin:17px 0 1px;
   padding:13px 0 2px;
   border-top:1px solid var(--line);

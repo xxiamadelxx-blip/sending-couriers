@@ -314,7 +314,7 @@ function summary() {
   const emptyDashboard=!s.entries.length&&!s.closure;
   const emptyPanel=`<section class="home-empty" aria-labelledby="homeEmptyTitle">
     <span class="home-empty-symbol" aria-hidden="true">${icon.package}</span>
-    <p class="home-eyebrow">НОВЫЙ ПЕРИОД</p>
+    <p class="home-eyebrow">Новый период</p>
     <h2 id="homeEmptyTitle">Смена ещё не записана</h2>
     <p class="home-empty-copy">Добавьте слот, чтобы увидеть темп, доход и выплаты.</p>
     <button class="button primary" id="homeEmptyAdd" type="button">${icon.plus}Добавить первый слот</button>

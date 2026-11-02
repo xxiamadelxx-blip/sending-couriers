@@ -82,3 +82,39 @@ The real SpawnDroid capture above showed four remaining labels in all caps; the 
 - The current browser's file chooser did not expose the local APK to SpawnDroid. This follow-up APK was **not installed**; a matched Android after-capture for the casing/heading adjustment is **NOT RUN**. The earlier Android screenshots above remain evidence only for the prior CSS candidate.
 
 **Current gate:** previous candidate's Android spot check remains recorded; this follow-up's Android visual result and owner approval remain **NOT RUN**. Keep PR #14 draft.
+
+## Latest follow-up — Android visual review · 2 November 2026
+
+This section supersedes the previous follow-up gate above. Forecast was intentionally skipped.
+
+### Candidate and device
+
+- Candidate: Courier-Finance-1.7.24-unslop-followup-QA.apk, SHA-256 596a2df53646c37fe9dde375b83460dfcce06b9880421d0fc997894757894ea4.
+- Package/version: ru.courier.finance.transfer, 1.7.24 (38).
+- The QA APK was made from the earlier unsigned QA APK by replacing only assets/www/index.html, assets/www/app.mjs, and assets/www/style.css with this branch’s files. It is a focused web-asset preview, not a fresh full source build or release APK. It uses a temporary QA signing key.
+- ZIP alignment and APK Signature Scheme v2/v3 verification passed. The uploaded artifact parsed in SpawnDroid, installed on a fresh device, and launched successfully.
+- Device: Android 15 / API 35, Russian locale, 720×1280 px at 320 dpi (360×640 dp). The session was stopped after inspection.
+
+### Screens inspected
+
+- **Home, empty state:** “Новый период” now uses sentence case and reads clearly. The add button is partly obscured by the fixed navigation in the initial viewport; scrolling to check its reachability was not completed.
+- **Period:** empty-state copy, payout conditions, 12-week card, bonus settings and export action fit their visible cards. The 12-week heading uses 12 px sentence case. See the [top](evidence/unslop-2026-11-02/followup-period-top.jpg) and [lower](evidence/unslop-2026-11-02/followup-period-lower.jpg) captures.
+- **Add Slot:** the date caption and section headings use sentence case, the two-column fields fit at 360 dp, and Save is visible. See [Add Slot](evidence/unslop-2026-11-02/followup-add-slot.jpg).
+- **History:** empty state and Import JSON entry are visible. See [History](evidence/unslop-2026-11-02/followup-history.jpg).
+- The import preview dialog was not opened on this latest APK. Settings, light theme, 390 dp, large text, save/edit/restart flows, and scroll reachability of the Home add button were not checked. Forecast was not opened.
+
+![SpawnDroid Android 15 Home empty state](evidence/unslop-2026-11-02/followup-home-empty.jpg)
+
+### Latest acceptance
+
+| Criterion | Evidence / check | Status |
+| --- | --- | --- |
+| Candidate starts on Android 15 | Fresh SpawnDroid session; Home rendered | **PASS** |
+| Home / Period / Add Slot / History visual spot check | Captures above; no card overlap in inspected screens | **PASS, limited** |
+| Home add button clear of fixed navigation after scroll | Partly covered in initial viewport; scroll reachability not checked | **NOT RUN** |
+| Latest import-dialog labels and 12-week heading on Android | Dialog not opened on this candidate | **NOT RUN** |
+| Settings, light theme, 390 dp, large text, save/edit/restart | Not inspected in this session | **NOT RUN** |
+| APK ZIP alignment and signature | zipalign check; apksigner v2/v3 verification | **PASS** |
+| User accepts the visual result | Owner review of captures | **NOT RUN** |
+
+**Current gate:** limited Android visual spot check passed for the listed screens. Keep PR #14 draft for owner review. This QA APK is not a production update; no release build or user-installed app was changed.
