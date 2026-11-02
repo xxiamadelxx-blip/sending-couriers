@@ -4,6 +4,34 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class YandexScreenParserTest {
+    @Test public void completedCardSurvivesOcrDamageToStatusLabel() {
+        String card="Заказ\nИтого 100,00 ₽\nДетали\n"
+            +"oS Завершён\nКоэффициент спроса 1.0\nНомер заказа 123456-1234567\n"
+            +"Hayano 2026.10.18 12:10\nЗавершение 2026.10.18 12:22";
+        YandexScreenParser.Candidate detail=find(YandexScreenParser.parse(card),"ORDER_DETAIL");
+        assertEquals("COMPLETED",field(detail,"status"));
+        assertEquals("2026-10-18T12:10",field(detail,"started_at"));
+        assertEquals("2026-10-18T12:22",field(detail,"completed_at"));
+    }
+    @Test public void focusedOrderOcrRecoversBothTimesWithoutChangingOtherCandidates() {
+        String full="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Коэффициент спроса 1.0\nНомер заказа 123456-7654321\n"
+            +"Начало 2026.10.18 13:17\nЗавершение 2026.10.18 13:2?";
+        String focused="Итого 100,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 123456-7654321\nНачало 2026.10.18 13:17\n"
+            +"Завершение 2026.10.18 13:27";
+        YandexScreenParser.Result primary=YandexScreenParser.parse(full);
+        YandexScreenParser.Result enriched=YandexScreenParser.withFocusedOrderDetail(primary,focused,null);
+        assertTrue(enriched.candidates.stream().anyMatch(c->"ORDER_DETAIL".equals(c.candidateType)
+            &&"2026-10-18T13:27".equals(field(c,"completed_at"))));
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("frame-a",full,enriched.candidates),
+            new VideoOrderTimePairs.Frame("frame-b",full,enriched.candidates));
+        assertEquals(1,VideoOrderTimePairs.extract(frames).size());
+        String conflicting=focused.replace("123456-7654321","123456-9999999");
+        assertEquals(primary.candidates.size(),
+            YandexScreenParser.withFocusedOrderDetail(primary,conflicting,null).candidates.size());
+    }
     @Test public void recoversTimePairFromSavedLayoutCandidateWhenPlainOcrLostLabels() {
         java.util.List<YandexScreenParser.Field> fields=java.util.Arrays.asList(
             new YandexScreenParser.Field("status","text","COMPLETED"),

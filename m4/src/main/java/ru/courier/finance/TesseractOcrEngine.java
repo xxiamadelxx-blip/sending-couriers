@@ -12,7 +12,7 @@ import java.io.InputStream;
 
 /** Bundled, network-free Russian + English OCR. All methods run off the UI thread. */
 public final class TesseractOcrEngine implements AutoCloseable {
-    public static final String VERSION = "tesseract4android-4.9.0-tessdata-fast-87416418-native-1608-hocr";
+    public static final String VERSION = "tesseract4android-4.9.0-tessdata-fast-87416418-native-1608-hocr-focus6";
     private final TessBaseAPI engine;
 
     public TesseractOcrEngine(Context context) throws Exception {
@@ -53,6 +53,13 @@ public final class TesseractOcrEngine implements AutoCloseable {
         String hocr = engine.getHOCRText(0);
         float confidence = Math.max(0f, Math.min(1f, engine.meanConfidence() / 100f));
         return new Recognition(text == null ? "" : text.trim(), confidence, hocr == null ? "" : hocr);
+    }
+
+    /** A detail card is a compact two-column block; this segmentation keeps its labels beside the values. */
+    public synchronized Recognition recognizeFocused(Bitmap bitmap) {
+        engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK);
+        try { return recognize(bitmap); }
+        finally { engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO); }
     }
 
     @Override public void close() { engine.recycle(); }

@@ -19,7 +19,7 @@ import org.json.JSONObject;
 /** Read already committed video orders for a durable forecast handoff. */
 public final class VideoForecastRecovery {
     private static final ZoneId MOSCOW=ZoneId.of("Europe/Moscow");
-    private static final String RECOVERY_VERSION="ocr-time-pairs-v2";
+    private static final String RECOVERY_VERSION="ocr-time-pairs-v3";
     private VideoForecastRecovery() {}
 
     /** Repair missing timestamps from the video's immutable OCR frames once per recovery version. */
@@ -34,6 +34,22 @@ public final class VideoForecastRecovery {
                 throw new IllegalStateException("Recovery report could not be saved");
         }
         return new JSONObject(read(store,hash)).put("recovery",new JSONObject(report)).toString();
+    }
+
+    /** Re-imports repair the existing source from fresh OCR without duplicating any order. */
+    public static JSONObject reconcileFreshAnalysis(Context context,CourierDatabase store,
+                                                    VideoImportProcessor.Result analysis) throws Exception {
+        validate(analysis.sourceSha256);
+        List<VideoOrderTimePairs.Frame> frames=new ArrayList<>();
+        for(VideoImportProcessor.Observation observation:analysis.observations)
+            frames.add(new VideoOrderTimePairs.Frame(observation.frameSha256,observation.ocrText,
+                observation.candidates));
+        JSONObject report=applyPairs(store,analysis.sourceSha256,frames,analysis.uniqueCandidateCount("ORDER_DETAIL"));
+        String key=RECOVERY_VERSION+":"+analysis.sourceSha256;
+        if(!context.getSharedPreferences("m4-video-time-recovery",Context.MODE_PRIVATE)
+                .edit().putString(key,report.toString()).commit())
+            throw new IllegalStateException("Fresh OCR recovery report could not be saved");
+        return report;
     }
 
     private static JSONObject reconcile(Context context,CourierDatabase store,String hash) throws Exception {
@@ -79,6 +95,11 @@ public final class VideoForecastRecovery {
         } finally { evidence.close(); }
         if(frames.isEmpty()) return new JSONObject().put("frames",0).put("savedDetails",0)
             .put("timePairs",0).put("newRows",0).put("status","NO_SAVED_VIDEO");
+        return applyPairs(store,hash,frames,savedDetails);
+    }
+
+    private static JSONObject applyPairs(CourierDatabase store,String hash,
+                                         List<VideoOrderTimePairs.Frame> frames,int savedDetails) throws Exception {
         List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
         Map<String,VideoOrderTimePairs.Pair> byCompletion=new HashMap<>();
         for(VideoOrderTimePairs.Pair pair:pairs) byCompletion.put(pair.completed,pair);

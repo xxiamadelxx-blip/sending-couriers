@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
+import android.graphics.Bitmap;
 import android.os.Build;
 
 import androidx.work.Data;
@@ -55,7 +56,10 @@ public final class VideoImportWorker extends Worker {
             VideoImportProcessor.Result analysis;
             try(TesseractOcrEngine ocr=new TesseractOcrEngine(context)) {
                 analysis=VideoImportProcessor.processFile(context,source,mime,getInputData().getString(KEY_NAME),
-                    ocr::recognize,(done,total)->setProgressAsync(new Data.Builder()
+                    new VideoImportProcessor.Ocr() {
+                        @Override public TesseractOcrEngine.Recognition recognize(Bitmap bitmap) { return ocr.recognize(bitmap); }
+                        @Override public TesseractOcrEngine.Recognition recognizeFocused(Bitmap bitmap) { return ocr.recognizeFocused(bitmap); }
+                    },(done,total)->setProgressAsync(new Data.Builder()
                         .putInt(KEY_DONE,done).putInt(KEY_TOTAL,total).build()));
             }
             if(!expected.equals(analysis.sourceSha256))
@@ -64,6 +68,12 @@ public final class VideoImportWorker extends Worker {
             VideoImportDatabase.PersistResult evidence=new VideoImportDatabase(context).persist(analysis,mime);
             M4ForecastFactWriter.ImportResult facts=M4ForecastFactWriter.importFacts(context,analysis);
             factsCommitted=true;
+            JSONObject freshRecovery=null; String recoveryError=null;
+            try {
+                CourierDatabase store=new CourierDatabase(context);
+                try { freshRecovery=VideoForecastRecovery.reconcileFreshAnalysis(context,store,analysis); }
+                finally { store.close(); }
+            } catch(Exception failure) { recoveryError=failure.getClass().getSimpleName(); }
             JSONObject response=new JSONObject();
             response.put("ok",true).put("duplicate",evidence.duplicate).put("frames",evidence.frameCount)
                 .put("uniqueFrames",analysis.uniqueFramesOcr).put("unknownScreens",evidence.unknownScreenCount)
@@ -76,6 +86,8 @@ public final class VideoImportWorker extends Worker {
                 .put("extractionsTruncated",candidates.size()>100).put("extractions",extractions)
                 .put("forecastFactsAccepted",facts.accepted).put("forecastFactsDuplicate",facts.duplicate)
                 .put("forecastFactsNeedsReview",facts.needsReview)
+                .put("timeRecovery",freshRecovery==null?JSONObject.NULL:freshRecovery)
+                .put("timeRecoveryError",recoveryError==null?JSONObject.NULL:recoveryError)
                 .put("duplicateOrderRowsSuppressed",facts.suppressedOrderRows)
                 .put("forecastFactMessage",facts.message);
             if(facts.accepted) response.put("forecastSource",facts.source).put("forecastDays",facts.forecastDays)
@@ -84,8 +96,9 @@ public final class VideoImportWorker extends Worker {
             if(facts.accepted&&facts.forecastDay!=null) response.put("forecastDay",facts.forecastDay);
 
             String message=(evidence.duplicate
-                ?"Видео уже импортировалось. Ниже показан повторный анализ; ранее сохранённые результаты не перезаписывались.\n\n"
-                :"")+extractionSummary(analysis,evidence.duplicate)+"\n\n"+facts.message;
+                ?"Видео уже импортировалось. Повторный анализ сверяет пропущенное время с сохранёнными заказами без повторного добавления строк.\n\n"
+                :"")+extractionSummary(analysis,evidence.duplicate)+"\n\n"+facts.message
+                +(recoveryError==null?"":"\nСверка времени не завершилась: "+recoveryError+".");
             File output=writeResult(context,analysis.sourceSha256,response.toString(),message);
             if(source!=null) source.delete();
             ForecastAutomation.enqueueAfterVideo(context,analysis.sourceSha256);

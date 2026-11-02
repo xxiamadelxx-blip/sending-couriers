@@ -2,6 +2,7 @@ package ru.courier.finance;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,7 +15,7 @@ import java.util.regex.Pattern;
 
 /** Deterministic OCR parser. Extracted values remain review candidates, never finance facts. */
 public final class YandexScreenParser {
-    public static final String VERSION = "yandex-pro-video-extract-v12";
+    public static final String VERSION = "yandex-pro-video-extract-v13";
 
     public enum ScreenType { ORDERS, INCOME, ACTIVITY, YANDEX_UNKNOWN, UNKNOWN }
 
@@ -149,6 +150,41 @@ public final class YandexScreenParser {
 
     public static Result parse(String ocrText) {
         return parse(ocrText,null);
+    }
+
+    /** Use a second OCR reading only when it is a complete, independently identified order card. */
+    public static Result withFocusedOrderDetail(Result primary,String focusedText,String focusedHocr) {
+        if(primary==null||focusedText==null||focusedText.isEmpty()) return primary;
+        Result focused=parse("Заказ\n"+focusedText,focusedHocr);
+        List<Candidate> accepted=new ArrayList<>(primary.candidates);
+        for(Candidate detail:focused.candidates) {
+            if(!"ORDER_DETAIL".equals(detail.candidateType)
+                    ||!"COMPLETED".equals(fieldValue(detail,"status"))) continue;
+            String number=fieldValue(detail,"order_number");
+            if(number==null||!number.matches("[0-9]{6}-[0-9]{4,}")) continue;
+            LocalDateTime start,end;
+            try {
+                start=LocalDateTime.parse(fieldValue(detail,"started_at"));
+                end=LocalDateTime.parse(fieldValue(detail,"completed_at"));
+            } catch(Exception incomplete) { continue; }
+            if(!end.isAfter(start)||!end.toLocalDate().equals(start.toLocalDate())) continue;
+            boolean conflicting=false;
+            for(Candidate prior:primary.candidates) if("ORDER_DETAIL".equals(prior.candidateType)) {
+                String priorNumber=fieldValue(prior,"order_number");
+                if(priorNumber!=null&&priorNumber.matches("[0-9]{6}-[0-9]{4,}")
+                        &&!priorNumber.equals(number)) conflicting=true;
+                String priorEnd=fieldValue(prior,"completed_at");
+                if(priorEnd!=null&&!priorEnd.equals(fieldValue(detail,"completed_at"))) conflicting=true;
+            }
+            if(!conflicting) accepted.add(detail);
+        }
+        return accepted.size()==primary.candidates.size()?primary
+            :new Result(primary.screenType,primary.reviewRequired,primary.reason,accepted);
+    }
+
+    private static String fieldValue(Candidate candidate,String name) {
+        for(Field field:candidate.fields) if(name.equals(field.name)) return field.value;
+        return null;
     }
 
     /** Parses regular OCR text plus optional Tesseract hOCR word coordinates. */
@@ -348,6 +384,13 @@ public final class YandexScreenParser {
         String orderNumber=valueAfter(lines,"номер\\s+заказа");
         String total=valueAfter(lines,"итого");
         String status=valueAfter(lines,"статус");
+        // A full order card can lose the left-hand "Статус" label while the
+        // completed value remains clear in the right-hand column. Do not
+        // mistake the "Завершение" timestamp label for a completed status.
+        if(status==null) for(String line:lines) {
+            String value=normalize(line);
+            if(value.contains("завершён")||value.contains("завершен")) { status="Завершён";break; }
+        }
         String coefficient=valueAfter(lines,"коэффициент\\s+спроса|коэф(?:ф)?\\.?(?:\\s+спроса)?");
         String started=valueAfter(lines,"начало|время\\s+начала");
         String completed=valueAfter(lines,"завершение|окончание|время\\s+завершения");
