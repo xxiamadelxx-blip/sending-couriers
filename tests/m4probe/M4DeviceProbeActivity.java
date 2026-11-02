@@ -207,9 +207,9 @@ public final class M4DeviceProbeActivity extends Activity {
                 while(cursor.moveToNext()) {
                     String accepted=cursor.getString(0),completed=cursor.getString(1);
                     long reward=cursor.getLong(2);
-                    if(accepted!=null&&completed!=null&&accepted.contains("10:55")&&completed.contains("11:20")
+                    if("2026-10-17T07:55:00Z".equals(accepted)&&"2026-10-17T08:20:00Z".equals(completed)
                             &&reward==10000) foundFirst=true;
-                    if(accepted!=null&&completed!=null&&accepted.contains("11:25")&&completed.contains("11:40")
+                    if("2026-10-17T08:25:00Z".equals(accepted)&&"2026-10-17T08:40:00Z".equals(completed)
                             &&reward==10000) foundSecond=true;
                 }
             }
