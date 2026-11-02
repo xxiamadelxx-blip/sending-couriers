@@ -43,7 +43,9 @@ wait_for_m4_probe() {
       if ! grep -Fq "$success_marker" <<<"$screen" \
           && grep -Fq "Quickstep isn't responding" <<<"$screen" \
           && grep -Fq 'resource-id="android:id/aerr_wait"' <<<"$screen"; then
-        tap_coords=$(python3 - "$window" <<'PY'
+        host_window="${RUNNER_TEMP:-/tmp}/m4-window.xml"
+        adb exec-out cat "$window" > "$host_window"
+        tap_coords=$(python3 - "$host_window" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
 root = ET.parse(sys.argv[1]).getroot()
 for node in root.iter("node"):
@@ -54,7 +56,7 @@ for node in root.iter("node"):
             print((x1+x2)//2, (y1+y2)//2)
             break
 PY
-)
+) || true
         if [[ -n "$tap_coords" ]]; then
           read -r tap_x tap_y <<<"$tap_coords"
           echo "Quickstep ANR dialog covers the app; tapping its Wait action, then rechecking the Activity marker."
