@@ -70,3 +70,15 @@
 **Release gate:** this is a limited Android spot check, not full UI acceptance. Do not merge or claim final visual PASS until the owner explicitly approves the screenshots. The draft must not be confused with a production-signed update.
 
 **Next action:** owner reviews the attached captures. Keep the PR draft until that review. If the visual result is rejected, revert the two CSS selectors.
+
+## Follow-up polish — import-dialog labels · 2 November 2026
+
+The real SpawnDroid capture above showed four remaining labels in all caps; the 12-week heading was also 10 px with wide tracking. This matches Unslop's typography findings for uppercase labels and very small text.
+
+- Changed the three existing import counters and the existing cycle heading to sentence case. The cycle heading is now 12 px / weight 600 / zero tracking. Counter captions keep the earlier 12 px size. No labels were added or removed; the wording and import actions are unchanged.
+- Direction remains the approved SHIFT CONTROL graphite/orange instrument panel. No blocks, colors, navigation, calculations, records or storage changed.
+- Rendered the same 1-record / 1-day / 0-closed-period preview at 360×640 in local Chromium. The labels fit in their existing cells. This is a browser rendering check, **not Android acceptance**.
+- Created a temporary QA APK from the earlier QA APK by replacing only `assets/www/index.html` and `assets/www/style.css`, then signing with a one-time QA key. Package/version remain `ru.courier.finance.transfer`, 1.7.24 (38); SHA-256 `d64b9c95885435b28e5d6106a9f2194599bde13779d27983e2320f5929b1bd0e`. Signature and zip alignment verified. This is a focused CSS/HTML preview APK, not a fresh full source build or release build.
+- The current browser's file chooser did not expose the local APK to SpawnDroid. This follow-up APK was **not installed**; a matched Android after-capture for the casing/heading adjustment is **NOT RUN**. The earlier Android screenshots above remain evidence only for the prior CSS candidate.
+
+**Current gate:** previous candidate's Android spot check remains recorded; this follow-up's Android visual result and owner approval remain **NOT RUN**. Keep PR #14 draft.
