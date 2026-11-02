@@ -32,7 +32,7 @@ test('UI M2: empty-state navigation must wait for rendered home and history, not
  const finish=qa.indexOf("if args.focus == 'content':",start);
  const section=qa.slice(start,finish);
  assert.match(section,/device\.tap_node\('Главная'\)\s+device\.wait_node\('Смена ещё не записана', 20\)/);
- assert.match(section,/device\.tap_node\('Записи периода'\)\s+device\.wait_node\('Пока нет записей', 20\)/);
+ assert.match(section,/device\\.tap_visible_node\\('Записи периода'\\)\\s+device\\.wait_node\\('Пока нет записей', 20\\)/);
  assert.match(section,/device\.wait_home\(30\)\s+device\.wait_node\('Смена ещё не записана', 20\)/);
 });
 
