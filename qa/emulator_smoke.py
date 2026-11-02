@@ -113,6 +113,40 @@ def tap_node(name):
     adb("shell", "input", "tap", str((coords[0] + coords[2]) // 2), str((coords[1] + coords[3]) // 2))
 
 
+
+def tap_visible_node(name, attempts=6):
+    """Scroll a requested control above the fixed navigation before tapping it.
+
+    Android exposes off-screen WebView controls in UiAutomator's tree. Tapping
+    their stale/off-screen bounds can hit the fixed FAB, so only tap after the
+    control is fully inside the viewport and above the bottom navigation.
+    """
+    dimensions = re.findall(r"(\\d+)x(\\d+)", adb("shell", "wm", "size"))
+    if not dimensions:
+        raise AssertionError("Unable to read emulator screen size")
+    width, height = map(int, dimensions[-1])
+    safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "-", name).strip("-") or "target"
+    for attempt in range(attempts):
+        root = dump(f"scroll-{safe_name}-{attempt}")
+        node = find_node(root, name)
+        nav = find_node(root, "Главная")
+        bounds = list(map(int, re.findall(r"\\d+", node.get("bounds", "")))) if node is not None else []
+        nav_bounds = list(map(int, re.findall(r"\\d+", nav.get("bounds", "")))) if nav is not None else []
+        safe_bottom = min(height, nav_bounds[1]) if len(nav_bounds) == 4 else height
+        if (len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1]
+                and bounds[0] >= 0 and bounds[2] <= width
+                and bounds[1] >= 0 and bounds[3] <= safe_bottom):
+            tap_node(name)
+            return
+        start_y = min(int(height * .78), safe_bottom - 32)
+        end_y = int(height * .30)
+        if start_y <= end_y:
+            start_y, end_y = int(height * .72), int(height * .25)
+        adb("shell", "input", "swipe", str(width // 2), str(start_y),
+            str(width // 2), str(end_y), "350")
+    raise AssertionError(f"UI node did not enter the visible area above bottom navigation: {name}")
+
+
 def fill_field(index, value):
     root = dump(f"editing-{index}")
     fields = [n for n in root.iter("node") if n.get("class") == "android.widget.EditText"
