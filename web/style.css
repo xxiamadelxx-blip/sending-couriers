@@ -680,7 +680,7 @@ dialog .button{margin:8px 0 0}
 #importDialog .import-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
 #importDialog .import-stats>div{background:var(--field);border:1px solid var(--line);min-height:76px;padding:9px 7px}
 #importDialog .import-stats strong{display:block;font-size:25px;line-height:1;font-weight:900}
-#importDialog .import-stats small{display:block;color:var(--muted);font-size:9px;letter-spacing:.08em;font-weight:800;margin-top:8px}
+#importDialog .import-stats small{display:block;color:var(--muted);font-size:12px;line-height:1.25;letter-spacing:0;font-weight:600;margin-top:8px}
 #importDialog .import-merge{color:var(--ink);font-size:14px;line-height:1.4;margin:19px 0}
 #importDialog .import-cycle{border-left:3px solid var(--teal);background:var(--field);padding:10px 12px;margin-bottom:20px}
 #importDialog .import-cycle strong{display:block;color:var(--teal);font-size:10px;letter-spacing:.1em;margin-bottom:5px}
@@ -1638,7 +1638,7 @@ dialog .button{margin:8px 0 0}
 .period-page .period-day-title small,
 .period-page .period-day-figures small{
   color:var(--console-label);
-  font-size:11px;
+  font-size:12px;
   font-weight:500;
   line-height:1.3;
 }
