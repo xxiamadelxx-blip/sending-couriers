@@ -17,8 +17,48 @@ capture_screen() {
 fail_with_diagnostics() {
   capture_screen m4-failure.png || true
   adb shell cat "$window" || true
-  adb logcat -d -s AndroidRuntime:E
+  echo "--- app process ---"
+  adb shell pidof "$package" || true
+  adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|Hist #' | tail -20 || true
+  echo "--- current processes ---"
+  adb shell ps -A | grep -E 'courier|quickstep|launcher' || true
+  echo "--- M4 probe progress ---"
+  adb logcat -d -s M4DeviceProbe:I || true
+  echo "--- Android runtime / ANR diagnostics ---"
+  adb logcat -d -v brief | grep -E 'AndroidRuntime|am_anr|ANR in|Quickstep|Input dispatching timed out|M4DeviceProbe' | tail -160 || true
   return 1
+}
+
+wait_for_m4_probe() {
+  local success_marker="$1"
+  local failure_marker="$2"
+  local attempts="$3"
+  local probe_log=""
+  echo "Waiting up to $((attempts * 2)) seconds for Android probe marker: $success_marker"
+  for ((attempt=0; attempt<attempts; attempt++)); do
+    probe_log=$(adb logcat -d -s M4DeviceProbe:I 2>/dev/null || true)
+    if grep -Fq "$success_marker" <<<"$probe_log"; then
+      timeout 20s adb shell uiautomator dump "$window" >/dev/null 2>&1 || true
+      screen=$(timeout 5s adb shell cat "$window" 2>/dev/null || true)
+      if grep -Fq "$success_marker" <<<"$screen"; then
+        printf '%s\n' "$screen"
+        return 0
+      fi
+      echo "Android code logged success but the Activity UI did not expose the same marker."
+      printf '%s\n' "$probe_log" | tail -80
+      fail_with_diagnostics
+      return 1
+    fi
+    if grep -Fq "$failure_marker" <<<"$probe_log"; then
+      printf '%s\n' "$probe_log" | tail -100
+      fail_with_diagnostics
+      return 1
+    fi
+    sleep 2
+  done
+  echo "Timed out waiting for Android probe marker: $success_marker"
+  printf '%s\n' "$probe_log" | tail -80
+  fail_with_diagnostics
 }
 
 wait_for_marker() {
@@ -65,8 +105,9 @@ print_web_state_diagnostic() {
 
 adb install app/build/outputs/apk/debug/app-debug.apk
 adb shell pm clear "$package"
+adb logcat -c
 adb shell am start -W -n "$package/$activity"
-wait_for_marker "M4 FORECAST WRITE PASS" "M4 FORECAST QA FAIL" 90
+wait_for_m4_probe "M4 FORECAST WRITE PASS" "M4 FORECAST QA FAIL" 90
 capture_screen m4-forecast-write.png
 adb shell am force-stop "$package"
 adb shell am start -W -n "$package/$activity" --ez m4.verifyRestart true

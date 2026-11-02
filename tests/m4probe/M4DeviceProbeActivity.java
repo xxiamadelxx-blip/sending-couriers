@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 10588)
+Total output lines: 624
+
 package ru.courier.finance;
 
 import android.app.Activity;
@@ -6,6 +9,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.widget.TextView;
 import android.media.MediaMetadataRetriever;
@@ -33,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Android-only probe for video frame extraction, local OCR, and structured review candidates. */
 public final class M4DeviceProbeActivity extends Activity {
+    private static final String PROBE_TAG="M4DeviceProbe";
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private TextView label;
 
@@ -54,6 +59,7 @@ public final class M4DeviceProbeActivity extends Activity {
     private void runProbe() {
         File video=null;
         try {
+            stage("copy fixture");
             video=File.createTempFile("m4-probe-", ".mp4",getCacheDir());
             try(InputStream input=getAssets().open("m4-fixture/screen.mp4");FileOutputStream output=new FileOutputStream(video)) {
                 byte[] buffer=new byte[32*1024];int count;
@@ -65,6 +71,7 @@ public final class M4DeviceProbeActivity extends Activity {
             retriever.release();
             if(duration==null) throw new AssertionError("fixture video has no duration metadata");
 
+            stage("extract frames and run local OCR");
             VideoImportProcessor.Result result;
             try(TesseractOcrEngine ocr=new TesseractOcrEngine(this)) {
                 result=VideoImportProcessor.processFile(this,video,"video/mp4","screen.mp4",ocr::recognize,null);
@@ -99,13 +106,16 @@ public final class M4DeviceProbeActivity extends Activity {
                     +", orders="+orders+", slot="+slotCandidate+", rowCount="+orderRows
                     +", rowTotal="+rowTotal+", repeatedTimeRows="+repeatedTimeRows
                     +", slotTotal="+slotTotal+", slotOrderCount="+slotOrderCount);
+            stage("verify focused OCR fallback");
             verifyFocusedPass(video);
+            stage("persist OCR evidence");
             VideoImportDatabase database=new VideoImportDatabase(this);
             String probeImportId="m4v_"+result.sourceSha256.substring(0,32);
             database.deleteImport(probeImportId);
             VideoImportDatabase.PersistResult stored=database.persist(result,"video/mp4");
             if(stored.duplicate || stored.frameCount<1 || stored.insertedCandidateCount<1)
                 throw new AssertionError("local evidence/candidate persistence failed");
+            stage("write forecast facts");
             M4ForecastFactWriter.ImportResult forecast=M4ForecastFactWriter.importFacts(this,result);
             if(!forecast.accepted || forecast.duplicate || forecast.orderCount!=33 || forecast.forecastDay==null
                     || forecast.forecastDay.getInt("orders")!=33 || forecast.visibleOrderRows!=33
@@ -114,9 +124,13 @@ public final class M4DeviceProbeActivity extends Activity {
                     || !forecast.rawComplete || forecast.forecastDay.getBoolean("workConfirmed")
                     || forecast.forecastDay.getJSONArray("intervals").length()!=0)
                 throw new AssertionError("forecast writer did not accept the exact synthetic order: "+forecast.message);
+            stage("verify partial aggregates");
             verifyPartialAggregate();
+            stage("verify continuous two-slot import");
             verifyContinuousTwoSlotImport();
+            stage("verify amount-independent time persistence");
             verifyAmountIndependentTimePersistence();
+            stage("verify M5 cross-source deduplication");
             verifyM5CrossSourceDeduplication();
             String date=forecast.forecastDay.getString("date");
             boolean saved=getSharedPreferences("m4-forecast-qa",MODE_PRIVATE).edit()
@@ -124,9 +138,18 @@ public final class M4DeviceProbeActivity extends Activity {
             if(!saved) throw new AssertionError("restart verification marker could not be saved");
             show("M4 FORECAST WRITE PASS\nM4 AMOUNT-INDEPENDENT TIME PERSISTENCE PASS\nM4 CONTINUOUS TWO-SLOT PASS\nM5 CROSS-SOURCE RECONCILIATION PASS\n"
                 +"33/33 full list accepted\n29/12 partial aggregate accepted\nDelivery durations did not become work hours.");
+            Log.i(PROBE_TAG,"M4 FORECAST WRITE PASS; all forecast persistence checks passed");
         } catch(Throwable error) {
+            Log.e(PROBE_TAG,"M4 FORECAST QA FAIL at "+currentStage+": "+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()),error);
             show("M4 FORECAST QA FAIL\n"+error.getClass().getSimpleName()+": "+String.valueOf(error.getMessage()));
         } finally { if(video!=null) video.delete(); }
+    }
+
+    private volatile String currentStage="startup";
+    private void stage(String value) {
+        currentStage=value;
+        Log.i(PROBE_TAG,"STAGE: "+value);
+        show("M4 synthetic offline video probe\nStage: "+value);
     }
 
     private void verifyFocusedPass(File video) throws Exception {
@@ -271,35 +294,7 @@ public final class M4DeviceProbeActivity extends Activity {
                 "09:59","23:15",times28,10000);
             M4ForecastFactWriter.ImportResult repeated=M4ForecastFactWriter.importFacts(this,second);
             if(!repeated.accepted||repeated.needsReview||repeated.suppressedOrderRows!=11)
-                throw new AssertionError("second video source duplicated the same 11/1100 day: "+repeated.message);
-            long[] raw28=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders "
-                +"WHERE date='2026-10-28'");
-            long[] aggregate28=counts(db,"SELECT COUNT(*),COALESCE(SUM(order_count),0) "
-                +"FROM active_aggregate_order_counts WHERE date='2026-10-28'");
-            long baseAggregates=counts(db,"SELECT COUNT(*),0 FROM aggregate_order_counts WHERE date='2026-10-28'")[0];
-            if(raw28[0]!=11||raw28[1]!=110000||aggregate28[0]!=1||aggregate28[1]!=11||baseAggregates!=3)
-                throw new AssertionError("M5 11/1100 reconciliation mismatch: RAW="+raw28[0]+"/"+raw28[1]
-                    +", activeAggregate="+aggregate28[0]+"/"+aggregate28[1]+", retainedSources="+baseAggregates);
-
-            String xlsx18="m5-xlsx-20261018";
-            seedSource(db,xlsx18,repeatHex('c'),"xlsx");
-            seedDailyAggregate(db,"m5-day-20261018",xlsx18,"2026-10-18",2);
-            seedRawRows(db,xlsx18,"2026-10-18",new String[]{"18:57","18:57"},10000);
-            VideoImportProcessor.Result sameMinute=syntheticVideo(repeatHex('d'),"2026-10-18","778899001",
-                "09:00","23:00",new String[]{"18:57","18:57"},10000);
-            M4ForecastFactWriter.ImportResult two=M4ForecastFactWriter.importFacts(this,sameMinute);
-            long rawSameMinute=counts(db,"SELECT COUNT(*),COALESCE(SUM(reward_kopecks),0) FROM active_orders "
-                +"WHERE date='2026-10-18' AND source_id=?",xlsx18)[0];
-            if(!two.accepted||two.suppressedOrderRows!=2||rawSameMinute!=2)
-                throw new AssertionError("two distinct 18:57 orders were collapsed or copied");
-        } finally { db.close(); store.close(); }
-    }
-
-    private void verifyContinuousTwoSlotImport() throws Exception {
-        String evening="Слот: 200,00 ₽\n347889490\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
-            +"Начало\n2026.10.31 17:49\nЗавершение\n2026.10.31 22:00\n";
-        String morning="Слот: 200,00 ₽\n347714773\n2 заказа\nТип слота Плановый\nСтатус Завершён\n"
-            +"Начало\n2026.10.31 12:01\nЗавершение\n2026.10.31 15:00\n";
+      …588 tokens truncated…00\n";
         String eveningRows="Яндекс Про\nЗаказы\n20:19 100,00 ₽ >\n20:29 100,00 ₽ >\n";
         String adjustments="Доход\n18:00–22:00\nПлановый слот\n1 805 ₽\n14:52\nДругое\n-2,36 ₽\n";
         String morningRows="Яндекс Про\nЗаказы\n12:24 100,00 ₽ >\n12:37 100,00 ₽ >\n";
