@@ -148,6 +148,37 @@ public final class YandexScreenParserTest {
         assertEquals(1,orders.size());
         assertFalse((Boolean)fact(orders.get(0),"confirmedDelivery"));
     }
+    @Test public void forecastWriterKeepsTimesWhenCardAmountDiffersFromVerifiedList() throws Exception {
+        String slot="Слот: 100,00 ₽\n341234567\n1 заказ\nЗаказы 100,00 ₽\n"
+            +"Начало 2026.11.01 09:00\nЗавершение 2026.11.01 22:00";
+        String list="Яндекс Про\nЗаказы\n12:03 100,00 ₽ >";
+        String card="Заказ\nИтого 120,00 ₽\nДетали\nСтатус Завершён\n"
+            +"Номер заказа 261101-2693515\nНачало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
+        Object facts=extractFacts(videoWith(slot,list,card));
+        java.util.List<?> orders=(java.util.List<?>)fact(facts,"orders");
+        assertEquals(1,orders.size());
+        Object order=orders.get(0);
+        assertTrue((Boolean)fact(order,"confirmedDelivery"));
+        assertEquals("261101-2693515",fact(order,"orderNumber"));
+        assertEquals(10000L,((Long)fact(order,"amountKopecks")).longValue());
+        assertEquals(711,((Integer)fact(order,"acceptedMinute")).intValue());
+        assertEquals(723,((Integer)fact(order,"deliveredMinute")).intValue());
+    }
+    @Test public void forecastWriterKeepsTimesWhenCardAmountIsMissing() throws Exception {
+        String slot="Слот: 100,00 ₽\n341234567\n1 заказ\nЗаказы 100,00 ₽\n"
+            +"Начало 2026.11.01 09:00\nЗавершение 2026.11.01 22:00";
+        String list="Яндекс Про\nЗаказы\n12:03 100,00 ₽ >";
+        String card="Заказ\nИтого\nДетали\nСтатус\nЗавершён\nНомер заказа\n261101-2693515\n"
+            +"Начало\n2026.11.01 11:51\nЗавершение\n2026.11.01 12:03";
+        Object facts=extractFacts(videoWith(slot,list,card));
+        java.util.List<?> orders=(java.util.List<?>)fact(facts,"orders");
+        assertEquals(1,orders.size());
+        Object order=orders.get(0);
+        assertTrue((Boolean)fact(order,"confirmedDelivery"));
+        assertEquals(10000L,((Long)fact(order,"amountKopecks")).longValue());
+        assertEquals(711,((Integer)fact(order,"acceptedMinute")).intValue());
+        assertEquals(723,((Integer)fact(order,"deliveredMinute")).intValue());
+    }
     @Test public void oneFramePairRequiresOrderIdAndAmountAndCanCrossMidnight() {
         String card="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\n"
             +"Номер заказа 261101-2693515\nНачало 2026.11.01 23:55\n"
