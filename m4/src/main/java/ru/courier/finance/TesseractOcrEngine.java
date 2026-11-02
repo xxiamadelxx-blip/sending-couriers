@@ -40,8 +40,9 @@ public final class TesseractOcrEngine implements AutoCloseable {
             output.getFD().sync();
         }
         if (temp.length() < 1_000_000L) {
+            long copiedBytes = temp.length();
             temp.delete();
-            throw new IllegalStateException("Bundled OCR model is incomplete: " + asset);
+            throw new IllegalStateException("Bundled OCR model is incomplete: " + asset + " (" + copiedBytes + " bytes copied)");
         }
         if(target.exists() && !target.delete()) { temp.delete(); throw new IllegalStateException("Cannot replace incomplete OCR model: " + asset); }
         if(!temp.renameTo(target)) { temp.delete(); throw new IllegalStateException("Cannot install OCR model: " + asset); }
