@@ -2632,16 +2632,16 @@ html,body {
 #app#app :is(h1,h2,h3,strong,b,button,label,summary,dt,dd,.meter-value,.major-amount,.amount,.hero-pace strong,.gauge-label strong,.income-parts strong,.payouts strong,.premium-teasers strong,.period-day-figures strong,.cycle-bonus-metrics strong,.period-facts dd,.forecast-number,.forecast-subnumber,.period-norm-stat strong,.slot-live-summary strong,.detail-amount,.day-meters,.day-meter strong,.import-stats strong,.duration-heading output,.tariff-rate input) { font-weight:600!important; }
 #app#app :is(.home-eyebrow,.income-hero h2,.home-premiums .card-heading,.period-days-heading h2,.forecast-eyebrow,.cycle-header h2,.income-parts span,.payouts h2) { letter-spacing:0!important; }
 /* Restore the approved 1.7.27 navigation component and keep its five existing actions. */
-#app#app .bottom-nav { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 62px minmax(0,1fr) minmax(0,1fr); align-items:center; column-gap:4px; gap:4px; padding:8px calc(12px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(12px + var(--safe-left)); overflow:visible; background:var(--nav-surface)!important; color:#e9edea; border-top:3px solid var(--teal); box-shadow:none!important; }
-#app#app .nav-item { position:relative; min-width:0; min-height:56px; padding:8px 4px; border:0; border-radius:2px; background:transparent; color:var(--nav-idle); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:10px; font-weight:600; letter-spacing:0; line-height:1.1; }
-#app#app .nav-item svg { width:23px!important; height:23px!important; stroke-width:1.5!important; color:inherit; }
-#app#app .nav-item span { max-width:100%; font-size:10px; line-height:1.15; white-space:nowrap; overflow:hidden; }
-#app#app .nav-item.active { border-radius:2px; background:var(--nav-selected); color:#fff8ef; font-weight:600; }
-#app#app .nav-item.active::before { content:none!important; display:none!important; }
-#app#app .bottom-nav .nav-add { align-self:center; justify-self:center; width:54px; min-width:54px; height:54px; min-height:54px; margin:0; padding:0; transform:translateY(-2px); border:2px solid var(--nav-surface); border-radius:4px!important; background:var(--signal-panel); color:#14191c; display:grid; place-items:center; box-shadow:0 0 0 2px var(--nav-surface); }
-#app#app .bottom-nav .nav-add svg { width:26px!important; height:26px!important; stroke-width:1.5!important; color:inherit; }
+#bottomNav { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 62px minmax(0,1fr) minmax(0,1fr); align-items:center; column-gap:4px; gap:4px; padding:8px calc(12px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(12px + var(--safe-left)); overflow:visible; background:var(--nav-surface)!important; color:#e9edea; border-top:3px solid var(--teal); box-shadow:none!important; }
+#bottomNav .nav-item { position:relative; min-width:0; min-height:56px; padding:8px 4px; border:0; border-radius:2px; background:transparent; color:var(--nav-idle); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:10px; font-weight:600; letter-spacing:0; line-height:1.1; }
+#bottomNav .nav-item svg { width:23px!important; height:23px!important; stroke-width:1.5!important; color:inherit; }
+#bottomNav .nav-item span { max-width:100%; font-size:10px; line-height:1.15; white-space:nowrap; overflow:hidden; }
+#bottomNav .nav-item.active { border-radius:2px; background:var(--nav-selected); color:#fff8ef; font-weight:600; }
+#bottomNav .nav-item.active::before { content:none!important; display:none!important; }
+#bottomNav .nav-add { align-self:center; justify-self:center; width:54px; min-width:54px; height:54px; min-height:54px; margin:0; padding:0; transform:translateY(-2px); border:2px solid var(--nav-surface); border-radius:4px!important; background:var(--signal-panel); color:#14191c; display:grid; place-items:center; box-shadow:0 0 0 2px var(--nav-surface); }
+#bottomNav .nav-add svg { width:26px!important; height:26px!important; stroke-width:1.5!important; color:inherit; }
 @media(max-width:374px) {
-  #app#app .nav-item { font-size:10px; }
-  #app#app .nav-item span { font-size:10px; }
-  #app#app .bottom-nav { padding-left:calc(8px + var(--safe-left)); padding-right:calc(8px + var(--safe-right)); }
+  #bottomNav .nav-item { font-size:10px; }
+  #bottomNav .nav-item span { font-size:10px; }
+  #bottomNav { padding-left:calc(8px + var(--safe-left)); padding-right:calc(8px + var(--safe-right)); }
 }
