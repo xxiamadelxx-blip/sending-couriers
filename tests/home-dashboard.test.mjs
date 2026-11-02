@@ -10,6 +10,10 @@ test('first launch has a single accessible action instead of empty statistics',(
   assert.match(app,/\$\('#homeEmptyAdd'\)\?\.addEventListener\('click',\(\)=>form\(\)\)/);
   assert.match(app,/emptyDashboard\?emptyPanel:filledPanel/);
 });
+test('Home empty state keeps the existing package glyph after the staircase icon rollback',()=>{
+  assert.match(app,/class="home-empty-symbol" aria-hidden="true">\$\{icon\.package\}/);
+  assert.doesNotMatch(app,/brand_mark\.png/);
+});
 test('pace and payout decision are grouped in semantic reading order',()=>{
   assert.match(app,/class="home-focus" aria-label="Темп и условие выплаты"/);
   assert.match(app,/\$\{rhythm\.outerHTML\}\$\{status\.outerHTML\}/);

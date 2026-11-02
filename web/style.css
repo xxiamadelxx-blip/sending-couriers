@@ -1998,7 +1998,6 @@ button:disabled{opacity:.48}
 #homeDeck .calculation summary{min-height:40px;color:var(--muted);font-size:13px}
 .home-empty{align-items:flex-start;gap:12px;padding:22px;border:1px solid var(--line);border-radius:var(--card-radius);background:var(--surface);box-shadow:none}
 .home-empty-symbol{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line);border-radius:11px;background:var(--field);color:var(--accent)}
-.home-empty-symbol img{width:32px;height:32px;object-fit:contain}
 .home-eyebrow{color:var(--muted);font-size:12px;font-weight:550;letter-spacing:0}
 .home-empty h2{font-size:26px!important;line-height:1.12!important;font-weight:650!important;letter-spacing:-.8px!important}
 .home-empty-copy{max-width:30ch;color:var(--muted);font-size:14px}
@@ -2374,8 +2373,7 @@ body{background-image:none!important;background-attachment:initial}
 .payment-settings .pager-tabs button{font-weight:520;letter-spacing:0;text-transform:none}
 .appearance-card{border-top:1px solid var(--line)}
 
-/* SHIFT CONTROL signature: machined edges, one gold instrument slab, and the
-   owner-referenced staircase as the first-run brand moment. */
+/* SHIFT CONTROL signature: machined edges and one gold instrument slab. */
 :root{--card-radius:3px;--control-radius:3px}
 :root[data-theme=light]{--card-radius:3px;--control-radius:3px}
 #app :is(.home-focus,.income-hero,.home-premiums,.home-empty,.period-day,.detail-card,.appearance-card,.cycle-settings,.day-card,.day-group,dialog),
@@ -2392,7 +2390,6 @@ body{background-image:none!important;background-attachment:initial}
 #homeDeck .home-premiums .premium-teasers strong{color:var(--gold)}
 .home-empty{position:relative;isolation:isolate;overflow:hidden;padding:18px 20px;gap:8px;border:1px solid var(--line);border-top:3px solid var(--accent);background:var(--surface)}
 .home-empty-symbol{width:52px;height:52px;border:0;border-radius:0;background:transparent}
-.home-empty-symbol img{width:52px;height:52px}
 .home-eyebrow{font-size:11px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}
 .home-empty h2{font-size:28px!important;line-height:1.08!important;letter-spacing:-.035em!important}
 .home-empty-copy{max-width:30ch;font-size:14px}

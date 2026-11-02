@@ -315,7 +315,7 @@ function summary() {
   incomePanel.querySelector('#openPremiums')?.remove();
   const emptyDashboard=!s.entries.length&&!s.closure;
   const emptyPanel=`<section class="home-empty" aria-labelledby="homeEmptyTitle">
-    <span class="home-empty-symbol" aria-hidden="true"><img src="brand_mark.png" alt=""></span>
+    <span class="home-empty-symbol" aria-hidden="true">${icon.package}</span>
     <p class="home-eyebrow">Новый период</p>
     <h2 id="homeEmptyTitle">Смена ещё не записана</h2>
     <p class="home-empty-copy">Добавьте слот, чтобы увидеть темп, доход и выплаты.</p>
