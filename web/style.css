@@ -683,7 +683,7 @@ dialog .button{margin:8px 0 0}
 #importDialog .import-stats small{display:block;color:var(--muted);font-size:12px;line-height:1.25;letter-spacing:0;font-weight:600;margin-top:8px}
 #importDialog .import-merge{color:var(--ink);font-size:14px;line-height:1.4;margin:19px 0}
 #importDialog .import-cycle{border-left:3px solid var(--teal);background:var(--field);padding:10px 12px;margin-bottom:20px}
-#importDialog .import-cycle strong{display:block;color:var(--teal);font-size:10px;letter-spacing:.1em;margin-bottom:5px}
+#importDialog .import-cycle strong{display:block;color:var(--teal);font-size:12px;line-height:1.25;letter-spacing:0;font-weight:600;margin-bottom:5px}
 #importDialog .import-cycle span{display:block;color:var(--muted);font-size:12px;line-height:1.4}
 #importDialog .button{min-height:51px;margin:0;font-size:15px;font-weight:800}
 #importDialog #cancelImport{margin-top:9px;background:var(--field);border:1px solid var(--line);color:var(--ink)}
