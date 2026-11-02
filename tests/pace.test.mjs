@@ -22,7 +22,7 @@ test('13 October report shows 1.81 orders/hour and 33 minutes despite a blank re
   assert.equal(s.hoursRecorded, 9); assert.equal(s.ordersRecorded, 8);
   assert.equal(s.hourlyBase, 43200); assert.equal(s.paidReward, 20000);
   assert.equal(s.tips, 395); assert.equal(s.separateBonus, 3750);
-  assert.equal(s.grossUserIncome, 47345); assert.equal(s.estimatedYandexOwed, 23200);
+  assert.equal(s.accruedIncome, 43595); assert.equal(s.grossUserIncome, 47345); assert.equal(s.estimatedYandexOwed, 23595);
   assert.equal(JSON.stringify(state), before, 'calculating never rewrites an unknown order count');
 });
 
@@ -82,3 +82,4 @@ test('Markdown exports the computed partial pace and explains missing counters w
   assert.doesNotMatch(md, /Если набор дней.*темп и запас не определяются/);
   assert.doesNotMatch(md, /NaN|Infinity/);
 });
+
