@@ -38,6 +38,15 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_a11y_layout_matrix.py' -v
       - name: Independent-gate orchestration unit tests
         run: python3 -m unittest discover -s tests -p 'test_ui_gate_orchestrator.py' -v
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
       - name: Set up Android command line tools
         uses: android-actions/setup-android@v3
         with:
@@ -60,8 +69,7 @@ jobs:
       - name: Build isolated transfer package for owner signing
         run: |
           cp -a . "$RUNNER_TEMP/courier-transfer-source"
-          python3 tools/prepare_parallel.py "$RUNNER_TEMP/courier-transfer-source"
-          python3 "$RUNNER_TEMP/courier-transfer-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/courier-transfer-test-only.apk"
+          python3 "$RUNNER_TEMP/courier-transfer-source/build.py" --sdk "$ANDROID_HOME" --variant transferRelease --output "$RUNNER_TEMP/courier-transfer-test-only.apk"
           cp "$RUNNER_TEMP/courier-transfer-source/build/aligned.apk" "$RUNNER_TEMP/courier-transfer-unsigned.apk"
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$RUNNER_TEMP/apksigner.jar"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='41' versionName='1.7.27'"

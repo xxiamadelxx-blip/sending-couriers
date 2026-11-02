@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the offline APK with Android SDK 35 and Java 17, without Gradle."""
+"""Build a signed APK; AndroidX sources are compiled through the configured Gradle project."""
 import argparse
 import os
 from pathlib import Path
@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
 parser.add_argument('--sdk', default=os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME') or str(ROOT.parent / 'tools/android-sdk'))
 parser.add_argument('--output', default=str(ROOT.parent / 'artifacts/Courier-Finance-1.7.27.apk'))
+parser.add_argument('--variant', choices=('release', 'transferRelease'), default='release')
 args = parser.parse_args()
 sdk = Path(args.sdk).resolve()
 platforms = [sdk / 'platforms/android-35/android.jar', sdk / 'android-35/android.jar']
@@ -30,15 +31,38 @@ for path in (ROOT / 'web').iterdir():
 def run(*parts):
     subprocess.run([str(p) for p in parts], check=True, cwd=ROOT)
 
-run(tools / 'aapt', 'package', '-f', '-m', '--auto-add-overlay', '-M', ROOT / 'android/AndroidManifest.xml', '-S', ROOT / 'android/res', '-A', build / 'assets', '-I', android_jar, '-J', build / 'generated', '-F', build / 'resources.ap_')
-sources = list((ROOT / 'android/src').rglob('*.java')) + list((build / 'generated').rglob('*.java'))
-compiler = [shutil.which('javac')] if shutil.which('javac') else [shutil.which('java'), 'com.sun.tools.javac.Main']
-run(*compiler, '-encoding', 'UTF-8', '--release', '8', '-classpath', android_jar, '-d', build / 'classes', *sources)
-run('java', '-cp', tools / 'lib/d8.jar', 'com.android.tools.r8.D8', '--lib', android_jar, '--min-api', '26', '--output', build / 'dex', *sorted((build / 'classes').rglob('*.class')))
-shutil.copy2(build / 'resources.ap_', build / 'unsigned.apk')
-with zipfile.ZipFile(build / 'unsigned.apk', 'a', compression=zipfile.ZIP_DEFLATED) as apk:
-    apk.write(build / 'dex/classes.dex', 'classes.dex')
+uses_workmanager = any(
+    'import androidx.work.' in source.read_text(encoding='utf-8')
+    for source in (ROOT / 'android/src').rglob('*.java')
+)
+if uses_workmanager and (ROOT / 'app/build.gradle').is_file():
+    gradle = shutil.which('gradle')
+    if not gradle:
+        raise SystemExit('This AndroidX build needs Gradle 8.9+. Install Gradle and retry.')
+    if args.variant == 'transferRelease':
+        task = ':app:assembleTransferRelease'
+        gradle_apk = ROOT / 'app/build/outputs/apk/transfer/release/app-transfer-release-unsigned.apk'
+    else:
+        task = ':app:assembleRelease'
+        gradle_apk = ROOT / 'app/build/outputs/apk/release/app-release-unsigned.apk'
+    gradle_env = os.environ.copy()
+    gradle_env['ANDROID_HOME'] = str(sdk)
+    gradle_env['ANDROID_SDK_ROOT'] = str(sdk)
+    subprocess.run([gradle, '--no-daemon', task], check=True, cwd=ROOT, env=gradle_env)
+    if not gradle_apk.is_file():
+        raise SystemExit(f'Gradle did not produce the expected unsigned APK: {gradle_apk}')
+    shutil.copy2(gradle_apk, build / 'unsigned.apk')
+else:
+    run(tools / 'aapt', 'package', '-f', '-m', '--auto-add-overlay', '-M', ROOT / 'android/AndroidManifest.xml', '-S', ROOT / 'android/res', '-A', build / 'assets', '-I', android_jar, '-J', build / 'generated', '-F', build / 'resources.ap_')
+    sources = list((ROOT / 'android/src').rglob('*.java')) + list((build / 'generated').rglob('*.java'))
+    compiler = [shutil.which('javac')] if shutil.which('javac') else [shutil.which('java'), 'com.sun.tools.javac.Main']
+    run(*compiler, '-encoding', 'UTF-8', '--release', '8', '-classpath', android_jar, '-d', build / 'classes', *sources)
+    run('java', '-cp', tools / 'lib/d8.jar', 'com.android.tools.r8.D8', '--lib', android_jar, '--min-api', '26', '--output', build / 'dex', *sorted((build / 'classes').rglob('*.class')))
+    shutil.copy2(build / 'resources.ap_', build / 'unsigned.apk')
+    with zipfile.ZipFile(build / 'unsigned.apk', 'a', compression=zipfile.ZIP_DEFLATED) as apk:
+        apk.write(build / 'dex/classes.dex', 'classes.dex')
 run(tools / 'zipalign', '-f', '4', build / 'unsigned.apk', build / 'aligned.apk')
+
 signing = ROOT / 'signing'
 signing.mkdir(mode=0o700, exist_ok=True)
 key = signing / 'courier-release.jks'
