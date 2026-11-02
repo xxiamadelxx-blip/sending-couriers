@@ -13,8 +13,13 @@ test('first launch has a single accessible action instead of empty statistics',(
 test('pace and payout decision are grouped in semantic reading order',()=>{
   assert.match(app,/class="home-focus" aria-label="Темп и условие выплаты"/);
   assert.match(app,/\$\{rhythm\.outerHTML\}\$\{status\.outerHTML\}/);
-  assert.match(app,/\$\{income\.outerHTML\}/);
+  assert.match(app,/\$\{incomePanel\.outerHTML\}/);
   assert.match(css,/#homeDeck \.home-focus \.payment-status/);
+});
+test('home dashboard presents the premium ledger once, outside the gold income slab',()=>{
+  assert.match(app,/const incomePanel=income\.cloneNode\(true\);\s*incomePanel\.querySelector\('#openPremiums'\)\?\.remove\(\)/);
+  assert.match(app,/\$\{incomePanel\.outerHTML\}/);
+  assert.match(app,/class="home-premiums detail-card"/);
 });
 test('two forecast duration controls and large text remain visible in the source',()=>{
   assert.match(forecast,/durationField\('todaySlotHours','Слот',slot\)/);

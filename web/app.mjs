@@ -311,16 +311,18 @@ function summary() {
   const rhythm=$('.rhythm'),status=$('#paymentStatus'),income=$('.income-hero'),premiums=$('#openPremiums'),calculation=$('.calculation');
   premiums.querySelector('.card-heading svg')?.remove();
   const premiumHTML=`<div class="premiums-card">${premiums.innerHTML}</div>`;
+  const incomePanel=income.cloneNode(true);
+  incomePanel.querySelector('#openPremiums')?.remove();
   const emptyDashboard=!s.entries.length&&!s.closure;
   const emptyPanel=`<section class="home-empty" aria-labelledby="homeEmptyTitle">
-    <span class="home-empty-symbol" aria-hidden="true">${icon.package}</span>
+    <span class="home-empty-symbol" aria-hidden="true"><img src="brand_mark.png" alt=""></span>
     <p class="home-eyebrow">Новый период</p>
     <h2 id="homeEmptyTitle">Смена ещё не записана</h2>
     <p class="home-empty-copy">Добавьте слот, чтобы увидеть темп, доход и выплаты.</p>
     <button class="button primary" id="homeEmptyAdd" type="button">${icon.plus}Добавить первый слот</button>
   </section>`;
   const filledPanel=`<section class="home-focus" aria-label="Темп и условие выплаты">${rhythm.outerHTML}${status.outerHTML}</section>
-    ${income.outerHTML}
+    ${incomePanel.outerHTML}
     <section class="home-premiums detail-card">${premiumHTML}${cycle.boundaryNote ? `<details class="calculation boundary-note"><summary>Есть старые интервалы</summary><p>${esc(cycle.boundaryNote)}</p></details>` : ''}</section>
     ${calculation.outerHTML}`;
   rhythm.insertAdjacentHTML('beforebegin',`<div id="homeDeck" class="home-stack">${emptyDashboard?emptyPanel:filledPanel}</div>`);

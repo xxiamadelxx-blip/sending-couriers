@@ -1,6 +1,8 @@
 # Unslop UI audit · 2 November 2026
 
-**Scope:** UI only, no forecast models, business logic, records, navigation, or storage changes. This is a **light-polish candidate**, not an approved release. Credit: [Unslop by Damir Sokolovsky](https://github.com/heydamir/unslop), CC BY 4.0.
+**Current scope:** full SHIFT CONTROL interface redesign and owner-referenced staircase app mark. Forecast calculations, business rules, records, navigation actions, and storage are protected. The current QA candidate launched and was visually reviewed on SpawnDroid Android 15; the PR remains a draft pending owner acceptance and remaining Android checks. Credit: [Unslop by Damir Sokolovsky](https://github.com/heydamir/unslop), CC BY 4.0.
+
+> The dated reviews below describe earlier, narrower candidates. They are historical evidence only and are superseded by the latest full redesign section at the end of this report.
 
 ## Verified baselines
 
@@ -118,3 +120,56 @@ This section supersedes the previous follow-up gate above. Forecast was intentio
 | User accepts the visual result | Owner review of captures | **NOT RUN** |
 
 **Current gate:** limited Android visual spot check passed for the listed screens. Keep PR #14 draft for owner review. This QA APK is not a production update; no release build or user-installed app was changed.
+
+## Full SHIFT CONTROL redesign and staircase mark · 2 November 2026
+
+This is the current candidate. It replaces the earlier typography-only/light-polish scope above.
+
+### What changed
+
+- Reworked the shared visual language across Home, Period, History, Add/Edit Slot, Forecast, Settings, tariff controls, import/export, and dialogs: graphite instruments, signal-orange controls, gold income slab, machined edges, clearer numeric hierarchy, and a segmented hardware-style navigation bar.
+- Retained the approved SHIFT CONTROL palette and all five navigation actions. The existing Forecast screen and its two duration controls were restyled; model and calculation code were not changed.
+- Replaced the old glossy four-way brand glyph with a crisp stepped mark based on the supplied reference. The mark is consistent across the Android launcher, splash, web startup and Home empty state.
+- Removed a duplicated premium block from the Home render path; it now appears once in the ledger outside the income panel. A regression test covers this structure.
+
+### Candidate and Android device
+
+- Source branch: `ui/unslop-light-polish-20261102`; exact source SHA is recorded in the PR head and delivery record.
+- QA APK: `Courier-Finance-1.7.24-SHIFT-CONTROL-REDESIGN-QA.apk`, SHA-256 `869ba4aa334afa5b26ca6455ea516c0fadd3796cb52bab45d8ee0fe96b6149ac`.
+- Package/version: `ru.courier.finance.transfer`, 1.7.24 (38).
+- The APK overlays the branch's web assets and approved launcher/splash artwork onto the previous QA APK (`d64b9c95885435b28e5d6106a9f2194599bde13779d27983e2320f5929b1bd0e`). This is a focused asset-overlay preview, not a fresh native source build or production release. It uses a temporary QA signing key.
+- ZIP alignment and APK Signature Scheme v2/v3 verification passed. SpawnDroid artifact `app-19` accepted the upload as Ready; the APK installed on a fresh device and launched.
+- Device: Android 15 / API 35, Russian locale, 720×1280 px at 320 dpi (360×640 dp). Session `sess_8ae9d8e8ed644bc09f-18102` was stopped after inspection.
+
+### Screens inspected
+
+- **Home:** the staircase mark renders in Android WebView, the orange first-slot action is visible above bottom navigation, and the empty state fits the 360 dp viewport. See [the SpawnDroid Home capture](evidence/unslop-2026-11-02/shift-control-home-spawndroid-2026-11-02.jpg).
+- **Period:** the empty ledger, date navigation, payout conditions, and 12-week tracker were inspected; the content continues below the fixed navigation.
+- **Forecast:** insufficient-history state and both existing duration controls were visible. No forecast values were changed.
+- **Settings:** tariff and preference controls were inspected at 360 dp.
+- **Add Slot:** date, hours/orders fields, and Save were visible. The form was opened and exited without saving test data.
+- **History / Import JSON:** History and the import entry were inspected. Import opened Android's system file picker; it was cancelled without selecting a file or mutating records.
+- Logcat showed the Activity displayed with no app crash during this inspection. This is a visual spot check, not full Android acceptance.
+
+![SpawnDroid Android 15 · SHIFT CONTROL Home](evidence/unslop-2026-11-02/shift-control-home-spawndroid-2026-11-02.jpg)
+
+### Acceptance
+
+| Criterion | Evidence / check | Status |
+| --- | --- | --- |
+| Forecast formulas, money calculations, records, navigation logic and persistence remain unchanged | Diff limited to visual CSS, one Home rendering adjustment, brand resources and focused UI tests; `npm test` also covers product/model behavior | **PASS** |
+| Product/model test suite | `npm test`; 201 passed, 0 failed | **PASS** |
+| JavaScript syntax and CSS runtime parse | `node --check web/app.mjs`; the current CSS loaded and rendered in the Android 15 WebView. A standalone Lightning CSS parser is not installed in this checkout. | **PASS, JS check plus Android runtime parse** |
+| Staircase artwork consistency | `tests/launch-branding.test.mjs`; Android and web assets checked | **PASS** |
+| Local responsive preview, both themes and 200% form text | Chromium previews at 360/390 px with synthetic 9 h / 18 orders / 3,200 ₽ | **PASS, browser preview only** |
+| Fresh full source APK build | Baseline `build.py` omits existing AndroidX WorkManager/M4 dependencies; Gradle wrapper/runtime and ignored M4 assets are absent | **BLOCKED** |
+| Focused QA APK manifest, v2/v3 signature and ZIP alignment | `ru.courier.finance.transfer` 1.7.24 (38); `apksigner` and `zipalign -c -p 4` | **PASS, asset-overlay QA APK** |
+| SpawnDroid install and launch | Android 15 / API 35, fresh device | **PASS** |
+| Home, Period, Forecast, Settings, Add Slot and History visual review | Current candidate at 360 dp | **PASS, visual spot check** |
+| Forecast control operation, saved entry, edit, import commit and persistence after process restart | Not operated/saved in this device pass | **NOT RUN** |
+| Light theme, 390 dp, enlarged Android font and rotation | Not inspected on Android | **NOT RUN** |
+| Owner accepts the visual result | Awaiting owner review | **NOT RUN** |
+
+The focused QA APK is installable for review but is not a fresh native compilation or production update. No release build or user-installed app was changed.
+
+**Release gate:** keep PR #14 as draft. Android visual spot checks passed for the listed screens; remaining Android acceptance and owner approval are still open.
