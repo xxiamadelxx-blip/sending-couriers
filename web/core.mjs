@@ -57,9 +57,16 @@ export function parseHours(raw) {
   if (Number(s) > 1000000) throw new Error('Часы за день: число слишком велико.');
   return Math.round(Number(s) * 100) / 100;
 }
-export function hoursText(value) {
-  return value == null ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
+export function ruNumber(value, options = {}) {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, ...options }).format(Number(value)).replace(/\u202f/g, '\u00a0');
 }
+export function plural(value, forms) {
+  const count = Math.abs(Math.trunc(Number(value)));
+  const category = new Intl.PluralRules('ru-RU').select(count);
+  return forms[{one:0,few:1,many:2,other:2}[category] ?? 2];
+}
+export function hoursText(value) { return value == null ? '—' : ruNumber(value); }
 export function parseMoney(raw, label = 'Сумма', signed = false) {
   const s = String(raw ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
   if (!s) return 0;
@@ -74,7 +81,13 @@ export function money(amount) {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency', currency: 'RUB', minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2
-  }).format(amount);
+  }).format(amount).replace(/\u202f/g, '\u00a0');
+}
+export function accruedIncome(hourlyBase, tips = 0, tax = 0, parkCommission = 0) {
+  if (hourlyBase == null) return null;
+  const cents = [hourlyBase, tips, -tax, -parkCommission].reduce((sum, value) => sum + Math.round(Number(value ?? 0) * 100), 0);
+  if (!Number.isSafeInteger(cents)) throw new Error('Сумма начисления слишком велика.');
+  return cents / 100;
 }
 export function deductionChecks(input) {
   const reward = parseMoney(input.reward, 'Вознаграждение');
@@ -99,7 +112,7 @@ export function deductionChecks(input) {
   }
   return { reward, expectedTax, expectedCommission, warnings, errors };
 }
-export function paceText(pace) { return pace == null ? '—' : pace.toFixed(3).replace('.', ','); }
+export function paceText(pace) { return pace == null ? '—' : ruNumber(pace,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 export function reserveMinutes(hours, orders, hiddenMinutes = 0, threshold = THRESHOLD) {
   // Only migrated cumulative readings retain their old unknown minute remainder.
   return Math.max(0, Math.floor((orders / threshold - hours - hiddenMinutes / 60) * 60 + 1e-8));
@@ -156,8 +169,8 @@ export function applyPaymentTermsFromDate(state, input) {
   // a later tariff can still be entered explicitly after this one.
   return updateSettings(state, {paymentRules:[...(state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart < rule.effectivePeriodStart),rule]});
 }
-export function goalText(number) { return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:3}).format(number); }
-export function percentText(number) { return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(number); }
+export function goalText(number) { return ruNumber(number,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+export function percentText(number) { return ruNumber(number,{maximumFractionDigits:2}); }
 function baseForHours(hundredths, rate) {
   const cents = (BigInt(hundredths) * BigInt(Math.round(rate * 100)) + 50n) / 100n;
   if (cents > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Почасовая сумма слишком велика. Проверьте часы и ставку.');
@@ -216,7 +229,7 @@ function normalizeSettings(input) {
     if (input?.[key] != null && typeof input[key] !== 'boolean') throw new Error('Проверьте настройки отклика.');
   }
   const theme = input?.theme ?? 'dark';
-  if (!['dark','light'].includes(theme)) throw new Error('Выберите дневную или ночную тему.');
+  if (!['dark','light','system'].includes(theme)) throw new Error('Выберите дневную, ночную или системную тему.');
   return { premiumCycleStart: start == null || start === '' ? null : start,
     ...(input?.cycleOpening == null ? {} : {cycleOpening:normalizeCycleOpening(input.cycleOpening,start)}),
     soundEnabled: input?.soundEnabled ?? true, hapticsEnabled: input?.hapticsEnabled ?? true, theme, paymentRules:normalizePaymentRules(input?.paymentRules) };
@@ -400,15 +413,20 @@ export function calculate(state, id, asOf = null) {
     missingHours: hours == null ? null : Math.max(0,Math.round(minimumHours * 100)-hoursHundredths)/100,
     missingOrders: hours == null || orders == null ? null : Math.max(0,requiredOrderCount(hoursHundredths,terms.basePace)-orders), complete
   };
+  const tax = latest ? sum('tax') : null;
+  const parkCommission = latest ? sum('parkCommission') : null;
+  const deductions = tax == null && parkCommission == null ? null : Math.round(((tax ?? 0) + (parkCommission ?? 0)) * 100) / 100;
+  const accrued = base == null ? null : accruedIncome(base, tips ?? 0, tax ?? 0, parkCommission ?? 0);
+  const remaining = accrued == null ? null : accruedIncome(accrued, -(paidReward ?? 0));
   return {
     paymentConditions,
     entries, latest, hours, orders, pace, terms, requiredOrders: hours == null ? null : requiredOrderCount(hoursHundredths,terms.basePace), hoursRecorded, ordersRecorded, pendingCount, matchedCounters, hiddenMinutes,
     dayCount: new Set(entries.map(e => e.date)).size,
     reserve: pace != null ? reserveMinutes(hours, orders, hiddenMinutes,terms.basePace) : null,
     hourlyBase: base, rateBreakdown, paidReward, tips, separateBonus, pacePremium,
-    tax: latest ? sum('tax') : null, parkCommission: latest ? sum('parkCommission') : null,
-    grossUserIncome: base != null ? Math.round((base + tips + separateBonus) * 100) / 100 : null,
-    estimatedYandexOwed: base != null ? Math.round((base - paidReward) * 100) / 100 : null,
+    tax, parkCommission, deductions, accruedIncome: accrued,
+    grossUserIncome: accrued == null ? null : accruedIncome(accrued, separateBonus ?? 0),
+    estimatedYandexOwed: remaining,
     closure: state.closures[id] ?? null
   };
 }
@@ -601,11 +619,11 @@ export function markdownReport(state, id, exportDate = today()) {
     slotCounts.set(e.date, number);
     const legacy = e.legacyReading;
     const origin = legacy ? `${legacy.edited ? 'Исправлено вручную' : legacy.interpretation === 'daily' ? 'Ввод за день' : `Накопительные показания${legacy.fromDate ? ` после ${legacy.fromDate}` : ' с начала периода'}`}; исходные показания на ${legacy.date}: ${legacy.hours} ч, ${legacy.orders} заказов` : 'Ввод за слот / день';
-    return `| ${e.date} | ${hoursText(e.dailyHours)} | ${e.dailyOrders ?? '—'} | ${money(e.reward)} | ${money(e.tips)} | ${money(e.separateBonus)} | ${money(e.displayedNet)} | ${mdSafe(origin)} | ${mdSafe(e.note)} | ${number} |`;
+    return `| ${e.date} | ${hoursText(e.dailyHours)} | ${e.dailyOrders ?? '—'} | ${money(e.reward)} | ${money(e.tips)} | ${money(e.tax)} | ${money(e.parkCommission)} | ${money(e.separateBonus)} | ${money(e.displayedNet)} | ${mdSafe(origin)} | ${mdSafe(e.note)} | ${number} |`;
   });
   const days = [...new Set(s.entries.map(e => e.date))].map(date => {
     const d = calculateDay(state, date);
-    return `| ${date} | ${hoursText(d.hours)} | ${d.orders ?? '—'} | ${money(d.paidReward)} | ${money(d.tips)} | ${money(d.separateBonus)} |`;
+    return `| ${date} | ${hoursText(d.hours)} | ${d.orders ?? '—'} | ${money(d.paidReward)} | ${money(d.tips)} | ${money(d.tax)} | ${money(d.parkCommission)} | ${money(d.separateBonus)} | ${money(d.accruedIncome)} |`;
   });
   const p = periodFor(id);
   return [
@@ -623,9 +641,9 @@ export function markdownReport(state, id, exportDate = today()) {
     `- Условия выплаты: ${{risk:'не выполнены',met:'выполнены по введённым данным',unknown:'недостаточно полных данных'}[s.paymentConditions.status]}.`,
     `- Не хватает часов: ${hoursText(s.paymentConditions.missingHours)}; заказов при введённых часах: ${s.paymentConditions.missingOrders ?? '—'}.`,
     ...(s.paymentConditions.status !== 'met' ? ['- Почасовая доплата не гарантирована: условия ещё не подтверждены. Финансовые суммы ниже остаются оценкой; фактические выплаты не меняются.'] : []), '',
-    '## Финансы периода', `- Почасовая база: ${money(s.hourlyBase)}`, `- Вознаграждение уже выплачено: ${money(s.paidReward)}`,
-    `- Осталось получить от Яндекса: ${money(s.estimatedYandexOwed)}`, `- Чаевые: ${money(s.tips)}`,
-    `- Отдельные бонусы: ${money(s.separateBonus)}`, `- Общий доход по пользовательской формуле: ${money(s.grossUserIncome)}`, '',
+    '## Финансы периода', `- Почасовая база: ${money(s.hourlyBase)}`, `- Чаевые: ${money(s.tips)}`, `- Удержания (налог и комиссия парка): ${money(s.deductions)}`,
+    `- Начислено по формуле база + чаевые − удержания: ${money(s.accruedIncome)}`, `- Выплачено: ${money(s.paidReward)}`,
+    `- Осталось выплатить: ${money(s.estimatedYandexOwed)}`, `- Отдельные бонусы: ${money(s.separateBonus)}`, `- Общий доход с отдельными бонусами: ${money(s.grossUserIncome)}`, '',
     '## Расчётные премии',
     `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база по ставкам дат записей, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
     `- Начало 12-недельного отсчёта: ${state.settings?.premiumCycleStart ?? 'не настроено'}.`,
@@ -643,11 +661,11 @@ export function markdownReport(state, id, exportDate = today()) {
     '| Дата | ID записи | Часы |', '| --- | --- | ---: |',
     ...cycle.entries.map(e => `| ${e.date} | ${mdSafe(e.id)} | ${hoursText(e.dailyHours)} |`), '',
     '## Итоги по дням', 'Суммы записей за дату. Они уже включены в итог периода и не прибавляются повторно.',
-    '| Дата | Часы | Заказы | Вознаграждение | Чаевые | Отдельные бонусы |',
-    '| --- | ---: | ---: | ---: | ---: | ---: |', ...days, '',
+    '| Дата | Часы | Заказы | Выплачено | Чаевые | Налог | Комиссия парка | Бонусы отдельно | Начислено |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |', ...days, '',
     '## Слоты и записи', 'Каждая строка — отдельный слот или прежняя дневная запись.',
-    '| Дата | Часы за слот / перенесённый вклад | Заказы за слот / перенесённый вклад | Вознаграждение | Чаевые | Бонусы | Итог на экране | Источник часов | Примечание | Слот / запись |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: |', ...rows,
+    '| Дата | Часы за слот / перенесённый вклад | Заказы за слот / перенесённый вклад | Выплачено | Чаевые | Налог | Комиссия парка | Бонусы отдельно | Итог на экране | Источник часов | Примечание | Слот / запись |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: |', ...rows,
     ...(s.entries.length ? [] : ['Записей за период пока нет.']), '',
     '## Идентификаторы для поиска ошибок',
     '| ID | Дата | Создано | Изменено |', '| --- | --- | --- | --- |',
@@ -663,9 +681,9 @@ export function markdownReport(state, id, exportDate = today()) {
     '- Часы за период = сумма dailyHours всех записей периода; заказы = сумма dailyOrders.',
     '- Несколько слотов за одну дату складываются за день и период. Исправление заменяет только выбранную запись; удаление убирает только её вклад.',
     '- Почасовая база = сумма по ставкам, действовавшим в даты записей; при незавершённом периоде это оценка.',
-    '- Общий доход = почасовая база + чаевые + отдельные бонусы.',
-    '- Осталось получить = почасовая база − сумма reward; чаевые и отдельные бонусы не уменьшают эту сумму.',
-    '- Если вознаграждение превышает базу, разница остаётся отрицательной, без обнуления.',
+    '- Начислено = почасовая база + чаевые − налог − комиссия парка; все денежные слагаемые округлены до копеек.',
+    '- Осталось выплатить = начислено − сумма reward, где reward хранит фактически выплаченное. Отдельные бонусы учитываются отдельно в общем доходе.',
+    '- Остаток после выплаты может быть отрицательным, если уже выплачено больше начисленного.',
     `- Запас = max(0, заказы / ${goalText(s.terms.basePace)} − часы). Минуты округляются вниз. Только для перенесённых накопительных показаний дополнительно вычитаются 59 минут.`,
     '- При нулевых часах или отсутствии всех введённых часов либо всех введённых заказов темп и запас не определяются.',
     '- Часы и заказы необязательны независимо друг от друга; пропуски обозначены прочерком и не превращаются в нули.',

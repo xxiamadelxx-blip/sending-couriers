@@ -2373,32 +2373,254 @@ body{background-image:none!important;background-attachment:initial}
 .payment-settings .pager-tabs button{font-weight:520;letter-spacing:0;text-transform:none}
 .appearance-card{border-top:1px solid var(--line)}
 
-/* SHIFT CONTROL signature: machined edges and one gold instrument slab. */
-:root{--card-radius:3px;--control-radius:3px}
-:root[data-theme=light]{--card-radius:3px;--control-radius:3px}
-#app :is(.home-focus,.income-hero,.home-premiums,.home-empty,.period-day,.detail-card,.appearance-card,.cycle-settings,.day-card,.day-group,dialog),
-#app :is(.button,.period-select,.export-icon,.theme-toggle,.back,.period-arrow,.slot-mode-button,.pager-tabs button,.pager-controls button,.week-presets button,.forecast-page input,.forecast-page select,.form-grid input,.field input){border-radius:3px}
-#homeDeck .home-focus{position:relative;border-top:3px solid var(--accent);background:var(--field)}
-#homeDeck .home-focus .payment-status{background:var(--nav-surface)}
-#homeDeck .income-hero{clip-path:polygon(0 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%)}
-#homeDeck .income-hero h2{color:#594528;font-size:12px;font-weight:750;letter-spacing:.11em;text-transform:uppercase}
-#homeDeck .income-parts span,#homeDeck .payouts h2{font-size:10px;letter-spacing:.055em;text-transform:uppercase}
-#homeDeck .home-premiums{padding:0;border:0;background:transparent}
-#homeDeck .home-premiums .premiums-card{padding:16px 2px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:transparent}
-#homeDeck .home-premiums .card-heading{font-size:12px;font-weight:750;letter-spacing:.11em;text-transform:uppercase}
-#homeDeck .home-premiums .premium-teasers>span{padding-top:13px}
-#homeDeck .home-premiums .premium-teasers strong{color:var(--gold)}
-.home-empty{position:relative;isolation:isolate;overflow:hidden;padding:18px 20px;gap:8px;border:1px solid var(--line);border-top:3px solid var(--accent);background:var(--surface)}
-.home-empty-symbol{width:52px;height:52px;border:0;border-radius:0;background:transparent}
-.home-eyebrow{font-size:11px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}
-.home-empty h2{font-size:28px!important;line-height:1.08!important;letter-spacing:-.035em!important}
-.home-empty-copy{max-width:30ch;font-size:14px}
-.home-empty .button{min-height:54px;margin-top:8px;border-radius:3px;font-weight:750;letter-spacing:.01em}
-.period-days-list{gap:0;border-bottom:1px solid var(--line)}
-.period-day{border:0;border-top:1px solid var(--line);background:transparent}
-.period-day>summary::before{width:3px;height:34px;border:0;border-radius:0;background:var(--accent);box-shadow:none}
-.period-day[open]>summary::before{background:var(--gold)}
-.nav-item{font-size:11px}
-.nav-item span{font-size:11px}
-.nav-item.active,:root[data-theme=light] .nav-item.active{border-radius:3px;background:var(--nav-selected)}
-.bottom-nav .nav-add{border-radius:50%}
+
+/* SHIFT CONTROL · Unslop finish · 9 passes */
+:root {
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:20px;
+  --space-6:24px;
+  --card-radius:16px;
+  --control-radius:10px;
+  --inner-radius:12px;
+  --text-primary:var(--ink);
+  --text-secondary:var(--muted);
+  --text-tertiary:var(--quiet);
+  --motion:cubic-bezier(.2,0,0,1);
+}
+:root[data-theme=light] {
+  --card-radius:16px;
+  --control-radius:10px;
+  --inner-radius:12px;
+}
+html,body {
+  background:var(--bg)!important;
+  background-image:none!important;
+  color:var(--text-primary);
+  font-family:Golos,Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px;
+  line-height:1.45;
+}
+#app {
+  width:100%;
+  max-width:480px;
+  min-height:100vh;
+  min-height:100dvh;
+  margin:0 auto;
+  padding:calc(16px + var(--safe-top)) calc(16px + var(--safe-right)) calc(var(--navigation-space,104px) + var(--safe-bottom) + 20px) calc(16px + var(--safe-left));
+  background:var(--bg);
+  color:var(--text-primary);
+  font-family:Golos,Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-weight:400;
+}
+#app * { font-variant-numeric:tabular-nums; font-weight:400; }
+#app :is(h1,h2,h3,strong,b,button,label,summary,dt,dd,.meter-value,.major-amount,.amount) { font-weight:600; }
+#app :is(p,.hint,.quiet,.muted,small,.field-note,.forecast-work-note,.period-day small,.payment-rule span) { color:var(--text-secondary); font-weight:400; }
+#app h1,#app h2,#app h3 { color:var(--text-primary); text-transform:none; letter-spacing:-.02em; }
+#app h1 { font-size:clamp(26px,7.2vw,32px); line-height:1.15; }
+#app h2 { font-size:18px; line-height:1.3; }
+#app h3 { font-size:15px; line-height:1.35; }
+#app :is(.home-eyebrow,.home-empty .home-eyebrow,.income-hero h2,.home-premiums .card-heading,.period-days-heading h2,.forecast-eyebrow,.cycle-header h2) { text-transform:none!important; letter-spacing:.02em!important; font-weight:500!important; }
+#app :is(.hero-pace strong,.meter-value,.gauge-label strong,.income-hero strong,.payouts strong,.period-day-figures strong,.forecast-number,.forecast-subnumber,.period-norm-stat strong,.field input,.duration-value input,.slot-live-summary strong,.cycle-bonus-metrics strong) { font-family:Roboto,Golos,system-ui,sans-serif; font-variant-numeric:tabular-nums lining-nums; font-feature-settings:"tnum" 1,"lnum" 1; }
+#app :is(.hero-pace strong,.meter-value,.gauge-label strong,.income-hero strong,.payouts strong,.period-day-figures strong,.forecast-number,.forecast-subnumber,.period-norm-stat strong,.slot-live-summary strong,.cycle-bonus-metrics strong) { font-weight:600!important; }
+#app svg { width:18px!important; height:18px!important; stroke-width:1.5!important; flex:none; }
+#app :is(button,a,summary,input,select,textarea) { transition:color .12s ease,background-color .12s ease,border-color .12s ease,opacity .12s ease; }
+#app :is(button,a,summary,input,select,textarea):active { transform:none; }
+#app button:focus-visible,#app a:focus-visible,#app summary:focus-visible,#app input:focus-visible,#app select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#app :is(.detail-card,.appearance-card,.cycle-settings,.day-card,.day-group,dialog,.home-focus,.income-hero,.home-empty,.period-day,.forecast-simple-hero) {
+  border-radius:var(--card-radius)!important;
+  box-shadow:none!important;
+  clip-path:none!important;
+}
+#app :is(.button,.period-select,.export-icon,.theme-toggle,.back,.period-arrow,.slot-mode-button,.pager-tabs button,.pager-controls button,.week-presets button,.form-grid input,.field input,.field select,.field textarea,.date-box) { border-radius:var(--control-radius)!important; }
+#app .overview-top { margin:0 0 20px; padding-top:0; }
+#app .overview-top h1 { margin:16px 0 12px; font-size:clamp(28px,8vw,34px); line-height:1.12; font-weight:600; letter-spacing:-.03em; text-transform:none; }
+#app .overview-toolbar { min-height:40px; gap:12px; }
+#app .header-tools { display:flex; gap:8px; }
+#app .header-weather { min-height:40px; padding:8px 8px; border:0; background:transparent; }
+#app .weather-caption { color:var(--text-secondary); font-size:12px; font-weight:500; }
+#app .weather-icons { gap:8px; }
+#app .weather-mini { display:flex; align-items:center; gap:4px; color:var(--text-secondary); }
+#app .weather-mini strong { color:var(--text-primary); font-size:12px; font-weight:500; }
+#app .period-button { min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:var(--surface); color:var(--text-primary); }
+#app .home-stack { position:relative; display:grid; gap:var(--space-4); padding-left:12px; }
+#app .home-stack::before { content:""; position:absolute; z-index:0; top:24px; bottom:24px; left:4px; width:1px; background:var(--line); pointer-events:none; }
+#app .home-stack > :not(.home-empty) { position:relative; z-index:1; }
+#app .home-stack > :not(.home-empty)::after { content:""; position:absolute; left:-12px; top:24px; width:5px; height:5px; border:1px solid var(--bg); border-radius:50%; background:var(--accent); pointer-events:none; }
+#app .home-empty { margin:0; padding:20px; border:1px solid var(--line); background:var(--surface); }
+#app .home-empty .home-empty-symbol { width:40px; height:40px; display:grid; place-items:center; border:1px solid var(--line); border-radius:12px!important; background:var(--field); color:var(--accent); }
+#app .home-empty h2 { margin:4px 0 0; font-size:24px; line-height:1.2; letter-spacing:-.02em; }
+#app .home-empty .button { margin-top:8px; min-height:48px; border-radius:var(--control-radius)!important; }
+#homeDeck .home-focus { overflow:hidden; border:1px solid var(--line); border-top:2px solid var(--accent); background:var(--surface); }
+#homeDeck .home-focus::before { content:none!important; display:none!important; }
+#homeDeck .home-focus .rhythm { margin:0; padding:20px 16px 16px; border:0; border-radius:0; background:transparent; }
+#homeDeck .home-focus .pace-hero { grid-template-columns:minmax(0,1fr) 104px; gap:12px; align-items:center; }
+#homeDeck .home-focus .pace-hero h2 { margin:0 0 8px; color:var(--text-secondary); font-size:13px; font-weight:500; letter-spacing:0; }
+#homeDeck .hero-pace { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; color:var(--text-secondary); font-size:13px; }
+#homeDeck .hero-pace strong { color:var(--accent); font-size:clamp(42px,12vw,56px); line-height:1; letter-spacing:-.035em; }
+#homeDeck .gauge { width:96px; height:96px; }
+#homeDeck .gauge-label strong { color:var(--accent); font-size:20px; }
+#homeDeck .gauge-label span { color:var(--text-secondary); font-size:10px; line-height:1.25; }
+#homeDeck .meters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-3); margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--line); }
+#homeDeck .meter { display:flex; align-items:center; gap:12px; min-width:0; padding:0; }
+#homeDeck .meter>svg { color:var(--text-secondary); }
+#homeDeck .meter-value { margin:0; color:var(--text-primary); font-size:22px; line-height:1.1; }
+#homeDeck .meter-value span:last-child { color:var(--text-secondary); font-size:12px; font-weight:500; }
+#homeDeck .meter-label { margin:4px 0 0; color:var(--text-secondary); font-size:12px; }
+#homeDeck .payment-status { display:grid; grid-template-columns:18px minmax(0,1fr); gap:12px; margin:0; padding:16px; border:0; border-top:1px solid var(--line); border-radius:0 0 var(--card-radius) var(--card-radius); background:var(--nav-surface); }
+#homeDeck .payment-status strong { color:var(--error); }
+#homeDeck .payment-status p { margin:4px 0 0; color:var(--text-secondary); font-size:13px; }
+#homeDeck .payment-status-action { min-height:40px; margin:4px 0 -4px; padding:4px 0; border:0; background:transparent; color:var(--accent); text-align:left; text-decoration:underline; text-underline-offset:3px; }
+#homeDeck .reserve-line { margin:8px 0 0; color:var(--text-secondary); }
+#homeDeck .income-hero { padding:16px; border:0; background:var(--income-surface); color:var(--income-ink); }
+#homeDeck .income-hero::before { content:none!important; }
+#homeDeck .income-hero h2 { margin:0 0 12px; color:var(--income-ink); font-size:12px; }
+#homeDeck .income-hero .major-amount { color:var(--income-ink); font-size:clamp(34px,9vw,42px); line-height:1.1; letter-spacing:-.03em; }
+#homeDeck .income-parts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 16px; margin-top:16px; padding-top:14px; border-top:1px solid color-mix(in srgb,var(--income-ink) 24%,transparent); }
+#homeDeck .income-parts span { color:color-mix(in srgb,var(--income-ink) 76%,transparent); font-size:11px; letter-spacing:.01em; }
+#homeDeck .income-parts strong { display:block; margin-top:4px; color:var(--income-ink); font-size:16px; }
+#homeDeck .payouts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:14px; padding-top:14px; border-top:1px solid color-mix(in srgb,var(--income-ink) 24%,transparent); }
+#homeDeck .payouts h2 { margin:0 0 4px; color:color-mix(in srgb,var(--income-ink) 76%,transparent); font-size:11px; letter-spacing:0; }
+#homeDeck .payouts strong { color:var(--income-ink); font-size:21px; }
+#homeDeck .home-premiums { padding:0; border:0; background:transparent; }
+#homeDeck .home-premiums .premiums-card { display:block; width:100%; padding:16px; border:1px solid var(--line); border-radius:var(--inner-radius)!important; background:var(--surface); color:var(--text-primary); text-align:left; }
+#homeDeck .home-premiums .card-heading { font-size:14px; }
+#homeDeck .home-premiums .premium-teasers { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:16px; }
+#homeDeck .home-premiums .premium-teasers>span { display:flex; align-items:flex-start; gap:8px; min-width:0; padding-top:0; }
+#homeDeck .home-premiums .premium-teasers>span>svg { color:var(--text-secondary); }
+#homeDeck .home-premiums .premium-teasers>span>span { display:grid; gap:4px; color:var(--text-secondary); font-size:11px; }
+#homeDeck .home-premiums .premium-teasers strong { color:var(--gold); font-size:22px; }
+#homeDeck .premium-reason { color:var(--text-secondary); font-size:11px; line-height:1.35; }
+#homeDeck .calculation { border:1px solid var(--line); border-radius:var(--inner-radius); background:var(--surface); }
+#app .page-heading { min-height:52px; gap:12px; margin:0 0 20px; padding:0 0 12px; border-bottom:1px solid var(--line); }
+#app .page-heading h1 { flex:1; margin:0; font-size:23px; letter-spacing:-.02em; }
+#app .back,#app .export-icon,#app .theme-toggle,#app .period-arrow { width:44px; height:44px; min-width:44px; min-height:44px; display:grid; place-items:center; padding:0; border:1px solid var(--line); background:var(--surface); color:var(--text-secondary); }
+#app .back svg,#app .export-icon svg,#app .theme-toggle svg,#app .period-arrow svg { width:18px!important; height:18px!important; }
+#app .period-navigation { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:8px; margin-bottom:20px; }
+#app .period-arrow { border-radius:var(--control-radius)!important; }
+#app .period-days-heading { margin:0 0 12px; }
+#app .period-days-heading h2 { margin:0; font-size:18px; font-weight:600; }
+#app .period-days-list { display:grid; gap:var(--space-3); border:0; }
+#app .period-day { position:relative; overflow:hidden; border:1px solid var(--line); background:var(--surface); }
+#app .period-day>summary { display:grid; grid-template-columns:minmax(0,1fr) auto 18px; gap:8px 12px; align-items:center; min-height:82px; padding:16px; list-style:none; }
+#app .period-day>summary::-webkit-details-marker,#app .payment-more>summary::-webkit-details-marker { display:none; }
+#app .period-day>summary::before { content:""; position:absolute; left:0; top:16px; bottom:16px; width:2px; border-radius:0 2px 2px 0; background:var(--accent); }
+#app .period-day[open]>summary::before { background:var(--accent); }
+#app .period-day-title { display:grid; gap:4px; min-width:0; }
+#app .period-day-title small { color:var(--text-secondary); }
+#app .period-day-figures { display:grid; justify-items:end; gap:4px; }
+#app .period-day-figures strong { color:var(--text-primary); font-size:19px; }
+#app .period-day-figures small { color:var(--text-secondary); text-align:right; }
+#app .period-day-chevron { display:grid; place-items:center; color:var(--text-secondary); }
+#app .period-day-slots { display:grid; gap:8px; padding:0 12px 12px; }
+#app .period-day-slot { padding:12px; border:1px solid var(--line); border-radius:var(--inner-radius)!important; background:var(--field); }
+#app .period-slot-header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+#app .period-slot-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:12px 0 0; }
+#app .period-slot-facts>div { min-width:0; }
+#app .period-slot-facts dt { color:var(--text-secondary); font-size:11px; }
+#app .period-slot-facts dd { margin:4px 0 0; color:var(--text-primary); font-size:14px; font-weight:500; overflow-wrap:anywhere; }
+#app .period-cycle-compact { margin-top:16px; }
+#app .cycle-bonus-metrics { gap:12px; }
+#app .cycle-bonus-metrics strong { color:var(--accent); font-size:20px; }
+#app .inline-help { width:28px; height:28px; min-width:28px; min-height:28px; display:inline-grid; place-items:center; margin-left:4px; padding:0; border:0; border-radius:50%; background:var(--accent-wash); color:var(--accent); vertical-align:middle; }
+#app .payment-settings,#app .settings-page>.detail-card,#app .settings-page>.appearance-card { margin-bottom:16px; }
+#app .settings-page .detail-card,#app .settings-page .appearance-card,#app .forecast-page .detail-card { padding:16px; border:1px solid var(--line); background:var(--surface); }
+#app .settings-page .payment-more,#app .forecast-page .calculation,#app .import-quality-details { border:1px solid var(--line); border-radius:var(--inner-radius); background:var(--field); }
+#app .settings-page .payment-more>summary,#app .forecast-page .calculation>summary,#app .import-quality-details>summary { min-height:48px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; cursor:pointer; list-style:none; }
+#app .settings-page .payment-more>summary::after { content:"⌄"; color:var(--accent); font-size:20px; line-height:1; }
+#app .settings-page .payment-more[open]>summary::after { transform:rotate(180deg); }
+#app .settings-page .payment-more>summary svg { display:none; }
+#app .settings-page .payment-more .form-grid { padding:0 16px 16px; }
+#app .settings-page .payment-settings form { display:grid; gap:16px; }
+#app .settings-page .payment-period .hint { margin:8px 0 0; line-height:1.5; }
+#app .settings-page .field input,#app .settings-page .field select,#app .forecast-page .field input { min-height:48px; padding:12px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); }
+#app .settings-page .payment-settings .tariff-rate { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; }
+#app .settings-page .payment-settings .tariff-rate input { font-size:30px; font-weight:600; }
+#app .settings-page .appearance-card,#app .settings-page .detail-card { border-radius:var(--card-radius)!important; }
+#app .settings-page .switch-row { min-height:56px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+#app .settings-page .switch-row:last-of-type { border-bottom:0; }
+#app .settings-page input[type=checkbox] { accent-color:var(--accent); }
+#app .version-label { display:block; width:100%; min-height:44px; margin:4px 0 16px; border:0; border-radius:0!important; background:transparent; color:var(--text-secondary); text-align:center; }
+#app .changelog-dialog { max-width:min(90vw,400px); padding:20px; border:1px solid var(--line); background:var(--surface); color:var(--text-primary); }
+#app .changelog-dialog::backdrop { background:rgba(0,0,0,.58); }
+#app .changelog-dialog p { color:var(--text-secondary); }
+#app .slot-live-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; padding:16px; border:1px solid var(--line); border-radius:var(--inner-radius); background:var(--field); }
+#app .slot-live-summary>div { display:grid; gap:4px; }
+#app .slot-live-summary span { color:var(--text-secondary); font-size:12px; }
+#app .slot-live-summary strong { color:var(--text-primary); font-size:18px; }
+#app .slot-live-summary p { grid-column:1/-1; margin:0; color:var(--text-secondary); font-size:12px; }
+#app .field [aria-invalid=true] { border-color:var(--error); }
+#app .field-error { color:var(--error); font-size:12px; }
+#app .field-warning { color:var(--warning-ink); }
+#app .forecast-page { gap:16px; }
+#app .forecast-page :is(.forecast-simple-hero,.forecast-hero) { overflow:hidden; padding:20px; border:1px solid var(--line); border-top:2px solid var(--accent); background:var(--surface); }
+#app .forecast-page .forecast-simple-hero::before { content:none!important; display:none!important; }
+#app .forecast-page .forecast-simple-hero h2 { margin:4px 0 8px; font-size:19px; }
+#app .forecast-page .forecast-number { margin:8px 0; color:var(--accent); font-size:clamp(38px,12vw,54px); line-height:1.05; }
+#app .forecast-page .forecast-number span { display:block; color:var(--text-secondary); font-size:14px; font-weight:500; }
+#app .forecast-page .forecast-band { display:flex; align-items:center; gap:8px; color:var(--text-secondary); }
+#app .forecast-range-help { position:relative; flex:none; }
+#app .forecast-range-help>summary { width:32px; height:32px; display:grid; place-items:center; border-radius:50%; background:var(--field); color:var(--text-secondary); list-style:none; cursor:pointer; }
+#app .forecast-range-help>summary::-webkit-details-marker { display:none; }
+#app .forecast-range-help>p { position:absolute; z-index:5; right:0; top:calc(100% + 8px); width:min(260px,72vw); margin:0; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--raised); color:var(--text-primary); font-size:12px; }
+#app .period-norm-card { display:grid; gap:12px; border-left:2px solid var(--accent)!important; }
+#app .period-norm-card h2 { margin:0; font-size:17px; }
+#app .period-norm-stat { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+#app .period-norm-stat span { color:var(--text-secondary); font-size:13px; }
+#app .period-norm-stat strong { color:var(--accent); font-size:23px; }
+#app .period-norm-copy { margin:0; color:var(--text-secondary); font-size:13px; }
+#app .forecast-video-summary { display:grid; gap:8px; }
+#app .forecast-video-summary h2,#app .forecast-video-summary p { margin:0; }
+#app .forecast-video-summary details { margin-top:4px; border-top:1px solid var(--line); }
+#app .forecast-video-summary details>summary { min-height:44px; display:flex; align-items:center; color:var(--accent); list-style:none; cursor:pointer; }
+#app .forecast-video-summary details>summary::-webkit-details-marker { display:none; }
+#app .forecast-video-summary details[open] { padding-bottom:8px; }
+#app .forecast-video-summary details ol { display:grid; gap:8px; padding-left:22px; color:var(--text-secondary); font-size:12px; }
+#app .forecast-page .forecast-simple-plan { border:1px solid var(--line); border-radius:var(--card-radius); background:var(--surface); }
+#app .forecast-page .forecast-simple-plan .duration-control+.duration-control { margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+#app .forecast-page .duration-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#app .forecast-page .duration-value { display:inline-flex; align-items:center; gap:4px; }
+#app .forecast-page .duration-value input { width:76px; min-height:40px; padding:8px 8px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); text-align:right; }
+#app .forecast-page .duration-track { display:grid; grid-template-columns:36px minmax(0,1fr) 36px; align-items:center; gap:8px; margin-top:8px; }
+#app .forecast-page .duration-track button { width:36px; height:36px; min-height:36px; padding:0; border:1px solid var(--line); border-radius:9px!important; background:var(--field); color:var(--text-primary); font-size:18px; }
+#app .forecast-page .duration-slider { width:100%; height:36px; min-height:36px; margin:0; padding:0; border:0; background:transparent; accent-color:var(--accent); }
+#app .forecast-page .duration-slider::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:linear-gradient(to right,var(--accent) 0,var(--accent) var(--duration-fill,0%),var(--line) var(--duration-fill,0%),var(--line) 100%); }
+#app .forecast-page .duration-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); box-shadow:none; }
+#app .forecast-page .duration-slider::-moz-range-track { height:4px; border-radius:4px; background:var(--line); }
+#app .forecast-page .duration-slider::-moz-range-progress { height:4px; border-radius:4px; background:var(--accent); }
+#app .forecast-page .duration-slider::-moz-range-thumb { width:18px; height:18px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); }
+#app .duration-step-hint { margin:0; color:var(--text-secondary); font-size:12px; }
+#app .forecast-page .forecast-import-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:0 0 12px; }
+#app .forecast-page .forecast-import-button { min-height:48px; padding:8px; line-height:1.3; white-space:normal; }
+#app .forecast-page .forecast-metrics { gap:12px; }
+#app .forecast-page .metric { border-color:var(--line); }
+#app .forecast-page .metric strong { font-weight:600; }
+#app .import-quality-details { margin:8px 0; }
+#app .import-quality-details p { margin:0; padding:0 16px 12px; font-size:12px; overflow-wrap:anywhere; }
+#app .payment-status-action,#app .period-slot-edit { min-height:40px; }
+#app .nav-item { min-height:52px; border-radius:8px; font-size:11px; }
+#app .nav-item span { font-size:11px; font-weight:500; }
+#app .nav-item.active,:root[data-theme=light] #app .nav-item.active { border-radius:8px!important; background:transparent; color:var(--accent); }
+#app .bottom-nav { box-shadow:none!important; }
+#app .bottom-nav .nav-add { border-radius:50%!important; }
+#app .period-day-slot .period-slot-edit { min-height:40px; padding:8px 8px; border:0; background:transparent; color:var(--accent); }
+#app .period-slot-note { margin-bottom:0; }
+#app :is(.error,[role=alert]) { overflow-wrap:anywhere; }
+@media(max-width:380px) {
+  #app { padding-left:calc(12px + var(--safe-left)); padding-right:calc(12px + var(--safe-right)); }
+  #homeDeck .home-focus .pace-hero { grid-template-columns:minmax(0,1fr) 88px; gap:8px; }
+  #homeDeck .gauge { width:84px; height:84px; }
+  #homeDeck .hero-pace strong { font-size:clamp(36px,11vw,46px); }
+  #app .period-day>summary { grid-template-columns:minmax(0,1fr) auto; }
+  #app .period-day-chevron { display:none; }
+  #app .forecast-import-actions { grid-template-columns:1fr; }
+}
+@media(prefers-reduced-motion:reduce) {
+  #app *,#app *::before,#app *::after { scroll-behavior:auto!important; transition-duration:.01ms!important; animation-duration:.01ms!important; }
+}
+@media(max-width:360px) {
+  #homeDeck .income-parts,#homeDeck .payouts,#homeDeck .home-premiums .premium-teasers { grid-template-columns:1fr; }
+  #app .period-day-figures strong { font-size:16px; }
+}

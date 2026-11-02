@@ -26,13 +26,13 @@ test('Two slots share one expandable date card with separate stable id edit cont
  assert.equal((x.match(/data-entry="slot17-a"/g)||[]).length,1);
  assert.ok(x.includes('Слот 1')&&x.includes('Слот 2'));
  assert.ok(x.includes('17 заказов'));
- assert.ok(x.includes('3450 ₽'));
+ assert.ok(x.includes('3450 ₽'));assert.ok(x.includes('Выплачено'));
  assert.doesNotMatch(x,/10:00|15:00|22:00/,'No invented times; existing model stores no per-slot start/end');
 });
 
 test('Missing slot hours/orders are unknown, not automatically zero',()=>{
  const x=periodDayMarkup([{id:'unknown-slot',date:'2026-10-20',dailyHours:null,dailyOrders:null,reward:0,tips:0,separateBonus:0}],()=>({hours:null,orders:null,paidReward:0}),date=>date,n=>n==null?'—':String(n),n=>n==null?'—':n+' ₽',esc);
- assert.ok(x.includes('— ч')); assert.ok(x.includes('— заказов'));assert.ok(x.includes('0 ₽'));
+ assert.ok(x.includes('— ч')); assert.ok(x.includes('Заказы не указаны'));assert.ok(x.includes('0 ₽'));
 });
 
 test('No facts and malicious notes remain safe',()=>{

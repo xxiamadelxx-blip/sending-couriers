@@ -21,8 +21,11 @@ test('approved Forecast visual: two existing persisted time controls and real un
   assert.match(simple,/result\.upper/);
 });
 
-test('approved Forecast: visual-only slider track fill uses existing minutes and does not change the step',()=>{
-  assert.match(duration,/step="15"/);
+test('Forecast sliders move by 30 minutes while exact numeric entry remains available',()=>{
+  const simple=forecast.slice(forecast.indexOf('  function simpleView()'),forecast.indexOf('  function readPair('));
+  assert.match(duration,/step="\$\{stepMinutes\}"/);
+  assert.match(simple,/durationField\('todaySlotHours','Полный слот',slot,'',30\)/);
+  assert.match(simple,/durationField\('todayWorkHours','Из них буду работать',work,'',30\)/);
   assert.match(duration,/const sync=\(\)=>syncDuration\(root,id\)/);
   assert.match(duration,/--duration-fill/);
   assert.match(css,/\.forecast-page \.forecast-simple-plan \.duration-slider::-webkit-slider-runnable-track/);
@@ -32,5 +35,6 @@ test('approved Forecast: visual-only slider track fill uses existing minutes and
 test('approved Forecast excludes navigation redesign; preserves actual five actions and the plus',()=>{
   for(const key of ["['summary','Главная'","['period','Период'","['forecast','Прогноз'","['settings','Настройки'"])assert.ok(app.includes(key),key);
   assert.ok(app.includes("['add','Добавить слот','plus','navAddSlot']"));
-  assert.match(css,/\.nav-add\{[\s\S]*?background:var\(--signal-panel\)/);
+  assert.match(css,/\.bottom-nav \.nav-add\{[\s\S]*?background:var\(--accent\)/);
+  assert.match(css,/\.bottom-nav \.nav-add\{[^}]*border-radius:50%/);
 });

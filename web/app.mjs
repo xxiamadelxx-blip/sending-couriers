@@ -1,6 +1,6 @@
 import {
   today, periodFor, shiftPeriod, formatDate, periodLabel, emptyState, normalizeState,
-  calculate, calculateDay, newEntryId, hoursText, money, paceText, reserveText,
+  calculate, calculateDay, newEntryId, hoursText, money, paceText, reserveText, plural, accruedIncome, calculateScenario, parseInteger,
   upsertEntry, mergeImport, parseCycleIncomeReport, parseMoney, parseHours, markdownReport, deductionChecks,
   TAX_PERCENT_MIN, TAX_PERCENT_MAX, PARK_COMMISSION_PERCENT,
   calculatePremiumCycle, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft, applyPaymentTermsFromDate,
@@ -92,7 +92,7 @@ window.receiveVideoImport = raw => {
       const repaired=Number(result.timeRecovery?.newRows??0);
       notify(result.timeRecoveryError
         ?`Повторная сверка времени завершилась с ошибкой: ${result.timeRecoveryError}.`
-        :`Повторный импорт: время дополнено у ${repaired} заказов. Итог проверки показан в прогнозе.`);
+        :`Повторный импорт: время дополнено у ${repaired} ${orderWord(repaired)}. Итог проверки показан в прогнозе.`);
     }
     else if (result.forecastFactsAccepted && (Array.isArray(result.forecastDays) ? result.forecastDays.length : result.forecastDay)) {
       const source=result.forecastSource||'video_import';
@@ -110,7 +110,7 @@ window.receiveVideoImport = raw => {
       acknowledge();
       if (view === 'forecast') forecastScreen?.refresh?.();
       else openForecast('today');
-      notify(`Видео сохранено в прогнозе: ${result.importedOrderCount} заказов. Подтверждено чтением из хранилища.`);
+      notify(`Видео сохранено в прогнозе: ${result.importedOrderCount} ${orderWord(result.importedOrderCount)}. Подтверждено чтением из хранилища.`);
     }
     else { notify(result.forecastFactMessage||`Разобрано кадров: ${result.frames}; извлечённые факты не прошли сверку и не записаны в прогноз.`); acknowledge(); }
   } catch(error) { notify(error?.message||'Импорт видео завершился без читаемого результата.'); }
@@ -189,7 +189,7 @@ function weatherWidget() {
   const status=w.available?w.stale?'Кэш погоды устарел':'Open-Meteo':'Погода недоступна';
   if(!w.available)return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${p.weatherCity?'Погода недоступна':'Не указана местность для погоды'}. Обновить погоду" title="${esc(status)}"><span id="weatherStatus" class="weather-unavailable">Погода —</span></button>`;
   const spokenWeather=w.parts.map(v=>`${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}`).join('. ');
-  return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${esc(spokenWeather)}. ${esc(status)}. Обновить погоду" title="${esc(status)}"><span class="weather-icons">${w.parts.map(v=>`<span class="weather-mini" data-weather-code="${v.code??''}" aria-label="${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}" title="${v.label} · ${weatherDescription(v.code)}"><span aria-hidden="true">${weatherSymbol(v.code)}</span><strong>${v.temp==null?'—':Math.round(v.temp)+'°'}</strong></span>`).join('')}</span><span id="weatherStatus" class="${w.available&&w.stale?'weather-cache':'sr-only'}">${w.available&&w.stale?'Кэш':esc(status)}</span></button>`;
+  return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${esc(spokenWeather)}. ${esc(status)}. Обновить погоду" title="${esc(status)}"><span class="weather-caption">Погода</span><span class="weather-icons">${w.parts.map(v=>`<span class="weather-mini" data-weather-code="${v.code??''}" aria-label="${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}" title="${v.label} · ${weatherDescription(v.code)}"><span aria-hidden="true">${weatherSymbol(v.code)}</span><strong>${v.temp==null?'—':Math.round(v.temp)+'°'}</strong></span>`).join('')}</span><span id="weatherStatus" class="${w.available&&w.stale?'weather-cache':'sr-only'}">${w.available&&w.stale?'Кэш':esc(status)}</span></button>`;
 }
 function refreshWeather(force=false) {
   const p=weatherLocation(state.forecast);
@@ -198,7 +198,9 @@ function refreshWeather(force=false) {
   if(force||stale&&Date.now()-weatherAttempt>1800000) {weatherAttempt=Date.now();Native.fetchWeather(p.weatherCity,p.timezone);}
 }
 function applyAppearance() {
-  const theme = state?.settings?.theme ?? 'dark';
+  const preference = state?.settings?.theme ?? 'dark';
+  const systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+  const theme = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference;
   document.documentElement.dataset.theme = theme;
   $('meta[name="theme-color"]').content = theme === 'dark' ? '#10151a' : '#eae7de';
   Native?.applyTheme?.(theme);
@@ -208,27 +210,32 @@ function applyAppearance() {
     button.setAttribute('aria-label', theme === 'dark' ? 'Включить дневную тему' : 'Включить ночную тему');
     button.title = button.getAttribute('aria-label');
   }
-  if ($('#themeSelect')) $('#themeSelect').value = theme;
+  if ($('#themeSelect')) $('#themeSelect').value = preference;
   if ($('#paceGauge')) { const s = calculate(state,selectedPeriod); drawPaceGauge(s.pace,s.terms.basePace,s.paymentConditions.paceMet); }
 }
+const systemThemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+systemThemeQuery?.addEventListener?.('change', () => { if (state?.settings?.theme === 'system') applyAppearance(); });
 document.addEventListener('click', event => {
   if (!event.target.closest('#themeToggle')) return;
-  try { persist(updateSettings(state,{theme:state.settings.theme === 'dark' ? 'light' : 'dark'})); }
+  try { const current = document.documentElement.dataset.theme; persist(updateSettings(state,{theme:current === 'dark' ? 'light' : 'dark'})); }
   catch (error) { notify(error.message); feedback('error'); }
 });
+document.addEventListener('click', event => { if (event.target.closest('#paymentSettingsAction')) settings(); });
 function themeButton() {
-  const dark = state.settings.theme === 'dark', label = dark ? 'Включить дневную тему' : 'Включить ночную тему';
+  const preference = state.settings.theme;
+  const dark = preference === 'system' ? (window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true) : preference === 'dark';
+  const label = dark ? 'Включить дневную тему' : 'Включить ночную тему';
   return `<button class="export-icon theme-toggle" id="themeToggle" type="button" aria-label="${label}" title="${label}">${dark ? icon.sun : icon.moon}</button>`;
 }
 function resetScroll() { window.scrollTo(0, 0); }
 function leaveForecast() { return view!=='forecast'||forecastScreen?.flush()!==false; }
 function heading(title) {
-  return `<div class="page-heading"><button class="back" type="button" aria-label="Назад" id="goBack">${icons.back}</button><h1>${title}</h1>${themeButton()}</div>`;
+  return `<div class="page-heading"><button class="back" type="button" aria-label="Назад" title="Назад" id="goBack">${icons.back}</button><h1>${title}</h1>${themeButton()}</div>`;
 }
 function bottomNav(active) {
   const host=$('#bottomNav');host.hidden=false;
   const links=[['summary','Главная','home','navSummary'],['period','Период','calendar','navPeriod'],['add','Добавить слот','plus','navAddSlot'],['forecast','Прогноз','chart-bar','navForecast'],['settings','Настройки','settings','navSettings']];
-  host.innerHTML=links.map(([key,label,image,id])=>key==='add'?`<button id="${id}" class="nav-add" type="button" aria-label="${label}">${icon.plus}</button>`:`<button id="${id}" class="nav-item ${active===key||(active==='history'&&key==='period')?'active':''}" type="button" aria-label="${label}" ${active===key||active==='history'&&key==='period'?'aria-current="page"':''}>${icon[image]}<span aria-hidden="true" data-short="${key==='settings'?'Настр.':label}">${label}</span></button>`).join('');
+  host.innerHTML=links.map(([key,label,image,id])=>key==='add'?`<button id="${id}" class="nav-add" type="button" aria-label="${label}" title="${label}">${icon.plus}</button>`:`<button id="${id}" class="nav-item ${active===key||(active==='history'&&key==='period')?'active':''}" type="button" aria-label="${label}" ${active===key||active==='history'&&key==='period'?'aria-current="page"':''}>${icon[image]}<span aria-hidden="true" data-short="${key==='settings'?'Настр.':label}">${label}</span></button>`).join('');
   $('#navSummary').onclick=summary;$('#navPeriod').onclick=periodDetails;$('#navAddSlot').onclick=()=>form();$('#navForecast').onclick=()=>openForecast();$('#navSettings').onclick=settings;
 }
 function cycleDate() {
@@ -257,7 +264,7 @@ function openExportDialog() {
   $('#exportDialog').showModal();
 }
 function navigation() {
-  return `<div class="period-navigation"><button class="period-arrow" id="previousPeriod" aria-label="Предыдущий период" type="button">${icon['chevron-left']}</button><select id="periodPicker" class="period-select" aria-label="Расчётный период">${periods().map(id => `<option value="${id}" ${id === selectedPeriod ? 'selected' : ''}>${esc(periodLabel(id))}</option>`).join('')}</select><button class="period-arrow" id="nextPeriod" aria-label="Следующий период" type="button">${icons.chevron}</button></div>`;
+  return `<div class="period-navigation"><button class="period-arrow" id="previousPeriod" aria-label="Предыдущий период" title="Предыдущий период" type="button">${icon['chevron-left']}</button><select id="periodPicker" class="period-select" aria-label="Расчётный период">${periods().map(id => `<option value="${id}" ${id === selectedPeriod ? 'selected' : ''}>${esc(periodLabel(id))}</option>`).join('')}</select><button class="period-arrow" id="nextPeriod" aria-label="Следующий период" title="Следующий период" type="button">${icons.chevron}</button></div>`;
 }
 function bindNavigation(rerender) {
   $('#periodPicker').addEventListener('change', e => { selectedPeriod = e.target.value; rerender(); });
@@ -265,17 +272,15 @@ function bindNavigation(rerender) {
   $('#nextPeriod').addEventListener('click', () => { selectedPeriod = shiftPeriod(selectedPeriod, 1).id; rerender(); });
 }
 function financeHint(s) {
-  if (s.hours == null) return s.latest ? 'Выплаты сохранены. Введите часы за день — тогда появится расчёт дохода.' : 'Добавьте первый день — появятся ваши показатели.';
-  const rates = s.rateBreakdown.map(part => `${hoursText(part.hours)} ч × ${money(part.hourlyRate)}/ч = ${money(part.base)}`).join('; ');
-  return `За часы: ${rates}. Оценка по введённым часам при итоговом темпе от ${goalText(s.terms.basePace)}.${s.hoursRecorded < s.entries.length ? ` Часы внесены для ${s.hoursRecorded} из ${s.entries.length} записей.` : ''}${s.hiddenMinutes ? ' Запас учитывает округление прежних часов до целого числа.' : ''}`;
+  if (s.hours == null) return s.latest ? 'Выплаты сохранены. Введите часы за день — появится расчёт дохода.' : 'Добавьте первый день — появятся ваши показатели.';
+  const rates = s.rateBreakdown.map(part => hoursText(part.hours) + ' ч × ' + money(part.hourlyRate) + '/ч = ' + money(part.base)).join('; ');
+  return 'Начислено: ' + rates + ' + чаевые ' + money(s.tips) + ' − удержания ' + money(s.deductions) + ' = ' + money(s.accruedIncome) + '. Выплачено ' + money(s.paidReward) + '; осталось выплатить ' + money(s.estimatedYandexOwed) + '. Условия выплаты зависят от темпа от ' + goalText(s.terms.basePace) + ' заказа/ч.';
 }
 function cycleBonusLabel(cycle, terms) {
   const rates = [...new Set([...cycle.breakdown.map(row => row.cycleBonusPercent), ...(cycle.openingPercent == null ? [] : [cycle.openingPercent])])];
   return rates.length > 1 ? 'За 12 недель' : `За 12 недель · ${percentText(rates[0] ?? terms.cycleBonusPercent)}%`;
 }
-function orderWord(value) {
-  return ({one:'заказ',few:'заказа',many:'заказов',other:'заказа'})[new Intl.PluralRules('ru').select(value)];
-}
+function orderWord(value) { return plural(value,['заказ','заказа','заказов']); }
 function meterSize(value) {
   const length = String(value ?? '').replace(/\s/g, '').length;
   return length > 8 ? ' wide' : length > 4 ? ' compact' : '';
@@ -283,25 +288,25 @@ function meterSize(value) {
 function paymentStatus(s) {
   const c = s.paymentConditions;
   let title, detail;
-  if (c.status === 'met') { title = 'Условия выплаты выполнены'; detail = `Минимум ${c.minimumHours} ч и темп от ${goalText(s.terms.basePace)} достигнуты.`; }
-  else if (!s.entries.length) { title = 'Условия выплаты'; detail = `От ${c.minimumHours} ч и темп от ${goalText(s.terms.basePace)} заказа/ч.`; }
+  if (c.status === 'met') { title = 'Условия выплаты выполнены'; detail = 'Минимум ' + c.minimumHours + ' ч и темп от ' + goalText(s.terms.basePace) + ' заказа/ч достигнуты.'; }
+  else if (!s.entries.length) { title = 'Условия выплаты'; detail = 'От ' + c.minimumHours + ' ч и темп от ' + goalText(s.terms.basePace) + ' заказа/ч.'; }
   else {
     title = c.status === 'risk' ? 'Выплата под риском' : 'Условия требуют проверки';
-    detail = c.hoursMet === false ? `До ${c.minimumHours} ч ещё ${hoursText(c.missingHours)} ч.` : c.hoursMet ? `Минимум ${c.minimumHours} ч набран.` : 'Часы пока неизвестны.';
-    detail += c.paceMet === false ? ` Темп ниже ${goalText(s.terms.basePace)}.` : c.paceMet == null ? ' Темп пока неизвестен.' : c.complete ? ' Темп достигнут.' : ' Часть часов или заказов не внесена.';
+    detail = c.hoursMet === false ? 'До ' + c.minimumHours + ' ч ещё ' + hoursText(c.missingHours) + ' ч.' : c.hoursMet ? 'Минимум ' + c.minimumHours + ' ч набран.' : 'Часы пока неизвестны.';
+    detail += c.paceMet === false ? ' Темп ниже ' + goalText(s.terms.basePace) + ' заказа/ч.' : c.paceMet == null ? ' Темп пока неизвестен.' : c.complete ? ' Темп достигнут.' : ' Часть часов или заказов не внесена.';
   }
-  return `<section class="payment-status ${c.status}" id="paymentStatus" role="status">${icon['info-circle']}<div><strong>${esc(title)}</strong><p>${esc(detail)}</p></div></section>`;
+  return '<section class="payment-status ' + c.status + '" id="paymentStatus" role="status">' + icon['info-circle'] + '<div><strong>' + esc(title) + '</strong><p>' + esc(detail) + '</p>' + (c.status === 'risk' ? '<button class="payment-status-action" id="paymentSettingsAction" type="button">Настроить условия выплаты</button>' : '') + '</div></section>';
 }
 function summary() {
   if(!leaveForecast())return;
   app.className = 'overview'; view = 'summary'; editingId = null;
   const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
   const gap = s.pace == null ? null : Math.max(0, s.requiredOrders - s.orders);
-  app.innerHTML=`<header class="overview-top"><div class="overview-toolbar">${weatherWidget()}<div class="header-tools"><button class="export-icon" id="export" type="button" aria-label="Экспорт для ChatGPT">${icons.share}</button>${themeButton()}</div></div><h1>Рабочий ритм</h1><button class="period-button" id="choosePeriod" type="button" aria-label="Выбрать расчётный период">${icon.calendar}${esc(periodLabel(selectedPeriod))}${icons.down}</button>${s.closure?'<p class="summary-close-status">Период закрыт</p>':''}</header>
+  app.innerHTML=`<header class="overview-top"><div class="overview-toolbar">${weatherWidget()}<div class="header-tools"><button class="export-icon" id="export" type="button" aria-label="Экспорт для ChatGPT" title="Экспорт для ChatGPT">${icons.share}</button>${themeButton()}</div></div><h1>Рабочий ритм</h1><button class="period-button" id="choosePeriod" type="button" aria-label="Выбрать расчётный период">${icon.calendar}${esc(periodLabel(selectedPeriod))}${icons.down}</button>${s.closure?'<p class="summary-close-status">Период закрыт</p>':''}</header>
     <section class="rhythm" aria-labelledby="paceTitle"><div class="pace-hero"><div><h2 id="paceTitle">Темп периода</h2><p id="summaryPace" class="hero-pace"><strong class="${paceText(s.pace).length > 7 ? 'wide' : paceText(s.pace).length > 5 ? 'compact' : ''}">${paceText(s.pace)}</strong> заказа/ч</p></div><div class="gauge"><canvas id="paceGauge" role="img" aria-label="${s.pace == null ? 'Пока нет данных о темпе' : `Выполнение нормы: ${Math.round(s.pace / s.terms.basePace * 100)}%`}"></canvas><div class="gauge-label" data-state="${s.paymentConditions.paceMet === false ? 'below' : 'other'}"><strong>${s.pace == null ? '—' : Math.round(s.pace / s.terms.basePace * 100) + '%'}</strong><span>Цель ${goalText(s.terms.basePace)}<br>заказа/ч</span></div></div></div>
     <div class="meters" aria-label="Сумма часов и заказов за период"><div class="meter">${icon.clock}<div><p class="meter-value${meterSize(hoursText(s.hours))}" id="summaryHours">${hoursText(s.hours)}<span class="unit"> ч</span></p><p class="meter-label">отработано</p></div></div><div class="meter">${icon.package}<div><p class="meter-value${meterSize(s.orders)}"><span id="summaryOrders">${s.orders ?? '—'}</span><span class="orders-unit"> ${s.orders == null ? 'заказов' : orderWord(s.orders)}</span></p><p class="meter-label">выполнено</p></div></div></div>
-    <div class="pace-block"><div class="norm-row">${icon.target}<span>До нормы</span><div><strong>${gap ?? '—'}${gap == null ? '' : ' ' + orderWord(gap)}</strong></div></div><p class="reserve-line" id="summaryReserve">Можно без заказов: ${reserveText(s.reserve)}</p>${s.pace != null && !s.matchedCounters ? '<p class="hint" id="paceNote">Неполные данные · темп по введённым итогам</p>' : ''}</div></section>${paymentStatus(s)}
-    <section class="income-hero" aria-labelledby="incomeTitle"><h2 id="incomeTitle">Общий доход</h2><div id="summaryGross">${amount(s.grossUserIncome, true)}</div><div class="income-parts"><div><span>За часы</span><strong>${esc(money(s.hourlyBase))}</strong></div><div><span>Чаевые</span><strong>${esc(money(s.tips))}</strong></div><div><span>Бонусы</span><strong>${esc(money(s.separateBonus))}</strong></div></div><section class="payouts" aria-label="Выплаты"><div id="summaryPaid"><h2>Выплачено</h2>${amount(s.paidReward)}</div><div><h2>Осталось выплатить</h2><div id="summaryOwed">${amount(s.estimatedYandexOwed)}</div></div></section><button class="premiums-card" id="openPremiums" type="button"><span class="card-heading">Расчётные премии${icons.chevron}</span><span class="premium-teasers"><span>${icon['chart-bar']}<span>За темп · ${percentText(s.terms.paceBonusPercent)}%<strong id="summaryPacePremium">${esc(money(s.pacePremium))}</strong></span></span><span>${icon.gift}<span>${esc(cycleBonusLabel(cycle, s.terms))}<strong id="summaryCyclePremium">${esc(money(cycle.premium))}</strong></span></span></span></button></section><details class="calculation"><summary>Расчёт дохода</summary><p class="hint" id="financeHint">${esc(financeHint(s))}</p></details>`;
+    <div class="pace-block"><div class="norm-row">${icon.target}<span>До нормы</span><div><strong>${gap ?? '—'}${gap == null ? '' : ' ' + orderWord(gap)}</strong></div></div>${s.reserve != null && s.reserve > 0 ? '<p class="reserve-line" id="summaryReserve">Запас времени без заказов: ' + reserveText(s.reserve) + '</p>' : ''}${s.pace != null && !s.matchedCounters ? '<p class="hint" id="paceNote">Неполные данные · темп по введённым итогам</p>' : ''}</div></section>${paymentStatus(s)}
+    <section class="income-hero" aria-labelledby="incomeTitle"><h2 id="incomeTitle">Общий доход</h2><div id="summaryGross">${amount(s.grossUserIncome, true)}</div><div class="income-parts"><div><span>За часы</span><strong>${esc(money(s.hourlyBase))}</strong></div><div><span>Чаевые</span><strong>${esc(money(s.tips))}</strong></div><div><span>Бонусы отдельно</span><strong>${esc(money(s.separateBonus))}</strong></div><div><span>Удержания</span><strong>${esc(money(s.deductions))}</strong></div></div><section class="payouts" aria-label="Выплаты"><div id="summaryPaid"><h2>Выплачено</h2>${amount(s.paidReward)}</div><div><h2>Осталось выплатить</h2><div id="summaryOwed">${amount(s.estimatedYandexOwed)}</div></div></section><button class="premiums-card" id="openPremiums" type="button"><span class="card-heading">Расчётные премии${icons.chevron}</span><span class="premium-teasers"><span>${icon['chart-bar']}<span>За темп · ${percentText(s.terms.paceBonusPercent)}%<strong id="summaryPacePremium">${esc(money(s.pacePremium))}</strong>${s.pace != null && s.pace < s.terms.premiumPace ? '<small class="premium-reason">Темп ниже цели ' + goalText(s.terms.premiumPace) + ' заказа/ч</small>' : ''}</span></span><span>${icon.gift}<span>${esc(cycleBonusLabel(cycle, s.terms))}<strong id="summaryCyclePremium">${esc(money(cycle.premium))}</strong></span></span></span></button></section><details class="calculation"><summary>Расчёт дохода</summary><p class="hint" id="financeHint">${esc(financeHint(s))}</p></details>`;
   // WebView 124 prunes named passive panels. Keep real headings and readouts
   // available to accessibility without adding stops to keyboard Tab navigation.
   app.querySelectorAll('#paceTitle,#summaryPace,.meter-value,#summaryPacePremium,#summaryCyclePremium').forEach(node=>node.tabIndex=-1);
@@ -354,7 +359,7 @@ function periodDetails() {
       ${cycle.start ? `<p class="cycle-bonus-dates">${esc(formatDate(cycle.start))} — ${esc(formatDate(cycle.end))}</p>` : ''}
       <div class="cycle-bonus-metrics" aria-label="Накопление премии">
         <div><span>Общий доход цикла</span><strong id="cycleTotalIncome">${esc(money(cycle.totalIncome))}</strong></div>
-        <div><span>${esc(cycleBonusLabel(cycle,s.terms))}</span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
+        <div><span class="cycle-premium-label">${esc(cycleBonusLabel(cycle,s.terms))}<button type="button" class="inline-help" aria-label="Как считается премия за 12 недель" title="Премия считается по доходу цикла и ставкам, действовавшим в даты записей. Выплата не подтверждена.">${icon['info-circle']}</button></span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
       </div>
       <p class="cycle-bonus-note">${!cycle.start ? 'Укажите дату начала цикла.' : cycle.status === 'not-started' ? 'Цикл ещё не начался.' : cycle.totalIncome == null ? 'Пока нет дохода по известным часам.' : 'Расчётная премия, выплата не подтверждена.'}${cycle.opening ? ` Включено накопленное до ${esc(formatDate(cycle.opening.through))}; ${cycle.excludedCount} старых записей не посчитаны повторно.` : ''}${cycle.missingHours ? ` Записей без часов: ${cycle.missingHours}.` : ''}${cycle.boundaryNote ? ' Есть старые интервалы: расчёт приблизительный.' : ''}</p>
       ${cycle.start ? `<progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress>` : ''}
@@ -427,16 +432,16 @@ function settings() {
   const ruleHistory = () => state.settings.paymentRules.length ? `<details class="calculation payment-history"><summary>История условий</summary>${[...state.settings.paymentRules].reverse().map(rule => `<div class="payment-rule"><strong>С ${esc(formatDate(rule.effectivePeriodStart))}</strong><span>${esc(money(rule.hourlyRate))}/ч · темп ${goalText(rule.basePace)}</span><span>Темп ${goalText(rule.premiumPace)}: ${percentText(rule.paceBonusPercent)}% · 12 недель: ${percentText(rule.cycleBonusPercent)}%</span></div>`).join('')}</details>` : '';
   app.innerHTML = `${heading('Настройки')}<section class="detail-card payment-settings"><h2>Тариф</h2><form id="paymentForm" novalidate><div class="field payment-period"><label for="paymentPeriod">Действует с даты</label><div class="date-box settings-date-box"><span id="paymentDateVisible">${esc(formatDate(chosenDate, true))}</span>${icon['chevron-down']}<input id="paymentPeriod" type="date" lang="ru" value="${esc(chosenDate)}" required></div><p class="hint">Выберите день, с которого действует тариф. Уже введённые часы пересчитаются с этой даты; каждый период покажет свой итог. Более поздние тарифы будут заменены.</p></div>
     <div class="tariff-rate">${field('hourlyRate','Ставка за час',initial.hourlyRate,{unit:'₽',full:true})}<span class="tariff-rate-unit">/ час</span></div>
-    <details class="payment-more"><summary>Остальные условия${icons.down}</summary><div class="form-grid">
-    ${field('basePace','Темп для оплаты',initial.basePace,{unit:'заказа/ч',full:true})}
+    ${field('basePace','Цель темпа для выплаты',initial.basePace,{unit:'заказа/ч',full:true})}
+    <details class="payment-more"><summary>Остальные условия</summary><div class="form-grid">
     ${field('premiumPace','Темп для премии',initial.premiumPace,{unit:'заказа/ч',full:true})}
     ${field('minimumHours','Минимум часов за период',initial.minimumHours ?? 80,{unit:'ч',full:true})}
     ${field('criticalPace','Критический темп',initial.criticalPace ?? initial.basePace,{unit:'заказа/ч',full:true})}
     ${field('paceBonusPercent','Премия за темп',initial.paceBonusPercent,{unit:'%'})}
     ${field('cycleBonusPercent','Премия за 12 недель',initial.cycleBonusPercent,{unit:'%'})}</div></details>
     <p class="payment-effective-date" id="paymentEffectiveDate" aria-live="polite">Выбрана дата: ${esc(formatDate(chosenDate))}</p><div class="error" id="paymentError" role="alert" hidden></div><button class="button primary" id="savePaymentTerms" type="submit">Сохранить условия</button></form><div id="paymentHistory">${ruleHistory()}</div></section>
-    <section class="detail-card appearance-card"><h2>Тема интерфейса</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная</option></select></div></section>
-    <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><p class="hint version-label">Версия ${APP_VERSION}</p>`;
+    <section class="detail-card appearance-card"><h2>Тема интерфейса</h2><div class="field theme-field"><label for="themeSelect" class="sr-only">Оформление</label><select id="themeSelect" class="period-select"><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Дневная</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Ночная</option><option value="system" ${state.settings.theme === 'system' ? 'selected' : ''}>Системная</option></select></div></section>
+    <section class="detail-card"><h2>Отклик</h2><label class="switch-row" for="soundEnabled"><span>Звуки</span><input type="checkbox" role="switch" id="soundEnabled" ${state.settings.soundEnabled ? 'checked' : ''}></label><label class="switch-row" for="hapticsEnabled"><span>Виброотклик</span><input type="checkbox" role="switch" id="hapticsEnabled" ${state.settings.hapticsEnabled ? 'checked' : ''}></label><button class="button quiet" id="feedbackTest" type="button">Проверить отклик</button></section><div class="error" id="preferencesError" role="alert" hidden></div><button type="button" class="version-label" id="showChangelog" aria-label="Открыть историю изменений" title="Открыть историю изменений">Версия ${APP_VERSION}</button><dialog id="changelogDialog" class="changelog-dialog"><h2>Версия ${APP_VERSION}</h2><p>Прогноз рассчитывается по истории смен, а полный слот отделён от активного рабочего времени.</p><p>Импорт отчёта и видео сохраняет подтверждённые факты. Расчётные премии показаны отдельно от фактических выплат.</p><form method="dialog"><button class="button quiet" type="submit">Закрыть</button></form></dialog>`;
   const paymentFields=['hourlyRate','basePace','premiumPace','minimumHours','criticalPace','paceBonusPercent','cycleBonusPercent'];
   bottomNav('settings'); $('#goBack').addEventListener('click', summary);
   // Keep the editable hourly amount and its ₽ suffix visually together,
@@ -478,7 +483,8 @@ function settings() {
       catch (error) { event.target.checked = state.settings[key]; $('#preferencesError').textContent = error.message; $('#preferencesError').hidden = false; feedback('error'); }
     });
   }
-  $('#feedbackTest').addEventListener('click', () => feedback('success')); resetScroll();
+  $('#feedbackTest').addEventListener('click', () => feedback('success'));
+  $('#showChangelog').addEventListener('click', () => $('#changelogDialog').showModal()); resetScroll();
 }
 function field(key, label, value = '', { unit = '₽', full = false, integer = false, labelClass = '', note = '', signed = false, validation = false } = {}) {
   return `<div class="field${full ? ' full' : ''}"><label for="${key}" class="${labelClass}">${label}</label><div class="field-box"><input id="${key}" name="${key}" type="text" aria-label="${esc(label)}" inputmode="${integer ? 'numeric' : 'decimal'}" autocomplete="off" maxlength="${integer ? 7 : 14}" class="with-unit${key === 'dailyOrders' ? ' orders-input' : ''}" value="${esc(value)}" aria-describedby="${key}-note${validation ? ` ${key}-error` : ''}" ${validation ? 'aria-invalid="false"' : ''} ${signed ? '' : ''}><span class="field-unit${key === 'dailyOrders' ? ' orders' : ''}" aria-hidden="true">${unit}</span></div>${note ? `<span class="field-note" id="${key}-note">${note}</span>` : `<span id="${key}-note" hidden></span>`}${validation ? `<span class="field-error" id="${key}-error" role="status" hidden></span>` : ''}</div>`;
@@ -546,13 +552,13 @@ function form(id = null, returnTo = 'history') {
     ${inputHint ? `<p class="hint optional-reading">${esc(inputHint)}</p>` : ''}
     <p class="hint slot-hint" id="slotHint" hidden></p>
     <h2 class="form-section-heading">Время и заказы</h2>
-    ${field('dailyHours', carried ? 'Часы за интервал' : 'Часы за слот', val('dailyHours'), { unit: 'ч', labelClass: 'daily-label', note: carried ? 'Время между прежними записями' : '' })}
-    ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', val('dailyOrders'), { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : '' })}
-    <h2 class="form-section-heading">Начисления и удержания</h2>
-    ${field('reward', 'Вознаграждение', val('reward'), { full: true })}
+    ${field('dailyHours', carried ? 'Часы за интервал' : 'Часы за слот', val('dailyHours'), { unit: 'ч', labelClass: 'daily-label', note: carried ? 'Время между прежними записями' : '', validation: true })}
+    ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', val('dailyOrders'), { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : '', validation: true })}
+    <h2 class="form-section-heading">Выплата, чаевые и удержания</h2>
+    ${field('reward', 'Выплачено', val('reward'), { full: true, note: 'Фактическая сумма выплаты за слот', validation: true })}
     ${field('tax', 'Налог', val('tax'), { unit: '₽', note: `Ориентир ${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%`, validation: true })}
     ${field('parkCommission', 'Комиссия парка', val('parkCommission'), { unit: '₽', note: `Ориентир ${PARK_COMMISSION_PERCENT}%`, validation: true })}
-    ${field('tips', 'Чаевые', val('tips'))}${field('separateBonus', 'Отдельные бонусы', val('separateBonus'))}</div>
+    ${field('tips', 'Чаевые', val('tips'), { validation: true })}${field('separateBonus', 'Отдельные бонусы', val('separateBonus'), { validation: true })}<section class="slot-live-summary full" aria-live="polite"><div><span>Удержания</span><strong id="slotDeductionTotal">— ₽</strong></div><div><span>Начислено</span><strong id="slotAccrued">— ₽</strong></div><p id="slotAccrualFormula">Часы × ставка + чаевые − удержания</p></section></div>
     <details class="additional slot-working"><summary>Рабочее время дня${icons.down}</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
@@ -615,32 +621,72 @@ function form(id = null, returnTo = 'history') {
     $('#slotWorkTotal').addEventListener('input',()=>{workingDirty=true;});
   }
   renderWorking(e.date);
+  function setInlineError(key,message='') {
+    const input=$('#'+key),status=$('#'+key+'-error');
+    input.setAttribute('aria-invalid',String(Boolean(message)));
+    if(status){status.textContent=message;status.hidden=!message;}
+  }
+  function refreshInlineValidation() {
+    const checks={
+      dailyHours:()=>parseHours($('#dailyHours').value),
+      dailyOrders:()=>parseInteger($('#dailyOrders').value,'Заказы за слот'),
+      reward:()=>parseMoney($('#reward').value,'Выплачено'),
+      tips:()=>parseMoney($('#tips').value,'Чаевые'),
+      tax:()=>parseMoney($('#tax').value,'Налог'),
+      parkCommission:()=>parseMoney($('#parkCommission').value,'Комиссия парка'),
+      separateBonus:()=>parseMoney($('#separateBonus').value,'Отдельные бонусы')
+    };
+    for(const [key,parse] of Object.entries(checks)){
+      const input=$('#'+key);
+      if(!input.value.trim()){setInlineError(key);continue;}
+      try{parse();setInlineError(key);}catch(error){setInlineError(key,error.message);}
+    }
+  }
+  const moneyInput=key=>{try{return parseMoney($('#'+key).value,key);}catch{return 0;}};
+  function refreshSlotPreview() {
+    const tax=moneyInput('tax'),commission=moneyInput('parkCommission'),tips=moneyInput('tips');
+    const deductions=Math.round((tax+commission)*100)/100;
+    $('#slotDeductionTotal').textContent=money(deductions);
+    let base=null,terms=null,hours=null;
+    try{
+      terms=paymentTermsFor(state,$('#date').value);
+      const raw=$('#dailyHours').value.trim();
+      if(raw){hours=parseHours(raw);base=calculateScenario({hours:raw,orders:'0'},terms).hourlyBase;}
+    }catch{}
+    const accrued=accruedIncome(base,tips,tax,commission);
+    $('#slotAccrued').textContent=money(accrued);
+    $('#slotAccrualFormula').textContent=base==null?'Введите часы, чтобы увидеть начисление':hoursText(hours)+' ч × '+money(terms.hourlyRate)+'/ч + '+money(tips)+' − '+money(deductions)+' = '+money(accrued);
+  }
   function refreshDeductions() {
     let check = null;
-    try { check = deductionChecks({ reward: $('#reward').value, tax: $('#tax').value, parkCommission: $('#parkCommission').value }); }
-    catch { /* The reward's number format is validated on save. */ }
+    try {
+      const raw=$('#dailyHours').value.trim();
+      if(raw){const base=calculateScenario({hours:raw,orders:'0'},paymentTermsFor(state,$('#date').value)).hourlyBase;check=deductionChecks({reward:base,tax:$('#tax').value,parkCommission:$('#parkCommission').value});}
+    } catch { /* Invalid values remain visible in their inline field errors. */ }
     for (const key of ['tax', 'parkCommission']) {
-      const rate = key === 'tax' ? `${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%` : `${PARK_COMMISSION_PERCENT}%`;
-      const guide = check ? (key === 'tax' ? `${money(check.expectedTax.min)}–${money(check.expectedTax.max)}` : money(check.expectedCommission)) : null;
-      $(`#${key}-note`).textContent = `Ориентир ${rate}${guide ? `: ${guide}` : ''}`;
+      const rate = key === 'tax' ? TAX_PERCENT_MIN+'–'+TAX_PERCENT_MAX+'%' : PARK_COMMISSION_PERCENT+'%';
+      const guide = check ? (key === 'tax' ? money(check.expectedTax.min)+'–'+money(check.expectedTax.max) : money(check.expectedCommission)) : null;
+      $('#'+key+'-note').textContent = 'Ориентир '+rate+(guide ? ': '+guide : '');
       const error = check?.errors.find(e => e.field === key);
       const warning = check?.warnings.find(e => e.field === key);
-      const status = $(`#${key}-error`);
+      const status = $('#'+key+'-error');
       status.textContent = error?.message ?? warning?.message ?? '';
       status.hidden = !error && !warning;
       status.classList.toggle('field-warning', Boolean(warning) && !error);
-      $(`#${key}`).classList.toggle('has-warning', Boolean(warning) && !error);
-      $(`#${key}`).setAttribute('aria-invalid', String(Boolean(error)));
+      $('#'+key).classList.toggle('has-warning', Boolean(warning) && !error);
+      $('#'+key).setAttribute('aria-invalid', String(Boolean(error)));
     }
   }
-  for (const key of ['reward', 'tax', 'parkCommission']) {
-    $(`#${key}`).addEventListener('input', () => { refreshDeductions(); $('#formError').hidden = true; });
+  for (const key of ['dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus']) {
+    $('#'+key).addEventListener('input', () => { refreshInlineValidation(); refreshDeductions(); refreshSlotPreview(); $('#formError').hidden = true; });
   }
+  refreshInlineValidation();
   refreshDeductions();
+  refreshSlotPreview();
   function refreshSlotHint() {
     const count = state.entries.filter(row => row.date === $('#date').value && row.id !== editingId).length;
     $('#slotHint').hidden = count === 0;
-    $('#slotHint').textContent = `Других слотов за эту дату: ${count}`;
+    $('#slotHint').textContent = `Уже добавлено слотов за эту дату: ${count}`;
   }
   refreshSlotHint();
   $('#date').addEventListener('change', event => {
@@ -648,6 +694,7 @@ function form(id = null, returnTo = 'history') {
     catch { $('#formPeriod').textContent = ''; }
     refreshSlotHint();
     renderWorking(event.target.value);
+    refreshInlineValidation(); refreshDeductions(); refreshSlotPreview();
   });
   $('#dayForm').addEventListener('submit', event => {
     event.preventDefault();
@@ -655,7 +702,9 @@ function form(id = null, returnTo = 'history') {
     const fields = Object.fromEntries(new FormData(event.target));
     try {
       saving = true; $('#saveDay').disabled = true;
-      refreshDeductions();
+      refreshInlineValidation(); refreshDeductions(); refreshSlotPreview();
+      const invalid=app.querySelector('.form-grid input[aria-invalid="true"]');
+      if(invalid){invalid.focus();throw new Error('Исправьте значения в отмеченных полях.');}
       // The retired supplementary fields remain in legacy entries and exports.
       let next = upsertEntry(state, { ...fields, displayedNet:original?.displayedNet ?? null, note:original?.note ?? '', id: entryId }, editingId);
       if (workingDirty) {
@@ -697,12 +746,12 @@ function history() {
   app.className = empty ? 'history-empty' : '';
   const card = (e, title) => {
     const readingHtml = `<div class="day-meters"><div class="day-meter"><strong>${hoursText(e.dailyHours)}<span> ч</span></strong><small>Отработано</small></div><div class="day-meter"><strong>${e.dailyOrders ?? '—'}</strong><small>Заказов</small></div></div><p class="day-delta" ${!dayCaption(e) && e.dailyHours != null && e.dailyOrders != null ? 'hidden' : ''}>${esc(dayCaption(e))}${e.dailyHours == null ? ' · часы не записаны' : ''}${e.dailyOrders == null ? ' · заказы не записаны' : ''}</p>`;
-    return `<article class="day-card"><div class="day-head"><h2>${esc(title)}</h2><button class="edit-day" data-date="${e.date}" data-entry="${esc(e.id)}" type="button" aria-label="Редактировать ${esc(title)}">Изменить</button></div>${readingHtml}<div class="day-money"><div class="day-row"><span>Вознаграждение</span>${amount(e.reward)}</div><div class="day-row"><span>Чаевые</span>${amount(e.tips)}</div><div class="day-row"><span>Отдельные бонусы</span>${amount(e.separateBonus)}</div>${e.displayedNet != null ? `<div class="day-row"><span>Итог на экране</span>${amount(e.displayedNet)}</div>` : ''}</div>${e.note ? `<p class="day-note">${esc(e.note)}</p>` : ''}</article>`;
+    return `<article class="day-card"><div class="day-head"><h2>${esc(title)}</h2><button class="edit-day" data-date="${e.date}" data-entry="${esc(e.id)}" type="button" aria-label="Редактировать ${esc(title)}" title="Редактировать ${esc(title)}">Изменить</button></div>${readingHtml}<div class="day-money"><div class="day-row"><span>Выплачено</span>${amount(e.reward)}</div><div class="day-row"><span>Чаевые</span>${amount(e.tips)}</div><div class="day-row"><span>Отдельные бонусы</span>${amount(e.separateBonus)}</div>${e.displayedNet != null ? `<div class="day-row"><span>Итог на экране</span>${amount(e.displayedNet)}</div>` : ''}</div>${e.note ? `<p class="day-note">${esc(e.note)}</p>` : ''}</article>`;
   };
   const groups = [...new Set(s.entries.map(e => e.date))].reverse().map(date => {
     const d = calculateDay(state, date);
     if (d.entries.length === 1) return card(d.entries[0], formatDate(date, true));
-    return `<section class="day-group"><h2>${esc(formatDate(date, true))}</h2><div class="day-summary"><p class="day-summary-counters">${hoursText(d.hours)} ч · ${d.orders ?? '—'} заказов</p><strong class="day-summary-reward">${esc(money(d.paidReward))}</strong></div><div class="slot-list">${d.entries.map((e, i) => card(e, `Слот ${i + 1}`)).reverse().join('')}</div></section>`;
+    return `<section class="day-group"><h2>${esc(formatDate(date, true))}</h2><div class="day-summary"><p class="day-summary-counters">${hoursText(d.hours)} ч · ${d.orders == null ? '—' : d.orders + ' ' + orderWord(d.orders)}</p><strong class="day-summary-reward">${esc(money(d.paidReward))}</strong></div><div class="slot-list">${d.entries.map((e, i) => card(e, `Слот ${i + 1}`)).reverse().join('')}</div></section>`;
   });
   const emptyFooter = `<div class="history-footer history-empty-footer">
       <p class="history-section-label">Работа с данными</p>
