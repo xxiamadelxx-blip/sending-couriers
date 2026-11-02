@@ -2460,7 +2460,8 @@ html,body {
 #homeDeck .home-focus .pace-hero h2 { margin:0 0 8px; color:var(--text-secondary); font-size:13px; font-weight:500; letter-spacing:0; }
 #homeDeck .hero-pace { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; color:var(--text-secondary); font-size:13px; }
 #homeDeck .hero-pace strong { color:var(--accent); font-size:clamp(42px,12vw,56px); line-height:1; letter-spacing:-.035em; }
-#homeDeck .gauge { width:96px; height:96px; }\n#homeDeck .gauge canvas { width:100%; height:100%; display:block; }
+#homeDeck .gauge { width:96px; height:96px; }
+#homeDeck .gauge canvas { width:100%; height:100%; display:block; }
 #homeDeck .gauge-label strong { color:var(--accent); font-size:20px; }
 #homeDeck .gauge-label span { color:var(--text-secondary); font-size:10px; line-height:1.25; }
 #homeDeck .meters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-3); margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--line); }
@@ -2611,7 +2612,8 @@ html,body {
 @media(max-width:380px) {
   #app { padding-left:calc(12px + var(--safe-left)); padding-right:calc(12px + var(--safe-right)); }
   #homeDeck .home-focus .pace-hero { grid-template-columns:minmax(0,1fr) 88px; gap:8px; }
-  #homeDeck .gauge { width:84px; height:84px; }\n  #homeDeck .gauge canvas { width:100%; height:100%; display:block; }
+  #homeDeck .gauge { width:84px; height:84px; }
+  #homeDeck .gauge canvas { width:100%; height:100%; display:block; }
   #homeDeck .hero-pace strong { font-size:clamp(36px,11vw,46px); }
   #app .period-day>summary { grid-template-columns:minmax(0,1fr) auto; }
   #app .period-day-chevron { display:none; }
