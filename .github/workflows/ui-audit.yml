@@ -54,6 +54,17 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Prepare SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Download pinned offline Russian and English OCR models
+        run: |
+          set -euo pipefail
+          mkdir -p m4-models/tessdata
+          base='https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd'
+          curl -fL "$base/rus.traineddata" -o m4-models/tessdata/rus.traineddata
+          curl -fL "$base/eng.traineddata" -o m4-models/tessdata/eng.traineddata
+          test "$(git hash-object m4-models/tessdata/rus.traineddata)" = b146cb2263acbc6383f8e92ea0ce759537687bb8
+          test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
+          test "$(wc -c < m4-models/tessdata/rus.traineddata)" -eq 3861738
+          test "$(wc -c < m4-models/tessdata/eng.traineddata)" -eq 4113088
       - name: Build isolated test APK, preserve release signing
         run: |
           cp -a . "$RUNNER_TEMP/courier-ui-source"
