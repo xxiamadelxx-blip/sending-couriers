@@ -4,10 +4,21 @@
 
 ## Verified baselines
 
-- Current source branch: `release/forecast-video-upload-20261101`, commit `1ba9b0d04b47e0c15c99aa6ba0f8edd2d6b2ed25`. The APK obtained from GitHub Actions run [41415151486](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41415151486) contains `assets/www/style.css`, `app.mjs`, and the other UI assets for source inspection. This run is an M4 build, **not a visual Android sign-off**.
-- Actual historical Android 35 dark/light screenshots at 360/390 from [UI audit run 40846918821](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40846918821), artifact `ui-audit-a1340c1d23615893a68dbafc705930578236dda7`. They show Home, Period, Add Slot, Forecast and History, **but are from 29 October and a different SHA**.
-- Current SpawnDroid logged-in browser session: **BLOCKED** here. Browser connector rejects access without its originating browser/extension context. TinyFish has neither a recorded SpawnDroid sign-in nor a funded balance; Limrun has no running instance. No fresh Android screenshots for this candidate were obtained.
+- Base APK source branch: `release/forecast-video-upload-20261101`, commit `1ba9b0d04b47e0c15c99aa6ba0f8edd2d6b2ed25`. The APK obtained from GitHub Actions run [41415151486](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41415151486) contains `assets/www/style.css`, `app.mjs`, and the other UI assets for source inspection. This run is an M4 build, **not a visual Android sign-off**.
+- Historical Android 35 dark/light screenshots at 360/390 from [UI audit run 40846918821](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/40846918821), artifact `ui-audit-a1340c1d23615893a68dbafc705930578236dda7`. They show Home, Period, Add Slot, Forecast and History, **but are from 29 October and a different SHA**; they are context only, not evidence for this candidate.
 - Local technical checks of extracted release APK assets: JS syntax `node --check` PASS; CSS `tinycss2.parse_stylesheet` PASS after the two CSS edits. These checks **do not prove Android visual QA**.
+
+## Android QA · SpawnDroid · 2 November 2026
+
+- Candidate source: branch `ui/unslop-light-polish-20261102`, commit `f366a269219afffe0c41283c823131f1b8cc8525`.
+- Device: Android 15 / API 35 phone, Russian locale, 720×1280 px at 320 dpi (360×640 dp).
+- Base: `Courier-Finance-1.7.24-base-UI-QA.apk`, package `ru.courier.finance.transfer`, version `1.7.24 (38)`, SHA-256 `d66311209289c967f2b464abd46e974e35d1954f729d98c6d5fdabd336d18008`.
+- Candidate: `Courier-Finance-1.7.24-unslop-UI-QA.apk`, same package/version, SHA-256 `a12f08d0adc419d1e586686f9d38e9a47f6af02cf87918e6f9ebab3c2be4c2fb`. It was derived from that base APK with the PR's CSS and signed with a temporary QA key so SpawnDroid could replace the test build. Both test APKs used that QA signer; neither is a production update.
+- Synthetic data: one entry for 2 November 2026 with a 320 ₽ reward and unknown hours/orders. The JSON import preview showed 1 record, 1 day, and 0 closed periods on both APKs. Import was cancelled on both; no import was applied.
+- Base and candidate import-dialog captures use the same preview data. The candidate's three counter captions are visibly larger; “ЗАКРЫТЫХ ПЕРИОДОВ” still wraps within its tile without colliding with other content. See [base](evidence/unslop-2026-11-02/base-import-dialog.jpg) and [candidate](evidence/unslop-2026-11-02/candidate-import-dialog.jpg).
+- On the candidate, Period was checked collapsed and expanded with the synthetic entry. The day-card metadata at 12 px remains legible and inside the card. The expanded-card capture is [here](evidence/unslop-2026-11-02/candidate-period-expanded.jpg). A matched base capture of the expanded card was not retained, so this is a candidate inspection, not a before/after comparison for that screen.
+- Candidate UI navigation to History and the import dialog worked. No visual regression was noticed in the tested card treatment, orange accents, or bottom navigation. In the captured viewport, the expanded card continues below the fixed navigation line; full scroll and touch behavior was not validated.
+- The SpawnDroid session was stopped after inspection. The candidate is a test artifact only; no release build or installed user app was changed.
 
 ## Five-point direction (derived from approved SHIFT CONTROL brand)
 
@@ -30,7 +41,7 @@
 | Motion | No demonstrated visual defect | Not confirmed | No changes |
 | Forecast model and import | Explicitly out of scope | Protected | No changes |
 
-### Nine Unslop passes, light mode
+### Nine Unslop passes · polish mode
 
 1. **Spacing:** retained approved period and nav geometry.
 2. **Color:** retained graphite/orange and saved themes.
@@ -46,14 +57,16 @@
 
 | Criterion | Evidence / check | Status |
 | --- | --- | --- |
-| No changes to financial calculations, forecast or storage | CSS-only source diff | PASS for **diff scope** |
+| Financial calculations, forecast and storage remain unchanged | CSS-only source diff | **PASS** |
 | CSS stays syntactically valid | `tinycss2` parse of candidate CSS | PASS |
-| Existing JS remains parseable | `node --check` over extracted APK assets; JS unchanged | PASS for **baseline only** |
-| At 360/390 dp both small-text corrections are readable without overlap | Fresh Android 35/SpawnDroid screenshot after installing a build of this branch | **NOT RUN** |
-| Day expanded cards, import dialog, dark/light, large text | Native touch interactions + visual comparison | **NOT RUN** |
-| Restart, edit/save and historical facts remain intact | Native read/write validation on exact new APK | **NOT RUN** |
-| User accepts visual result | Show fresh before/after images from the exact APK | **NOT RUN** |
+| Existing JS remains parseable | `node --check` over extracted APK assets; candidate JS is unchanged | **PASS** |
+| Import-counter labels, same synthetic preview, base vs candidate at 360 dp | SpawnDroid screenshots; larger candidate labels, no overlap, third label wraps within its tile | **PASS** |
+| Candidate Period collapsed/expanded with a day entry | SpawnDroid candidate screenshot; 12 px metadata fits in the visible card | **PASS** |
+| Matched before/after expanded Period card | No retained base expanded-card screenshot | **NOT RUN** |
+| Light theme, 390 dp, large text, remaining UI states | Not part of this SpawnDroid pass | **NOT RUN** |
+| Restart, edit/save and historical facts remain intact | No force-stop/restart or edit/save validation on this candidate | **NOT RUN** |
+| User accepts visual result | Owner review of the attached Android captures | **NOT RUN** |
 
-**Release gate:** do not merge or claim visual PASS until a fresh APK is built, installed, and inspected on Android and owner explicitly approves the resulting screen. This draft must not be confused with the previously tested APK.
+**Release gate:** this is a limited Android spot check, not full UI acceptance. Do not merge or claim final visual PASS until the owner explicitly approves the screenshots. The draft must not be confused with a production-signed update.
 
-**Next action:** restore the originating SpawnDroid browser session in Work/connected browser, run current baseline and candidate APK on the same 360/390 device configurations, capture Import and Period collapsed/expanded and inspect. If the changes do not fit, revert the two CSS selectors.
+**Next action:** owner reviews the attached captures. Keep the PR draft until that review. If the visual result is rejected, revert the two CSS selectors.
