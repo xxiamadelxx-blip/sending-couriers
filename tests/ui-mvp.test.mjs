@@ -53,7 +53,7 @@ test('UI M2: native full audit opens and cancels export, scroll-checks all tarif
  assert.match(qa,/capture\('export-dialog-360-dark'\)/);
  assert.match(qa,/device\.tap_node\('Закрыть'\)/);
  assert.match(qa,/Export modal remained open/);
- for(const term of ['Темп для оплаты','Темп для премии','Минимум часов за период','Критический темп','Премия за темп','Премия за 12 недель']) assert.ok(qa.includes(term));
+ for(const term of ['Цель темпа для выплаты','Темп для премии','Минимум часов за период','Критический темп','Премия за темп','Премия за 12 недель']) assert.ok(qa.includes(term));
  assert.match(qa,/Payment setting not reachable by scroll/);
  assert.match(qa,/capture\(f'settings-field-visible-/);
 });
@@ -70,6 +70,12 @@ test('UI M2: native history return waits for the rendered heading text',()=>{
  assert.ok(app.includes("heading('История')"));
  assert.match(qa,/device\.wait_node\('История', 20\)/);
  assert.doesNotMatch(qa,/device\.wait_node\('ИСТОРИЯ', 20\)/);
+});
+
+test('UI M2: settings accessibility audit uses the payment target label shown by the app',()=>{
+ assert.ok(app.includes("field('basePace','Цель темпа для выплаты'"));
+ assert.ok(qa.includes("device.find_node(root, 'Цель темпа для выплаты')"));
+ assert.ok(qa.includes("fields = ('Цель темпа для выплаты', 'Темп для премии'"));
 });
 
 test('UI M2: native Android file picker opens and cancel preserves both forecast durations',async()=>{

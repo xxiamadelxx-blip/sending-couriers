@@ -347,10 +347,10 @@ def main():
             if args.focus != 'delta':
                 device.tap_node('Остальные условия')
                 root = capture(f'settings-more-{suffix}')
-                assert device.find_node(root, 'Темп для оплаты') is not None
+                assert device.find_node(root, 'Цель темпа для выплаты') is not None
                 # The DOM can list off-screen fields with [0,0][0,0] bounds.
                 # For each payment setting, independently prove scroll reachability.
-                fields = ('Темп для оплаты', 'Темп для премии',
+                fields = ('Цель темпа для выплаты', 'Темп для премии',
                           'Минимум часов за период', 'Критический темп',
                           'Премия за темп', 'Премия за 12 недель')
                 for field_index, label in enumerate(fields):
