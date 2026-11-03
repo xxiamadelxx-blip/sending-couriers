@@ -2444,7 +2444,7 @@ html,body {
 #app .weather-icons { gap:8px; }
 #app .weather-mini { display:flex; align-items:center; gap:4px; color:var(--text-secondary); }
 #app .weather-mini strong { color:var(--text-primary); font-size:12px; font-weight:500; }
-#app .period-button { min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:var(--surface); color:var(--text-primary); }
+#app .period-button { min-height:48px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:var(--surface); color:var(--text-primary); }
 #app .home-stack { position:relative; display:grid; gap:var(--space-4); padding-left:12px; }
 #app .home-stack::before { content:""; position:absolute; z-index:0; top:24px; bottom:24px; left:4px; width:1px; background:var(--line); pointer-events:none; }
 #app .home-stack > :not(.home-empty) { position:relative; z-index:1; }
