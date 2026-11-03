@@ -127,6 +127,14 @@ test('UI M2: sliders and header controls retain 48dp targets after page styles a
  assert.match(css,/#app \.back,#app \.export-icon,#app \.theme-toggle,#app \.period-arrow \{ width:48px; height:48px; min-width:48px; min-height:48px;/);
  assert.match(css,/#app\.forecast-page \.duration-slider \{ width:100%; height:48px; min-height:48px;/);
 });
+test('UI M2: large-text form detects IME resize against the pre-keyboard viewport',()=>{
+ const start=app.indexOf('function installLargeTextFormLabelFocusGuard()');
+ const end=app.indexOf('function form(',start);
+ const guard=app.slice(start,end);
+ assert.match(guard,/const fullViewportHeight = Math\.max\(window\.innerHeight, window\.visualViewport\?\.height \?\? 0\)/);
+ assert.match(guard,/currentViewportHeight < fullViewportHeight - 100/);
+ assert.match(guard,/const offset = keyboardOpen \? Math\.min\(missing, room\) : 0/);
+});
 
 test('Android smoke returns from XLSX picker and verifies saved facts and current payout label',async()=>{
  const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');

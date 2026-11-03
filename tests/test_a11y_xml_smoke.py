@@ -22,8 +22,8 @@ class AccessibilityNativeXmlTest(unittest.TestCase):
         self.assertEqual(visible_accessible_actions(root)['named'], 0)
 
     def test_named_seekbar_role_and_48dp_target(self):
-        root = nodes('<node class="android.widget.SeekBar" clickable="true" text="14 ч, Слот" bounds="[273,1437][897,1584]"/>')
-        self.assertTrue(specific_named_control(root, 'Слот', role='SeekBar', min_pixels=144))
+        root = nodes('<node class="android.widget.SeekBar" clickable="true" text="14 ч, Полный слот" bounds="[267,1329][903,1476]"/>')
+        self.assertTrue(specific_named_control(root, 'Полный слот', role='SeekBar', min_pixels=144))
         self.assertFalse(specific_named_control(root, 'Из них буду работать', role='SeekBar', min_pixels=144))
 
     def test_unnamed_native_text_input_fails_accessible_name_gate(self):

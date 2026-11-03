@@ -91,9 +91,9 @@ def inspect_all_layouts(directory):
                 required.extend((s, 'Button') for s in (
                     'Экспорт для ChatGPT', 'Выбрать расчётный период'))
             if surface == 'forecast':
-                required.extend((s, 'SeekBar') for s in ('Слот', 'Из них буду работать'))
+                required.extend((s, 'SeekBar') for s in ('Полный слот', 'Из них буду работать'))
                 required.extend((s, 'Button') for s in (
-                    'Слот: минус', 'Слот: плюс',
+                    'Полный слот: минус', 'Полный слот: плюс',
                     'Из них буду работать: минус', 'Из них буду работать: плюс'))
                 # Import action is below the fold on the unscrolled native screen.
                 # Its reachability is tested by qa/xlsx_import_smoke.py with swipes.

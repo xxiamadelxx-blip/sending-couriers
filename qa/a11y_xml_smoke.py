@@ -99,9 +99,9 @@ def inspect(directory):
             f'{screen}: missing 48dp labelled {kind} for {label!r}')
     for label in BOTTOM:
         required('home-390-dark', label)
-    for label in ('Слот', 'Из них буду работать'):
+    for label in ('Полный слот', 'Из них буду работать'):
         required('forecast-390-dark', label, 'SeekBar')
-    for label in ('Слот: минус', 'Слот: плюс',
+    for label in ('Полный слот: минус', 'Полный слот: плюс',
                   'Из них буду работать: минус', 'Из них буду работать: плюс'):
         required('forecast-390-dark', label)
     for label in ('Редактировать Слот 1', 'Редактировать Слот 2'):
@@ -120,7 +120,7 @@ def inspect(directory):
             ('Часы за слот', 'Заказы за слот', 'Вознаграждение', 'Налог',
              'Комиссия парка', 'Чаевые', 'Отдельные бонусы'), 'form-390-dark'),
         'forecast-390-dark': require_native_edit_labels(snapshots['forecast-390-dark'],
-            ('Слот', 'Из них буду работать'), 'forecast-390-dark'),
+            ('Полный слот', 'Из них буду работать'), 'forecast-390-dark'),
         'settings-main-390-dark': require_native_edit_labels(snapshots['settings-main-390-dark'],
             ('Ставка за час',), 'settings-main-390-dark'),
     }
