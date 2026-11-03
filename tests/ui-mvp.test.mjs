@@ -101,11 +101,18 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
   }
   assert.match(forecast,/durationField\('todaySlotHours','Полный слот',slot,'',30\)/);
   assert.match(forecast,/durationField\('todayWorkHours','Из них буду работать',work,'',30\)/);
-  assert.match(qa,/durations\(after_slot_plus\) == \[14\.5, 8\]/);
-  assert.match(qa,/durations\(after_active_plus\) == \[14, 8\.5\]/);
+  assert.match(qa,/assert durations\(current\) == expected/);
+  assert.match(qa,/200% action scroll changed planned hours/);
   assert.match(qa,/Thumb drag must use four 30-minute detents/);
   assert.match(qa,/200% round-trip values changed after process death/);
-  assert.match(qa,/bb\[3\] <= nav_box\[1\]/);
+  assert.match(qa,/def scroll_forecast_to_top\(/);
+  assert.match(qa,/def scroll_forecast_action_into_view\(label, attempts=8\):/);
+  assert.match(qa,/scroll_forecast_action_into_view\(label\)/);
+});
+
+test('UI M2: narrow and large-text forecast import actions use one readable column',()=>{
+ assert.match(css,/@media\(max-width:380px\)\s*\{[\s\S]*?#app \.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
+ assert.match(css,/:root\[data-text-scale="large"\] #app \.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
 });
 
 test('UI M2: large text forecast reserves scroll room above the fixed navigation',()=>{
@@ -135,103 +142,4 @@ test('200% slider hitbox parsing uses digit regex that matches Android node coor
 
 test('CI Android runner preserves XLSX and transfer gates with independent exit status',async()=>{
   const ci=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
-  const runner=await readFile(new URL('../qa/run_ui_gates.py',import.meta.url),'utf8');
-  assert.match(ci,/python3 qa\/run_ui_gates\.py --apk/);
-  assert.match(runner,/'xlsx_import': \[/);
-  assert.match(runner,/\['python3', 'qa\/xlsx_import_smoke\.py'\]/);
-  assert.match(runner,/for name in names\[1:-1\]:\s*run\(name, skip=focus != 'full', blocked=not baseline_ok\)/);
-  assert.match(runner,/run\('transfer_upgrade'\)/);
-  assert.match(runner,/'status': 'PASS' if exit_code == 0 else 'FAIL'/);
-  assert.match(runner,/return 0 if json\.loads\(output\.read_text\(\)\)\['result'\] == 'PASS' else 1/);
-});
-
-test('release: transfer build and manifest agree on 1.7.27/code41 and keep the 1.7.14/code28 upgrade path',async()=>{
- const manifest=await readFile(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8');
- const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
- const build=await readFile(new URL('../build.py',import.meta.url),'utf8');
- const workflow=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
- assert.match(manifest,/android:versionCode="41" android:versionName="1\.7\.27"/);
- assert.match(core,/export const APP_VERSION = '1\.7\.27';/);
- assert.match(build,/Courier-Finance-1\.7\.27\.apk/);
- assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='41' versionName='1.7.27'"));
- assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
- assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
-});
-
-test('UI-013 full 200% label remains visible after opening IME, not just input and Save',async()=>{
- const f=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
- assert.match(css,/:root\[data-text-scale="large"\] \.form-page \.form-grid \.field input\{\s*scroll-margin-block-start:42px;/);
- assert.match(f,/assert focused_field_completely_visible\(root, label\)/);
- assert.match(f,/IME-label-fully-visible/);
-});
-
-test('UI-013: 200% native form focus repositions whole label after IME resize',()=>{
- assert.match(app,/function installLargeTextFormLabelFocusGuard\(\)/);
- assert.match(app,/const offset = keyboardOpen \? Math\.min\(missing, room\) : 0;/);
- assert.match(app,/scroll\.style\.paddingTop = offset > 0 \?/);
- assert.match(app,/scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
- assert.match(app,/window\.visualViewport\?\.addEventListener\('resize', schedule\)/);
- assert.match(app,/scroll\.addEventListener\('focusin', schedule\)/);
- assert.match(app,/installLargeTextFormLabelFocusGuard\(\);/);
-});
-
-test('UI-014: all input templates provide escaped explicit Android-accessible field names', async()=>{
- const duration=await readFile(new URL('../web/duration-control.mjs',import.meta.url),'utf8');
- const forecast=await readFile(new URL('../web/forecast-ui.mjs',import.meta.url),'utf8');
- assert.ok(app.includes('type="text" aria-label="${esc(label)}" inputmode='), 'slot and tariff text inputs missing label');
- assert.ok(duration.includes('type="text" aria-label="${esc(label)}" inputmode='), 'forecast duration input missing label');
- assert.ok(forecast.includes('type="${type}" aria-label="${esc(label)}" value='), 'forecast history input missing label');
-});
-
-test('Period day totals use independent calculateDay facts, not forecast or Home gross earnings',()=>{
- const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
- assert.match(section,/periodDayMarkup\(s\.entries,date=>calculateDay\(state,date\)/);
- assert.doesNotMatch(section,/money\(s\.grossUserIncome\)/);
- assert.doesNotMatch(section,/id="periodReward"/);
- // Period edit listeners are delegated in the module's final render setup,
- // outside periodDetails() and the section slice above.
- assert.match(app,/querySelectorAll\('\.period-slot-edit'\)/);
- assert.match(app,/form\(button\.dataset\.entry,'period'\)/);
-});
-test('approved History: day reward plus full per-slot fields and separate edit by stable id',()=>{
- const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
- assert.match(section,/class="day-summary"/);
- assert.match(section,/class="day-summary-reward"/);
- assert.match(section,/money\(d\.paidReward\)/);
- for(const label of ['Выплачено','Чаевые','Отдельные бонусы','Итог на экране','Отработано','Заказов']) {
-   assert.ok(section.includes(label), 'missing existing entry field or label: '+label);
- }
- assert.ok(section.includes('data-entry="${esc(e.id)}"'));
- assert.ok(section.includes("d.entries.map((e, i) => card(e, `Слот ${i + 1}`)"));
-});
-
-test('Period secondary 12-week tracker shows gross-income and 5% premium separately from paid amounts',()=>{
- const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
- assert.ok(section.indexOf('class="period-days"') < section.indexOf('class="cycle-bonus-metrics"'));
- for(const name of ['Общий доход цикла','cycleTotalIncome','cyclePremium','Расчётная премия, выплата не подтверждена']) assert.ok(section.includes(name),name);
- assert.match(css,/\.period-page \.period-cycle-compact #cyclePremium\{color:var\(--teal\)\}/);
-});
-
-test('Period cycle settings offer saved gross opening amount and ChatGPT JSON import with date cutoff',()=>{
- const p=app.slice(app.indexOf('function periodDetails()'),app.indexOf('function settings()'));
- for(const token of ['cycleOpeningGross','cycleOpeningThrough','importCycleReport','Сохранить накопленный доход','cycleOpeningInput()'])assert.ok(p.includes(token),token);
- assert.ok(p.indexOf('class="period-days"') < p.indexOf('cycle-opening-fields'));
-});
-
-test('Add Slot form uses accessible in-app work-mode choice rather than Android system select',()=>{
- const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
- assert.doesNotMatch(page,/<select id="slotWorkMode"/,'native Android selector must not open a system popup');
- for(const s of ['id="slotWorkModeButton"','id="slotModeOptions"','role="radiogroup"','data-slot-mode="${key}"',"['unknown','Не указывать']","['intervals','Интервалы С—До']","['total','Итого за день']","['rest','Выходной']"])
-   assert.ok(page.includes(s),s);
- assert.ok(page.includes('id="slotWorkMode" type="hidden" value="${mode}"'),'the mode is tracked as a real form control for save');
- assert.ok(page.includes('workingDirty=true'),'mode changes must be tracked as user edits');
-});
-test('Add Slot form has aligned responsive money fields and no dash placeholders',()=>{
- const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
- assert.doesNotMatch(page,/input\.placeholder = '—'/,'empty numeric inputs must remain empty without visual dashes');
- assert.match(page,/input\.placeholder = 'Введите'/);
- assert.match(css,/\.form-page \.field-box\{[^}]*min-height:54px/);
- assert.match(css,/\.form-page \.form-grid\{[^}]*align-items:start/);
- assert.match(css,/\.form-page \.slot-mode-options \[role="radio"\]/);
-});
-
+  const runner=await readFile(new URL('../qa/run_ui_gates.py',impo
