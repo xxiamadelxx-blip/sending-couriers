@@ -108,6 +108,11 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
   assert.match(qa,/bb\[3\] <= nav_box\[1\]/);
 });
 
+test('UI M2: large text forecast reserves scroll room above the fixed navigation',()=>{
+ assert.match(css,/:root\[data-text-scale="large"\] #app \.forecast-page \{ padding-bottom:72px;/);
+ assert.match(qa,/action_bounds\[3\] <= nav_bounds\[1\]/);
+});
+
 test('MVP Android M2 positive XLSX: full workflow imports same report twice and verifies saved facts',async()=>{
  const ci=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
  const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
