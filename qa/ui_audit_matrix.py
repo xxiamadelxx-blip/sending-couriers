@@ -497,8 +497,8 @@ def main():
             root = scroll_forecast_to_top()
             assert durations(root) == [14, 8], f'Unexpected 200% baseline: {durations(root)}'
             interactions = (
-                (f'Слот: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-plus', [14.5, 8]),
-                (f'Слот: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-restored', [14, 8]),
+                (f'Полный слот: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-plus', [14.5, 8]),
+                (f'Полный слот: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-restored', [14, 8]),
                 (f'Из них буду работать: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-active-plus', [14, 8.5]),
                 (f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-both-restored', [14, 8]),
             )
@@ -520,6 +520,16 @@ def main():
             nb = list(map(int, re.findall(r'\d+', nav.get('bounds', '')))) if nav is not None else []
             assert len(ab) == len(nb) == 4 and ab[1] >= 0 and ab[3] <= nb[1], (
                 f'200% import action was not reachable after slider checks: {ab}, {nb}'
+            )
+            video_action = device.find_node(root, 'Импортировать видео')
+            vb = list(map(int, re.findall(r'\d+', video_action.get('bounds', '')))) if video_action is not None else []
+            webview = next((n for n in root.iter('node') if n.get('class') == 'android.webkit.WebView'), None)
+            wb = list(map(int, re.findall(r'\d+', webview.get('bounds', '')))) if webview is not None else []
+            assert len(vb) == len(wb) == 4 and vb[1] >= ab[3] and vb[3] <= nb[1], (
+                f'200% import actions are not vertically stacked above navigation: {ab}, {vb}, {nb}'
+            )
+            assert abs(ab[0] - vb[0]) <= 24 and abs(ab[2] - vb[2]) <= 24 and ab[2] - ab[0] >= (wb[2] - wb[0]) * .75, (
+                f'200% import actions did not use one readable column: {ab}, {vb}, {wb}'
             )
             device.adb('shell', 'am', 'force-stop', device.PACKAGE)
             device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)

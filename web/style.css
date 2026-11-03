@@ -2621,6 +2621,9 @@ html,body {
   #app .period-day-chevron { display:none; }
   #app .forecast-page .forecast-import-actions { grid-template-columns:1fr; }
 }
+@media(max-width:420px) {
+  #app .forecast-page .forecast-import-actions { grid-template-columns:1fr; }
+}
 @media(prefers-reduced-motion:reduce) {
   #app *,#app *::before,#app *::after { scroll-behavior:auto!important; transition-duration:.01ms!important; animation-duration:.01ms!important; }
 }

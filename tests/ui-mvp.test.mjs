@@ -91,7 +91,7 @@ test('UI M2: native Android file picker opens and cancel preserves both forecast
 
 test('UI M2 native 200% font: both time bases are reachable, independently operable and persisted',()=>{
   assert.match(qa,/FORECAST_STEP_MINUTES = 30/);
-  for(const action of ['Слот: плюс','Слот: минус',
+  for(const action of ['Полный слот: плюс','Полный слот: минус',
                        'Из них буду работать: плюс','Из них буду работать: минус']){
     assert.ok(qa.includes(`f'${action} {FORECAST_STEP_MINUTES} минут'`),
       'missing Android 200% interaction: '+action);
@@ -112,6 +112,7 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
 
 test('UI M2: narrow and large-text forecast import actions use one readable column',()=>{
  assert.match(css,/@media\(max-width:380px\)\s*\{[\s\S]*?#app \.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
+ assert.match(css,/@media\(max-width:420px\)\s*\{\s*#app \.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
  assert.match(css,/:root\[data-text-scale="large"\] #app \.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
 });
 
@@ -136,7 +137,7 @@ test('200% slider hitbox parsing uses digit regex that matches Android node coor
  const block=qa.split("if scale == '2.0' and args.phase == 'after'")[1].split("if scale == '1.3' and args.phase == 'after'")[0];
  const expected=String.raw`re.findall(r'\d+',`;
  const wrong=String.raw`re.findall(r'\\d+',`;
- assert.equal(block.split(expected).length-1,2);
+ assert.equal(block.split(expected).length-1,4);
  assert.equal(block.split(wrong).length-1,0);
 });
 
