@@ -71,3 +71,53 @@ class AndroidSmokeOracleTests(TestCase):
         self.assertIsNone(device.find_node(root, "Пока мало данных"))
         smoke = MODULE.with_name("xlsx_import_smoke.py").read_text(encoding="utf-8")
         self.assertIn("wait_node(NO_WORK_HISTORY_LABEL, 25)", smoke)
+
+    def test_add_slot_never_taps_reward_field_outside_scroll_view(self):
+        offscreen = ET.fromstring('''<hierarchy>
+          <node class="android.view.View" scrollable="true" bounds="[33,407][1047,1670]">
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[36,1169][528,1334]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[552,1169][1044,1334]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[36,1670][1044,1838]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[36,0][528,0]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[552,0][1044,0]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[0,0][0,0]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[0,0][0,0]" />
+          </node>
+          <node text="Сохранить слот" bounds="[36,1709][1044,1874]" />
+        </hierarchy>''')
+        visible = ET.fromstring('''<hierarchy>
+          <node class="android.view.View" scrollable="true" bounds="[33,407][1047,1670]">
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[36,400][528,565]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[552,400][1044,565]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[36,900][1044,1065]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[36,0][528,0]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[552,0][1044,0]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[0,0][0,0]" />
+            <node class="android.widget.EditText" package="ru.courier.finance" bounds="[0,0][0,0]" />
+          </node>
+          <node text="Сохранить слот" bounds="[36,1709][1044,1874]" />
+        </hierarchy>''')
+        current = {"root": offscreen}
+        taps = []
+
+        def adb(*args, **kwargs):
+            if args[:3] == ("shell", "input", "swipe"):
+                current["root"] = visible
+            elif args[:3] == ("shell", "input", "tap"):
+                taps.append((int(args[3]), int(args[4])))
+            elif args[:3] == ("shell", "input", "text"):
+                typed = ET.fromstring(ET.tostring(current["root"]))
+                fields = [n for n in typed.iter("node")
+                          if n.get("class") == "android.widget.EditText"
+                          and n.get("package") == "ru.courier.finance"]
+                fields[2].set("text", args[3])
+                current["root"] = typed
+            return ""
+
+        with patch.object(device, "dump", side_effect=lambda _name: current["root"]), \
+                patch.object(device, "adb", side_effect=adb):
+            device.fill_field(2, 2000)
+
+        self.assertEqual(len(taps), 1)
+        self.assertGreaterEqual(taps[0][1], 407)
+        self.assertLess(taps[0][1], 1670)

@@ -148,18 +148,65 @@ def tap_visible_node(name, attempts=6):
     raise AssertionError(f"UI node did not enter the visible area above bottom navigation: {name}")
 
 
-def fill_field(index, value):
-    root = dump(f"editing-{index}")
+def form_input_point(root, index, minimum_visible_pixels=144):
+    """Return a tap point only when the input is exposed inside the scroll pane."""
     fields = [n for n in root.iter("node") if n.get("class") == "android.widget.EditText"
               and n.get("package") == PACKAGE]
-    assert len(fields) >= 7, f"Expected seven monetary/counter inputs, got {len(fields)}"
-    coords = list(map(int, re.findall(r"\d+", fields[index].get("bounds", ""))))
-    adb("shell", "input", "tap", str((coords[0] + coords[2]) // 2), str((coords[1] + coords[3]) // 2))
+    if len(fields) < 7 or index >= len(fields):
+        return None
+    scroll = next((n for n in root.iter("node") if n.get("class") == "android.view.View"
+                   and n.get("scrollable") == "true"), None)
+    save = find_node(root, "Сохранить слот")
+
+    def parse_bounds(node):
+        return list(map(int, re.findall(r"\d+", node.get("bounds", "")))) if node is not None else []
+
+    sb, fb, pb = map(parse_bounds, (scroll, fields[index], save))
+    if any(len(bounds) != 4 for bounds in (sb, fb, pb)):
+        return None
+    if fb[2] <= fb[0] or fb[3] <= fb[1] or sb[2] <= sb[0] or sb[3] <= sb[1]:
+        return None
+    top, bottom = max(sb[1], fb[1]), min(sb[3], pb[1], fb[3])
+    if fb[0] < sb[0] or fb[2] > sb[2] or bottom - top < minimum_visible_pixels:
+        return None
+    return (fb[0] + fb[2]) // 2, (top + bottom) // 2
+
+
+def tap_form_input(index, attempts=8):
+    """Scroll an input clear of the fixed save action before tapping it."""
+    for attempt in range(attempts):
+        root = dump(f"editing-{index}-{attempt}")
+        point = form_input_point(root, index)
+        if point is not None:
+            adb("shell", "input", "tap", str(point[0]), str(point[1]))
+            return
+        scroll = next((n for n in root.iter("node") if n.get("class") == "android.view.View"
+                       and n.get("scrollable") == "true"), None)
+        bounds = (list(map(int, re.findall(r"\d+", scroll.get("bounds", ""))))
+                  if scroll is not None else [])
+        if len(bounds) != 4 or bounds[2] <= bounds[0] or bounds[3] - bounds[1] < 96:
+            raise AssertionError(f"Slot form scroll area missing while locating input {index}")
+        x = (bounds[0] + bounds[2]) // 2
+        adb("shell", "input", "swipe", str(x), str(bounds[3] - 32),
+            str(x), str(bounds[1] + 32), "350")
+    raise AssertionError(f"Slot form input {index} did not enter the visible area")
+
+
+def fill_field(index, value):
+    tap_form_input(index)
     adb("shell", "input", "text", str(value))
     if index == 2 and value == 0:
         screenshot("ime-rest-reward")
         dump("ime-rest-reward")
     adb("shell", "input", "keyevent", "4")
+    root = dump(f"filled-{index}")
+    fields = [n for n in root.iter("node") if n.get("class") == "android.widget.EditText"
+              and n.get("package") == PACKAGE]
+    assert len(fields) >= 7 and fields[index].get("text") == str(value), (
+        f"Input {index} did not retain {value}: "
+        f"{fields[index].get('text') if len(fields) > index else 'missing'}")
+    if find_node(root, "Сохранить слот") is None:
+        raise AssertionError("Leaving the input closed the slot form instead of the keyboard")
 
 
 def add_slot(hours=None, orders=None, reward=0):
