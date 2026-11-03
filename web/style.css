@@ -2636,3 +2636,23 @@ html,body {
 /* Keep all product typography inside the approved 400–600 weight scale. */
 #app#app :is(h1,h2,h3,strong,b,button,label,summary,dt,dd,.meter-value,.major-amount,.amount,.hero-pace strong,.gauge-label strong,.income-parts strong,.payouts strong,.premium-teasers strong,.period-day-figures strong,.cycle-bonus-metrics strong,.period-facts dd,.forecast-number,.forecast-subnumber,.period-norm-stat strong,.slot-live-summary strong,.detail-amount,.day-meters,.day-meter strong,.import-stats strong,.duration-heading output,.tariff-rate input) { font-weight:600!important; }
 #app#app :is(.home-eyebrow,.income-hero h2,.home-premiums .card-heading,.period-days-heading h2,.forecast-eyebrow,.cycle-header h2,.income-parts span,.payouts h2) { letter-spacing:0!important; }
+
+/* Keep the compact rate readable, retain one cycle disclosure icon, and make
+   the shared payment-settings action consistent across Home and Period. */
+#app.settings-page .payment-settings .tariff-rate #hourlyRate { padding-inline:0; }
+.period-page .period-cycle-compact #configureCycle::after { content:none; }
+#app .payment-status-action {
+  display:inline-flex;
+  align-items:center;
+  min-height:48px;
+  max-width:100%;
+  margin:4px 0 -4px;
+  padding:4px 0;
+  border:0;
+  background:transparent;
+  color:var(--accent);
+  font:inherit;
+  text-align:left;
+  text-decoration:underline;
+  text-underline-offset:3px;
+}

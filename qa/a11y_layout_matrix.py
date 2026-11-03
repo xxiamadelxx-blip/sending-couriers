@@ -76,6 +76,13 @@ def visible_period_day_card(root):
     return False
 
 
+def required_surface_actions(surface):
+    """Named touch actions present in the shared synthetic risk fixture."""
+    if surface in ('home', 'period'):
+        return [('Настроить условия выплаты', 'Button')]
+    return []
+
+
 def inspect_all_layouts(directory):
     results = {}
     checked_controls = 0
@@ -112,6 +119,7 @@ def inspect_all_layouts(directory):
             if surface == 'history':
                 required.extend((s, 'Button') for s in (
                     'Редактировать Слот 1', 'Редактировать Слот 2'))
+            required.extend(required_surface_actions(surface))
             if surface == 'form':
                 required.append(('Сохранить слот', 'Button'))
                 required.append(('', 'Spinner'))  # current dated spinner, named by value

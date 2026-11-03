@@ -4,6 +4,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 from qa.a11y_layout_matrix import (
     SCREENS, inspect, ensure_labelled_target, visible_period_day_card,
+    required_surface_actions,
     inspect_all_layouts,
 )
 
@@ -26,6 +27,12 @@ class NativeLayoutMatrixTests(unittest.TestCase):
                      'text="Главная" bounds="[0,0][144,144]"/>')
         self.assertTrue(ensure_labelled_target(root, 'Главная'))
         self.assertFalse(ensure_labelled_target(root, 'Главная', min_px=145))
+
+    def test_payment_settings_action_has_native_48dp_gate_on_both_surfaces(self):
+        target = [('Настроить условия выплаты', 'Button')]
+        self.assertEqual(required_surface_actions('home'), target)
+        self.assertEqual(required_surface_actions('period'), target)
+        self.assertEqual(required_surface_actions('forecast'), [])
 
     def test_offscreen_inverted_bounds_never_count_as_accessible(self):
         root = nodes('<node class="android.widget.Button" clickable="true" '

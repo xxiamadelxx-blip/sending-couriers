@@ -21,6 +21,18 @@ test('Period is a day-entry ledger, with secondary payment/cycle information ins
  assert.ok(section.includes('data-entry') || section.includes("querySelectorAll('.period-slot-edit')"));
  assert.doesNotMatch(section,/class="detail-card period-overview"/);
 });
+test('Period cycle disclosure uses one chevron, not the inline icon and pseudo arrow together',()=>{
+ const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
+ assert.match(section,/id="configureCycle">Настройки премии и накопленного дохода\$\{icons\.down\}/);
+ assert.match(css,/#configureCycle::after\s*\{\s*content:\s*none/);
+});
+test('Settings hourly-rate field keeps all three digits inside the compact input',()=>{
+ assert.match(app,/rateInput\.style\.width = `\$\{Math\.max\(3\.25, Math\.min\(10, rateInput\.value\.length \+ \.25\)\)\}ch`/);
+ assert.match(css,/#app\.settings-page \.payment-settings \.tariff-rate #hourlyRate\s*\{[^}]*padding-inline:\s*0/);
+});
+test('Period payout action has the same transparent accent style and 48dp target as Home',()=>{
+ assert.match(css,/#app \.payment-status-action\s*\{[^}]*min-height:\s*48px[^}]*background:\s*transparent[^}]*color:\s*var\(--accent\)/);
+});
 test('UI M1: slot history keeps editable ID and complete monetary rows',()=>{
  const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
  assert.ok(section.includes('class="day-money"'));
