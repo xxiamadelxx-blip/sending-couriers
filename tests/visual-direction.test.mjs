@@ -48,7 +48,7 @@ test('all nine Unslop passes have concrete CSS and product copy signals',()=>{
   assert.match(finish,/--space-6:24px/);
   assert.match(finish,/#app svg \{ width:18px!important; height:18px!important; stroke-width:1\.5!important;/);
   assert.match(finish,/font-variant-numeric:tabular-nums/);
-  assert.match(finish,/home-stack::before/);
+  assert.doesNotMatch(finish,/home-stack::before/);
   assert.match(finish,/background-image:none!important/);
   assert.doesNotMatch(css,/transition\s*:\s*all|animate-pulse/);
   assert.match(js,/function orderWord\(value\) \{ return plural\(value,/);

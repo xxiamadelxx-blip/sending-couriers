@@ -1119,19 +1119,19 @@ dialog .button{margin:8px 0 0}
    rules override high-specificity legacy day-group and monospace styles.
    Do not interpret earlier XML/unit PASS as owner acceptance of aesthetics. */
 
-/* H1: each same-date slot has a bright LEFT rail in the approved right-hand
-   image. Legacy ".day-group .day-card" had reset the earlier .day-card rail. */
+/* Slots inside a day are separated as rows, without another card frame. */
 .history-list .day-group .day-card{
-  border-left:4px solid var(--teal);
-  border-radius:3px;
-  background:var(--surface);
+  border:0;
+  border-top:1px solid var(--line);
+  padding:16px 0;
+  background:transparent;
   box-shadow:none;
 }
 .history-list .day-group .day-head h2{
   font-family:system-ui,-apple-system,Roboto,sans-serif;
-  font-style:italic;
-  font-weight:800;
-  letter-spacing:-.025em;
+  font-style:normal;
+  font-weight:600;
+  letter-spacing:0;
 }
 .history-list .day-group .day-summary{
   padding-top:11px;
@@ -2347,7 +2347,7 @@ dialog .button{margin-top:7px}
 .bottom-nav{position:fixed;z-index:5;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 56px minmax(0,1fr) minmax(0,1fr);align-items:center;gap:3px;padding:7px calc(8px + var(--safe-right)) calc(7px + var(--safe-bottom)) calc(8px + var(--safe-left));overflow:visible;background:var(--nav-surface)!important;color:var(--ink);border-top:1px solid var(--line);box-shadow:none!important}
 .nav-item{position:relative;min-width:0;min-height:52px;padding:4px 1px;border:0;border-radius:8px;background:transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:500;letter-spacing:0;line-height:1.1}
 .nav-item svg{width:20px;height:20px;color:inherit}
-.nav-item span{max-width:100%;font-size:10px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:clip}
+.nav-item span{max-width:100%;font-size:10px;line-height:1.1;text-align:center;overflow-wrap:anywhere}
 .nav-item.active,.nav-item.active,:root[data-theme=light] .nav-item.active{background:transparent;border-radius:8px;color:var(--accent);font-weight:600}
 .nav-item.active::before{position:absolute;top:-7px;left:calc(50% - 10px);width:20px;height:2px;background:var(--accent);content:""}
 .bottom-nav .nav-add{align-self:center;justify-self:center;width:56px;min-width:56px;height:56px;min-height:56px;margin:0;padding:0;transform:none;border:0;border-radius:50%;background:var(--accent);color:var(--primary-ink);display:grid;place-items:center;box-shadow:none}
@@ -2445,8 +2445,7 @@ html,body {
 #app .weather-mini { display:flex; align-items:center; gap:4px; color:var(--text-secondary); }
 #app .weather-mini strong { color:var(--text-primary); font-size:12px; font-weight:500; }
 #app .period-button { min-height:48px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:var(--surface); color:var(--text-primary); }
-#app .home-stack { position:relative; display:grid; gap:var(--space-4); padding-left:12px; }
-#app .home-stack::before { content:""; position:absolute; z-index:0; top:24px; bottom:24px; left:4px; width:1px; background:var(--line); pointer-events:none; }
+#app .home-stack { position:relative; display:grid; gap:var(--space-3); padding:0; }
 #app .home-stack > :not(.home-empty) { position:relative; z-index:1; }
 #app .home-empty { margin:0; padding:20px; border:1px solid var(--line); background:var(--surface); }
 #app .home-empty .home-empty-symbol { width:40px; height:40px; display:grid; place-items:center; border:1px solid var(--line); border-radius:12px!important; background:var(--field); color:var(--accent); }
@@ -2541,6 +2540,8 @@ html,body {
 #app.settings-page .payment-more>summary svg { display:none; }
 #app.settings-page .payment-more .form-grid { padding:0 16px 16px; }
 #app.settings-page .payment-settings form { display:grid; gap:16px; }
+#app.settings-page .payment-period { gap:8px; }
+#app.settings-page .settings-date-box { margin-top:0; }
 #app.settings-page .payment-period .hint { margin:8px 0 0; line-height:1.5; }
 #app.settings-page .field input,#app.settings-page .field select,#app.forecast-page .field input { min-height:48px; padding:12px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); }
 #app.settings-page .payment-settings .tariff-rate { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; }
@@ -2616,7 +2617,7 @@ html,body {
 #app .period-slot-note { margin-bottom:0; }
 #app :is(.error,[role=alert]) { overflow-wrap:anywhere; }
 @media(max-width:380px) {
-  #app { padding-left:calc(12px + var(--safe-left)); padding-right:calc(12px + var(--safe-right)); }
+  #app { padding-left:calc(16px + var(--safe-left)); padding-right:calc(16px + var(--safe-right)); }
   #homeDeck .home-focus .pace-hero { grid-template-columns:minmax(0,1fr) 88px; gap:8px; }
   #homeDeck .gauge { width:84px; height:84px; }
   #homeDeck .gauge canvas { width:100%; height:100%; display:block; }

@@ -39,10 +39,10 @@ test('at 200% font scale the progress value is not overlaid on the ring',()=>{
   assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge canvas\{[\s\S]*?display:none/);
 });
 
-test('SHIFT CONTROL finish uses route markers, one orange accent, 4px-derived cards, and one icon scale',()=>{
+test('SHIFT CONTROL finish uses one orange accent, 4px-derived cards, and one icon scale',()=>{
   const finish=css.slice(css.lastIndexOf('Unslop finish'));
   assert.match(finish,/--space-1:4px/);assert.match(finish,/--card-radius:16px/);assert.match(finish,/--control-radius:12px/);
-  assert.match(finish,/\.home-stack::before/);assert.match(finish,/--text-primary:var\(--ink\)/);
+  assert.doesNotMatch(finish,/\.home-stack::before/);assert.match(finish,/--text-primary:var\(--ink\)/);
   assert.match(finish,/prefers-reduced-motion/);assert.doesNotMatch(finish,/radial-gradient|machined edges|border-radius:3px/);
   const spacing=[...finish.matchAll(/(?:^|[;{])\s*(margin|padding|gap|inset|top|right|bottom|left|row-gap|column-gap)\s*:\s*([^;}]+)/g)];
   const offGrid=spacing.flatMap(m=>[...m[2].matchAll(/(-?\d+(?:\.\d+)?)px/g)].map(x=>Number(x[1])).filter(n=>Math.abs(n)%4!==0));
