@@ -11,13 +11,18 @@ import org.json.JSONObject;
 
 /** Only public weather endpoints. Never receives app state, reports or screen frames. */
 public final class WeatherClient {
+    static final class HttpStatusException extends Exception {
+        final int status;
+        HttpStatusException(int status) { this.status = status; }
+    }
     private static JSONObject get(String address) throws Exception {
         URL url = new URL(address);
         if (!"https".equals(url.getProtocol()) || !("geocoding-api.open-meteo.com".equals(url.getHost()) || "api.open-meteo.com".equals(url.getHost()))) throw new IllegalArgumentException();
         HttpsURLConnection connection = (HttpsURLConnection)url.openConnection();
         connection.setConnectTimeout(7000); connection.setReadTimeout(7000); connection.setInstanceFollowRedirects(false);
         try {
-            if (connection.getResponseCode()!=200) throw new IllegalStateException();
+            int status = connection.getResponseCode();
+            if (status != 200) throw new HttpStatusException(status);
             try (InputStream in=connection.getInputStream(); ByteArrayOutputStream out=new ByteArrayOutputStream()) {
                 byte[] buffer=new byte[4096]; int n;
                 while((n=in.read(buffer))!=-1) { out.write(buffer,0,n); if(out.size()>200000) throw new IllegalArgumentException(); }
