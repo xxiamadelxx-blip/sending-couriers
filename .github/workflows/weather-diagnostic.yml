@@ -1,0 +1,42 @@
+name: Weather diagnostic build
+on:
+  push:
+    branches: [qa/weather-response-diagnostic-20261103]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Fetch pinned OCR data
+        run: |
+          mkdir -p m4-models/tessdata
+          base='https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd'
+          curl -fL "$base/rus.traineddata" -o m4-models/tessdata/rus.traineddata
+          curl -fL "$base/eng.traineddata" -o m4-models/tessdata/eng.traineddata
+          test "$(git hash-object m4-models/tessdata/rus.traineddata)" = b146cb2263acbc6383f8e92ea0ce759537687bb8
+          test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
+      - run: |
+          python3 build.py --sdk "$ANDROID_HOME" --variant transferRelease --output "$RUNNER_TEMP/test-only.apk"
+          cp build/aligned.apk "$RUNNER_TEMP/diagnostic-unsigned.apk"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$RUNNER_TEMP/apksigner.jar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weather-diagnostic-unsigned
+          path: |
+            ${{ runner.temp }}/diagnostic-unsigned.apk
+            ${{ runner.temp }}/apksigner.jar
