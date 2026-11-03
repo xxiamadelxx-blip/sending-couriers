@@ -45,12 +45,15 @@ public final class WeatherClient {
     }
     public static String fetch(String city,String timezone) throws Exception {
         if(city==null||city.trim().isEmpty()||city.length()>120||timezone==null||timezone.length()>80) throw new IllegalArgumentException();
-        String encoded=URLEncoder.encode(city.trim(),"UTF-8"),tz=URLEncoder.encode(timezone,"UTF-8");
+        String encoded=URLEncoder.encode(city.trim(),"UTF-8");
         JSONObject geo=get("https://geocoding-api.open-meteo.com/v1/search?name="+encoded+"&count=1&language=ru&format=json");
         JSONArray results=geo.optJSONArray("results"); if(results==null||results.length()==0) throw new IllegalArgumentException();
         JSONObject place=results.getJSONObject(0);
+        String resolvedTimezone=place.optString("timezone",timezone);
+        if(resolvedTimezone.isEmpty()) resolvedTimezone=timezone;
+        String tz=URLEncoder.encode(resolvedTimezone,"UTF-8");
         JSONObject weather=get("https://api.open-meteo.com/v1/forecast?latitude="+place.getDouble("latitude")+"&longitude="+place.getDouble("longitude")+"&hourly=temperature_2m,weather_code&forecast_days=2&timezone="+tz);
-        return new JSONObject().put("provider","Open-Meteo").put("requestedCity",city).put("city",place.getString("name")).put("timezone",timezone)
+        return new JSONObject().put("provider","Open-Meteo").put("requestedCity",city).put("city",place.getString("name")).put("requestedTimezone",timezone).put("timezone",resolvedTimezone)
             .put("latitude",place.getDouble("latitude")).put("longitude",place.getDouble("longitude")).put("hourly",weather.getJSONObject("hourly")).toString();
     }
 }

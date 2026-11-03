@@ -12,7 +12,7 @@ import { feedback as emitFeedback } from './feedback.mjs';
 import { mountForecast } from './forecast-ui.mjs';
 import {prepareForecast,forecastKey} from './forecast-runtime.mjs';
 import { syncSlots, ensureForecast, evaluateForecasts, currentProfile, assertForecastCapacity, importDays, videoImportReceipt, restoreVideoOrderEvidence } from './forecast.mjs';
-import { weatherCache, weatherParts, weatherSymbol, weatherDescription, weatherLocation } from './weather.mjs';
+import { weatherCache, weatherParts, weatherSymbol, weatherDescription, weatherLocation, resolvedWeatherLocation } from './weather.mjs';
 import { intervalField, bindIntervals, intervalValue } from './interval-control.mjs';
 import { withSlotWorkingTime } from './slot-work.mjs';
 
@@ -177,9 +177,10 @@ function recoverStoredVideoEvidence() {
 window.refreshNativeForecasts=refreshNativeForecasts;
 window.receiveWeather = text => {
   try {
-    const p=weatherLocation(state.forecast);if(!p.weatherCity)return;
-    const cache=weatherCache(JSON.parse(text),p);
-    persist({...state,forecast:{...state.forecast,weather:cache,location:state.forecast.location??p}},true);
+    const current=weatherLocation(state.forecast);if(!current.weatherCity)return;
+    const raw=JSON.parse(text),p=resolvedWeatherLocation(raw,current);
+    const cache=weatherCache(raw,p);
+    persist({...state,forecast:{...state.forecast,weather:cache,location:p}},true);
     if(view==='summary'){const y=scrollY;summary();window.scrollTo(0,y);}
   } catch(error) { notify(error.message); }
 };
