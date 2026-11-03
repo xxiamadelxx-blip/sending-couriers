@@ -1123,10 +1123,12 @@ dialog .button{margin:8px 0 0}
 .history-list .day-group .day-card{
   border:0;
   border-top:1px solid var(--line);
+  border-radius:0;
   padding:16px 0;
   background:transparent;
   box-shadow:none;
 }
+.history-list .day-group .day-card:first-child { border-top:0; }
 .history-list .day-group .day-head h2{
   font-family:system-ui,-apple-system,Roboto,sans-serif;
   font-style:normal;
@@ -1147,7 +1149,7 @@ dialog .button{margin:8px 0 0}
   padding-bottom:13px;
 }
 .history-list .day-group .day-card .day-money{
-  border-top:1px solid var(--line);
+  border-top:0;
   background:transparent;
 }
 .history-list .day-group .day-card .day-money .day-row:first-child{
@@ -2429,7 +2431,7 @@ html,body {
 #app :is(button,a,summary,input,select,textarea) { transition:color .12s var(--motion),background-color .12s var(--motion),border-color .12s var(--motion),opacity .12s var(--motion); }
 #app :is(button,a,summary,input,select,textarea):active { transform:none; }
 #app button:focus-visible,#app a:focus-visible,#app summary:focus-visible,#app input:focus-visible,#app select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-#app :is(.detail-card,.appearance-card,.cycle-settings,.day-card,.day-group,dialog,.home-focus,.income-hero,.home-empty,.period-day,.forecast-simple-hero) {
+#app :is(.detail-card,.appearance-card,.cycle-settings,.day-card:not(.day-group .day-card),.day-group,dialog,.home-focus,.income-hero,.home-empty,.period-day,.forecast-simple-hero) {
   border-radius:var(--card-radius)!important;
   box-shadow:none!important;
   clip-path:none!important;
