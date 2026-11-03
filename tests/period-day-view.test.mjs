@@ -53,3 +53,21 @@ test('Period screen shows editable days before conditions and 12-week settings',
  assert.doesNotMatch(page,/class="detail-card period-summary"|<h2>Итоги периода<\/h2>/,'Do not duplicate Home totals');
  assert.match(page,/form\(button\.dataset\.entry,'period'\)/,'Edit opens the exact selected slot ID');
 });
+
+
+test('Period day CSS keeps date and payout in separate columns with readable metadata spacing',()=>{
+ const css=readFileSync(new URL('../web/style.css',import.meta.url),'utf8');
+ const start=css.indexOf('#app .period-day>summary {');
+ const end=css.indexOf('#app .period-day-slots {',start);
+ assert.ok(start>=0&&end>start,'the final scoped Period layout block exists');
+ const layout=css.slice(start,end);
+ assert.match(layout,/#app \\.period-day-title \\{ grid-column:1; grid-row:1;/);
+ assert.match(layout,/#app \\.period-day-figures \\{ grid-column:2; grid-row:1;/);
+ assert.match(layout,/#app \\.period-day-figures small \\{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px 8px;/);
+ assert.match(layout,/#app \\.period-day-chevron \\{ grid-column:3; grid-row:1;/);
+ const mobileStart=css.indexOf('@media(max-width:380px)');
+ const mobileEnd=css.indexOf('@media(prefers-reduced-motion',mobileStart);
+ const mobile=css.slice(mobileStart,mobileEnd);
+ assert.match(mobile,/#app \\.period-day>summary \\{ grid-template-columns:minmax\\(0,1fr\\) auto; \\}/);
+ assert.match(mobile,/#app \\.period-day-chevron \\{ display:none; \\}/);
+});
