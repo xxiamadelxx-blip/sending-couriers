@@ -180,6 +180,26 @@ def tap_form_input(index, attempts=8):
         if point is not None:
             adb("shell", "input", "tap", str(point[0]), str(point[1]))
             return
+        if index == 2:
+            fields = [n for n in root.iter("node") if n.get("class") == "android.widget.EditText"
+                      and n.get("package") == PACKAGE]
+            scrollables = [n for n in root.iter("node") if n.get("class") == "android.view.View"
+                           and n.get("scrollable") == "true"]
+            scroll = scrollables[0] if scrollables else None
+            save = find_node(root, "Сохранить слот")
+            diagnostics = {
+                "attempt": attempt,
+                "fieldCount": len(fields),
+                "target": fields[index].attrib if len(fields) > index else None,
+                "fields": [{"text": n.get("text"), "content-desc": n.get("content-desc"),
+                            "resource-id": n.get("resource-id"), "bounds": n.get("bounds")}
+                           for n in fields],
+                "scrollables": [{"bounds": n.get("bounds"), "content-desc": n.get("content-desc"),
+                                 "resource-id": n.get("resource-id")}
+                                for n in scrollables],
+                "save": save.attrib if save is not None else None,
+            }
+            print("FORM_INPUT_GEOMETRY " + json.dumps(diagnostics, ensure_ascii=False), flush=True)
         scroll = next((n for n in root.iter("node") if n.get("class") == "android.view.View"
                        and n.get("scrollable") == "true"), None)
         bounds = (list(map(int, re.findall(r"\d+", scroll.get("bounds", ""))))
