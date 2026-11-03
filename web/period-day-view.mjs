@@ -25,8 +25,9 @@ export function periodDayMarkup(entries, dayTotals, dateLabel, hoursText, money,
     }).join('');
     return `<details class="period-day">
       <summary><span class="period-day-title">${esc(dateLabel(date))}<small>${count} ${plural(count,['слот','слота','слотов'])}</small></span>
-        <span class="period-day-figures"><strong>${display(day.paidReward,money)}</strong><small><span>Выплачено</span><span>${display(day.hours,hoursText)} ч · ${day.orders==null?'Заказы не указаны':`${esc(day.orders)} ${plural(day.orders,['заказ','заказа','заказов'])}`}</span></small></span>
-        <span class="period-day-chevron" aria-hidden="true">${icon['chevron-down']}</span></summary>
+        <span class="period-day-figures"><strong>${display(day.paidReward,money)}</strong><small>Выплачено</small></span>
+        <span class="period-day-chevron" aria-hidden="true">${icon['chevron-down']}</span>
+        <span class="period-day-overview">${display(day.hours,hoursText)} ч · ${day.orders==null?'Заказы не указаны':`${esc(day.orders)} ${plural(day.orders,['заказ','заказа','заказов'])}`}</span></summary>
       <div class="period-day-slots">${slotHtml}</div>
     </details>`;
   }).join('');

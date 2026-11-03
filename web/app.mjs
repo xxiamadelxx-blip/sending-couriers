@@ -572,7 +572,7 @@ function form(id = null, returnTo = 'history') {
     ${field('tax', 'Налог', val('tax'), { unit: '₽', note: `Ориентир ${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%`, validation: true })}
     ${field('parkCommission', 'Комиссия парка', val('parkCommission'), { unit: '₽', note: `Ориентир ${PARK_COMMISSION_PERCENT}%`, validation: true })}
     ${field('tips', 'Чаевые', val('tips'), { validation: true })}${field('separateBonus', 'Отдельные бонусы', val('separateBonus'), { validation: true })}<section class="slot-live-summary full" aria-live="polite"><div><span>Удержания</span><strong id="slotDeductionTotal">— ₽</strong></div><div><span>Начислено</span><strong id="slotAccrued">— ₽</strong></div><p id="slotAccrualFormula">Часы × ставка + чаевые − удержания</p></section></div>
-    <details class="additional slot-working"><summary>Рабочее время дня${icons.down}</summary><div id="slotWorkingEditor"></div></details>
+    <details class="additional slot-working"><summary>Рабочее время дня</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
   app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = 'Введите'; });

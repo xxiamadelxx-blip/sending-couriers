@@ -9,7 +9,7 @@ test('Unslop refinement keeps the SHIFT CONTROL palette and restores deliberate 
   const palette=css.slice(css.lastIndexOf('/* SHIFT CONTROL · Unslop pass'),css.lastIndexOf('/* SHIFT CONTROL · Unslop finish'));
   assert.match(palette,/--bg:#10151a/);assert.match(palette,/--surface:#171e23/);assert.match(palette,/--accent:#ff7952/);
   assert.match(palette,/--income-surface:#ffbd57/);
-  assert.match(finish,/--card-radius:16px/);assert.match(finish,/--control-radius:10px/);
+  assert.match(finish,/--card-radius:16px/);assert.match(finish,/--control-radius:12px/);
   assert.match(finish,/#homeDeck \.home-focus/);assert.match(finish,/background:var\(--income-surface\)/);
   assert.doesNotMatch(finish,/clip-path:polygon|radial-gradient|machined edges|border-radius:3px/);assert.match(finish,/clip-path:none!important/);
 });
