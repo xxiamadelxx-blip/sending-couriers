@@ -187,7 +187,7 @@ window.weatherFailed = () => { if(view==='summary' && $('#weatherStatus')) $('#w
 function weatherWidget() {
   const p=weatherLocation(state.forecast),w=weatherParts(state.forecast.weather,p);
   const status=w.available?w.stale?'Кэш погоды устарел':'Open-Meteo':'Погода недоступна';
-  if(!w.available)return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${p.weatherCity?'Погода недоступна':'Не указана местность для погоды'}. Обновить погоду" title="${esc(status)}"><span id="weatherStatus" class="weather-unavailable">Погода —</span></button>`;
+  if(!w.available)return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${p.weatherCity?'Погода недоступна. Проверить город':'Указать город для погоды'}" title="${esc(status)}"><span id="weatherStatus" class="weather-unavailable">${p.weatherCity?'Погода —':'Указать город'}</span></button>`;
   const spokenWeather=w.parts.map(v=>`${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}`).join('. ');
   return `<button class="header-weather" id="refreshWeather" type="button" aria-label="${esc(spokenWeather)}. ${esc(status)}. Обновить погоду" title="${esc(status)}"><span class="weather-caption">Погода</span><span class="weather-icons">${w.parts.map(v=>`<span class="weather-mini" data-weather-code="${v.code??''}" aria-label="${v.label}: ${weatherDescription(v.code)}, ${v.temp==null?'нет данных':Math.round(v.temp)+'°'}" title="${v.label} · ${weatherDescription(v.code)}"><span aria-hidden="true">${weatherSymbol(v.code)}</span><strong>${v.temp==null?'—':Math.round(v.temp)+'°'}</strong></span>`).join('')}</span><span id="weatherStatus" class="${w.available&&w.stale?'weather-cache':'sr-only'}">${w.available&&w.stale?'Кэш':esc(status)}</span></button>`;
 }
@@ -336,7 +336,24 @@ function summary() {
   $('#homeEmptyAdd')?.addEventListener('click',()=>form());
   $('#choosePeriod').addEventListener('click', history);
   $('#export').addEventListener('click', openExportDialog); resetScroll();
-  $('#refreshWeather')?.addEventListener('click',()=>refreshWeather(true));refreshWeather();
+  $('#refreshWeather')?.addEventListener('click',()=>{
+    const place=weatherLocation(state.forecast);
+    if(weatherParts(state.forecast.weather,place).available){refreshWeather(true);return;}
+    const dialog=document.createElement('dialog');
+    dialog.innerHTML=`<form id="weatherLocationForm"><h2>Погода</h2><div class="field"><label for="weatherCity">Город</label><input id="weatherCity" name="city" type="text" maxlength="120" autocomplete="address-level2" value="${esc(place.weatherCity)}" required></div><p>Укажите город, чтобы получать прогноз погоды.</p><button class="button primary" type="submit">Сохранить</button><button class="button quiet" type="button" id="cancelWeatherCity">Отмена</button></form>`;
+    document.body.append(dialog);
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    dialog.querySelector('#cancelWeatherCity').addEventListener('click',()=>dialog.close());
+    dialog.querySelector('form').addEventListener('submit',event=>{
+      event.preventDefault();
+      const city=dialog.querySelector('#weatherCity').value.trim();
+      if(!city)return;
+      const timezone=place.source==='unknown'?(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Moscow'):place.timezone;
+      try {persist({...state,forecast:{...state.forecast,location:{weatherCity:city,timezone,source:'manual'}}},true);weatherAttempt=0;dialog.close();summary();}
+      catch(error){notify(error.message);}
+    });
+    dialog.showModal();
+  });refreshWeather();
 }
 
 function periodDetails() {
