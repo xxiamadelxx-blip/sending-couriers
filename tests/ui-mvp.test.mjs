@@ -128,11 +128,11 @@ test('UI M2: sliders and header controls retain 48dp targets after page styles a
  assert.match(css,/#app\.forecast-page \.duration-slider \{ width:100%; height:48px; min-height:48px;/);
 });
 
-test('Android smoke checks persisted XLSX summary and current payout label',async()=>{
+test('Android smoke returns from XLSX picker and verifies saved facts and current payout label',async()=>{
  const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
  const form=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
- assert.match(xlsx,/wait_node\("История и импорт", 20\)/);
- assert.match(xlsx,/Даты: 1 · события: 2/);
+ assert.match(xlsx,/wait_node\("Прогноз", 20\)/);
+ assert.match(xlsx,/assert_imported\(exported_forecast\(\)\)/);
  assert.doesNotMatch(xlsx,/История загружена: 1 день/);
  assert.ok(form.includes("LABELS = ('Часы за слот', 'Заказы за слот', 'Выплачено'"), 'Large-text smoke must use the current payout field label');
  assert.doesNotMatch(form,/Вознаграждение/);

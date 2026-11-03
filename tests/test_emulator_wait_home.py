@@ -61,12 +61,12 @@ class AndroidSmokeOracleTests(TestCase):
         adb.assert_called_once_with("shell", "wm", "size")
         tap.assert_called_once_with("Сохранить слот")
 
-    def test_xlsx_import_checks_durable_import_summary(self):
+    def test_xlsx_import_returns_to_app_and_checks_saved_facts(self):
         smoke = MODULE.with_name("xlsx_import_smoke.py").read_text(encoding="utf-8")
-        self.assertIn('wait_node("История и импорт", 20)', smoke)
-        self.assertIn('wait_node("Состав импортированной истории", 20)', smoke)
-        self.assertIn("Даты: 1 · события: 2", smoke)
-        self.assertIn("Imported history summary did not show one date and two order events", smoke)
+        self.assertIn('wait_node("Прогноз", 20)', smoke)
+        self.assertIn("def assert_imported(forecast):", smoke)
+        self.assertIn("assert_imported(exported_forecast())", smoke)
+        self.assertIn("Repeated XLSX import changed order facts", smoke)
 
     def test_add_slot_never_taps_reward_field_outside_scroll_view(self):
         offscreen = ET.fromstring('''<hierarchy>
