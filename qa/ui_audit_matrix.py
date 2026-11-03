@@ -509,7 +509,7 @@ def main():
                 assert durations(current) == expected, (
                     f'200% action {label} produced {durations(current)}, expected {expected}'
                 )
-            scroll_forecast_action_into_view('Импортировать отчёт')
+            scroll_forecast_action_into_view('Импортировать видео')
             root = capture('font-2.0-forecast-actions-restored')
             assert durations(root) == [14, 8], (
                 f'200% action scroll changed planned hours: {durations(root)}'
