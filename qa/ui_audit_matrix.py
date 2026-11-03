@@ -330,7 +330,7 @@ def main():
         for _ in range(4):
             device.tap_node(f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут')
         device.tap_node('Главная')
-    for width, size in [(360, '1080x2400'), (390, '1170x2532')]:
+    for width, size in [(360, '1080x2400'), (390, '1170x2532'), (393, '1179x2532'), (412, '1236x2532')]:
         device.adb('shell', 'wm', 'size', size)
         for mode in ['dark', 'light']:
             device.tap_node('Главная')
@@ -449,7 +449,7 @@ def main():
         assert not missing_content, 'Main headings or values missing: ' + ', '.join(missing_content)
         return
     device.tap_node('Главная')
-    for scale in ['1.3', '2.0']:
+    for scale in ['1.3', '1.5', '2.0']:
         device.adb('shell', 'settings', 'put', 'system', 'font_scale', scale)
         device.adb('shell', 'am', 'force-stop', device.PACKAGE)
         device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
@@ -604,5 +604,5 @@ finally:
         'testSigningOnly': args.phase == 'after', 'releaseUpgradeVerified': False,
         'visualAuditStatus': 'NOT_VERIFIED', 'imeInteractionStatus': 'CAPTURED_REQUIRES_REVIEW',
         'checks': checks, 'focus': args.focus,
-        'limits': ['TalkBack not tested', 'Screenshot review required', 'Large text only at 390 dp in light theme']
+        'limits': ['TalkBack not tested', 'Screenshot review required', 'Large-text scenarios run at the last configured width and theme, not the full width/theme matrix']
     }, ensure_ascii=False, indent=2))

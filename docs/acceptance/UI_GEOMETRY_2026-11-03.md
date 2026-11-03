@@ -16,3 +16,9 @@ Baseline: branch ui/unslop-light-polish-20261102, c3a01859810a62ff76b3c0131188ca
 Reference mapping: [YNAB app overview](https://www.ynab.com/features) for total and categorized money, [Actual Budget example](https://actualbudget.org/docs/contributing/writing-docs/) for stable numeric columns, [Toggl Android List View and editing](https://support.toggl.com/en-us/article/toggl-track-timer-for-android-1v3i5g8/) for date-grouped entries and editing. Adaptation only; radii and spacing are the owner's specification, not reference measurements. These links are source pointers; side-by-side visual evidence remains NOT RUN.
 
 Full Android matrix, visual owner approval, weather live request, built versionCode verification, signing and real 1.7.27 upgrade with data preserved remain NOT RUN. No release PASS is claimed.
+
+## Android cycle 1 — f4048ef
+
+Android 35 UI audit [run 41710572595](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41710572595), CI merge SHA 2971dd1c92fc248a7bca3c155c259cfce93392c5; evidence artifact 13268544223. UI matrix and action layout PASS, XLSX repeated import PASS, temporary-signer upgrade PASS. Native edit-label diagnostic FAIL and 200% keyboard form FAIL; overall run FAIL. Real owner-signed 1.7.27 upgrade and 150% remain NOT RUN. Old and new source screen states are compared on synthetic data; screenshots showed a nested rounded line and duplicate lines in history, a duplicate heading divider on the slot form, a large date-label gap in settings, and low-contrast light warning text. Source changes after this run target these specific findings; they require new Android evidence.
+
+A separately signed transfer APK was produced from this run's aligned unsigned APK: SHA-256 fc33c4e888bf8321fb94bc83309f0a22b9e9b9a0576c8d8b069c5a09753cf3c2. Signature v2/v3 verified and certificate matches earlier 1.7.27 Round-FAB. This binary predates subsequent fixes and is not a release candidate. No visual approval is claimed.
