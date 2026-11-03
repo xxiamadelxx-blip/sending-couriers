@@ -64,6 +64,18 @@ def ensure_labelled_target(root, label, *, role_name='Button', min_px=MIN_PX):
     return False
 
 
+def visible_period_day_card(root):
+    """Require a real daily-ledger row in the initial viewport, not below-fold links."""
+    for node in root.iter('node'):
+        label = name(node)
+        if (re.search(r'\b\d+\s+слот(?:а|ов)?\b', label)
+                and '₽' in label and visible(node)):
+            b = bounds(node)
+            if b[3] - b[1] >= MIN_PX:
+                return True
+    return False
+
+
 def inspect_all_layouts(directory):
     results = {}
     checked_controls = 0
@@ -104,10 +116,14 @@ def inspect_all_layouts(directory):
                 required.append(('Сохранить слот', 'Button'))
                 required.append(('', 'Spinner'))  # current dated spinner, named by value
             if surface == 'period':
-                required.extend((s, 'Button') for s in (
-                    'Записи периода', 'Экспорт для ChatGPT'))
-            if surface == 'settings-main':
-                required.append(('Сохранить условия', 'Button'))
+                # The approved Period screen puts the editable daily ledger
+                # directly below the date selector. History/export links are
+                # below the long ledger/cycle content; reachability is checked
+                # by the native UI matrix after scrolling.
+                assert visible_period_day_card(root), (
+                    f'{screen}: no visible daily-ledger entry in the initial viewport')
+            # Settings Save is below the first viewport; qa/ui_audit_matrix.py
+            # scrolls to and taps it on the real device.
             if surface in ('settings-main', 'settings-more'):
                 required.append(('Остальные условия', 'View'))
         for label, kind in required:

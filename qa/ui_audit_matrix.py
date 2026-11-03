@@ -425,6 +425,9 @@ def main():
                         device.adb('shell', 'input', 'swipe', '540', '1770', '540', '680', '360')
                     assert visible, f'Payment setting not reachable by scroll: {label}; bounds={fb}'
                     capture(f'settings-field-visible-{suffix}-{field_index}')
+                # Save is below the full payment form; verify a safe on-screen
+                # hit target by scrolling before activating the unchanged fixture.
+                device.tap_visible_node('Сохранить условия')
             device.tap_node('Добавить слот')
             root = capture('form-' + suffix)
             edit = next(n for n in root.iter('node') if n.get('class') == 'android.widget.EditText')

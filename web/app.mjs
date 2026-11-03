@@ -499,12 +499,14 @@ function installLargeTextFormLabelFocusGuard() {
   const scroll = app.querySelector('.form-scroll');
   const save = app.querySelector('.save-area');
   if (!scroll || !save) return;
-  const fullViewportHeight = Math.max(window.innerHeight, window.visualViewport?.height ?? 0);
   const align = () => {
     if (!app.classList.contains('form-page')) return;
     const input = scroll.querySelector('.form-grid .field input:focus');
     const label = input?.closest('.field')?.querySelector('label');
-    if (!label) return;
+    if (!label) {
+      scroll.style.paddingTop = '';
+      return;
+    }
     const viewport = scroll.getBoundingClientRect();
     const inputRect = input.getBoundingClientRect();
     const labelRect = label.getBoundingClientRect();
@@ -513,17 +515,10 @@ function installLargeTextFormLabelFocusGuard() {
     const missing = Math.max(0, viewport.top + 2 - labelRect.top);
     const room = Math.max(0, visibleBottom - inputRect.bottom);
     // Android WebView may anchor the focused input after the IME resize,
-    // undoing ordinary scrollTop changes. Move the existing form viewport
-    // content down only while the keyboard is visible, leaving Save fixed.
-    // Android can resize both innerHeight and visualViewport for the IME.
-    // Compare with the form's pre-keyboard viewport so that resize does not
-    // hide the keyboard state by shrinking both values together.
-    const currentViewportHeight = Math.min(
-      window.innerHeight, window.visualViewport?.height ?? window.innerHeight
-    );
-    const keyboardOpen = Boolean(window.visualViewport)
-      && currentViewportHeight < fullViewportHeight - 100;
-    const offset = keyboardOpen ? Math.min(missing, room) : 0;
+    // undoing ordinary scrollTop changes. Keep the whole label box visible
+    // without depending on whether this WebView reports the IME resize.
+    // Only use space already available above Save; Save itself stays fixed.
+    const offset = Math.min(missing, room);
     scroll.style.paddingTop = offset > 0 ? `${offset}px` : '';
     if (offset > 0) scroll.scrollTop = Math.max(0, scroll.scrollTop - offset);
   };

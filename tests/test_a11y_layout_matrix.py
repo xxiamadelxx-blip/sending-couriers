@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from qa.a11y_layout_matrix import (
-    SCREENS, inspect, ensure_labelled_target, inspect_all_layouts,
+    SCREENS, inspect, ensure_labelled_target, visible_period_day_card,
+    inspect_all_layouts,
 )
 
 
@@ -30,6 +31,14 @@ class NativeLayoutMatrixTests(unittest.TestCase):
         root = nodes('<node class="android.widget.Button" clickable="true" '
                      'text="Записи периода" bounds="[48,2427][1122,2388]"/>')
         self.assertFalse(ensure_labelled_target(root, 'Записи периода'))
+
+    def test_period_requires_visible_day_card_instead_of_below_fold_links(self):
+        visible_card = nodes('<node class="android.view.View" text="3 ноября 2026 2 слота '
+                             '3 200 ₽ Выплачено 9 ч · 18 заказов" bounds="[39,728][1041,983]"/>')
+        offscreen_card = nodes('<node class="android.view.View" text="3 ноября 2026 2 слота '
+                              '3 200 ₽ Выплачено 9 ч · 18 заказов" bounds="[39,2201][1041,2100]"/>')
+        self.assertTrue(visible_period_day_card(visible_card))
+        self.assertFalse(visible_period_day_card(offscreen_card))
 
     def test_empty_clickable_action_fails(self):
         root = nodes('<node class="android.widget.Button" clickable="true" '

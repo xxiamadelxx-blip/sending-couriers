@@ -43,6 +43,9 @@ test('UI M2: Android form cancel exercises the real visible Back and checks hist
  assert.match(qa,/device\.tap_node\('Главная'\)/);
  assert.doesNotMatch(qa,/device\.adb\('shell', 'input', 'keyevent', '4'\)\s*device\.adb\('shell', 'input', 'keyevent', '4'\)/);
 });
+test('UI M2: long Settings form scrolls to and activates its Save control',()=>{
+ assert.match(qa,/for field_index, label in enumerate\(fields\):[\s\S]*?device\.tap_visible_node\('Сохранить условия'\)/);
+});
 
 test('UI M2: real money uses Cyrillic/ruble-capable system font, not Android monospace tofu',()=>{
   assert.match(css,/#homeDeck \.income-hero \.major-amount,\s*#homeDeck \.home-premiums \.premium-teasers strong,\s*\.day-money \.day-row span:last-child\{[\s\S]*?font-family:system-ui/);
@@ -127,13 +130,14 @@ test('UI M2: sliders and header controls retain 48dp targets after page styles a
  assert.match(css,/#app \.back,#app \.export-icon,#app \.theme-toggle,#app \.period-arrow \{ width:48px; height:48px; min-width:48px; min-height:48px;/);
  assert.match(css,/#app\.forecast-page \.duration-slider \{ width:100%; height:48px; min-height:48px;/);
 });
-test('UI M2: large-text form detects IME resize against the pre-keyboard viewport',()=>{
+test('UI M2: large-text form keeps the focused label visible without relying on IME resize detection',()=>{
  const start=app.indexOf('function installLargeTextFormLabelFocusGuard()');
  const end=app.indexOf('function form(',start);
  const guard=app.slice(start,end);
- assert.match(guard,/const fullViewportHeight = Math\.max\(window\.innerHeight, window\.visualViewport\?\.height \?\? 0\)/);
- assert.match(guard,/currentViewportHeight < fullViewportHeight - 100/);
- assert.match(guard,/const offset = keyboardOpen \? Math\.min\(missing, room\) : 0/);
+ assert.match(guard,/const offset = Math\.min\(missing, room\)/);
+ assert.match(guard,/if \(!label\) \{\s*scroll\.style\.paddingTop = ''/);
+ assert.match(guard,/scroll\.style\.paddingTop = offset > 0 \? `\$\{offset\}px` : ''/);
+ assert.match(guard,/if \(offset > 0\) scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
 });
 
 test('Android smoke returns from XLSX picker and verifies saved facts and current payout label',async()=>{
@@ -204,9 +208,9 @@ test('UI-013 full 200% label remains visible after opening IME, not just input a
  assert.match(f,/IME-label-fully-visible/);
 });
 
-test('UI-013: 200% native form focus repositions whole label after IME resize',()=>{
+test('UI-013: 200% native form focus repositions whole label after viewport changes',()=>{
  assert.match(app,/function installLargeTextFormLabelFocusGuard\(\)/);
- assert.match(app,/const offset = keyboardOpen \? Math\.min\(missing, room\) : 0;/);
+ assert.match(app,/const offset = Math\.min\(missing, room\);/);
  assert.match(app,/scroll\.style\.paddingTop = offset > 0 \?/);
  assert.match(app,/scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
  assert.match(app,/window\.visualViewport\?\.addEventListener\('resize', schedule\)/);
