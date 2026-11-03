@@ -66,6 +66,12 @@ test('UI M2: period choice has at least 48dp hitbox in native 360/390 theme matr
  assert.match(qa,/pb\[3\]-pb\[1\] >= 144/);
 });
 
+test('UI M2: native history return waits for the rendered heading text',()=>{
+ assert.ok(app.includes("heading('История')"));
+ assert.match(qa,/device\.wait_node\('История', 20\)/);
+ assert.doesNotMatch(qa,/device\.wait_node\('ИСТОРИЯ', 20\)/);
+});
+
 test('UI M2: native Android file picker opens and cancel preserves both forecast durations',async()=>{
  const native=await readFile(new URL('../android/src/ru/courier/finance/MainActivity.java',import.meta.url),'utf8');
  assert.match(native,/Intent\.ACTION_OPEN_DOCUMENT/);
