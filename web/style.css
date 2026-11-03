@@ -2526,23 +2526,23 @@ html,body {
 #app .cycle-bonus-metrics { gap:12px; }
 #app .cycle-bonus-metrics strong { color:var(--accent); font-size:20px; }
 #app .inline-help { width:28px; height:28px; min-width:28px; min-height:28px; display:inline-grid; place-items:center; margin-left:4px; padding:0; border:0; border-radius:50%; background:var(--accent-wash); color:var(--accent); vertical-align:middle; }
-#app .payment-settings,#app .settings-page>.detail-card,#app .settings-page>.appearance-card { margin-bottom:16px; }
-#app .settings-page .detail-card,#app .settings-page .appearance-card,#app .forecast-page .detail-card { padding:16px; border:1px solid var(--line); background:var(--surface); }
-#app .settings-page .payment-more,#app .forecast-page .calculation,#app .import-quality-details { border:1px solid var(--line); border-radius:var(--inner-radius); background:var(--field); }
-#app .settings-page .payment-more>summary,#app .forecast-page .calculation>summary,#app .import-quality-details>summary { min-height:48px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; cursor:pointer; list-style:none; }
-#app .settings-page .payment-more>summary::after { content:"⌄"; color:var(--accent); font-size:20px; line-height:1; }
-#app .settings-page .payment-more[open]>summary::after { transform:rotate(180deg); }
-#app .settings-page .payment-more>summary svg { display:none; }
-#app .settings-page .payment-more .form-grid { padding:0 16px 16px; }
-#app .settings-page .payment-settings form { display:grid; gap:16px; }
-#app .settings-page .payment-period .hint { margin:8px 0 0; line-height:1.5; }
-#app .settings-page .field input,#app .settings-page .field select,#app .forecast-page .field input { min-height:48px; padding:12px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); }
-#app .settings-page .payment-settings .tariff-rate { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; }
-#app .settings-page .payment-settings .tariff-rate input { font-size:30px; font-weight:600; }
-#app .settings-page .appearance-card,#app .settings-page .detail-card { border-radius:var(--card-radius)!important; }
-#app .settings-page .switch-row { min-height:56px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
-#app .settings-page .switch-row:last-of-type { border-bottom:0; }
-#app .settings-page input[type=checkbox] { accent-color:var(--accent); }
+#app .payment-settings,#app.settings-page>.detail-card,#app.settings-page>.appearance-card { margin-bottom:16px; }
+#app.settings-page .detail-card,#app.settings-page .appearance-card,#app.forecast-page .detail-card { padding:16px; border:1px solid var(--line); background:var(--surface); }
+#app.settings-page .payment-more,#app.forecast-page .calculation,#app .import-quality-details { border:1px solid var(--line); border-radius:var(--inner-radius); background:var(--field); }
+#app.settings-page .payment-more>summary,#app.forecast-page .calculation>summary,#app .import-quality-details>summary { min-height:48px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; cursor:pointer; list-style:none; }
+#app.settings-page .payment-more>summary::after { content:"⌄"; color:var(--accent); font-size:20px; line-height:1; }
+#app.settings-page .payment-more[open]>summary::after { transform:rotate(180deg); }
+#app.settings-page .payment-more>summary svg { display:none; }
+#app.settings-page .payment-more .form-grid { padding:0 16px 16px; }
+#app.settings-page .payment-settings form { display:grid; gap:16px; }
+#app.settings-page .payment-period .hint { margin:8px 0 0; line-height:1.5; }
+#app.settings-page .field input,#app.settings-page .field select,#app.forecast-page .field input { min-height:48px; padding:12px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); }
+#app.settings-page .payment-settings .tariff-rate { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; }
+#app.settings-page .payment-settings .tariff-rate input { font-size:30px; font-weight:600; }
+#app.settings-page .appearance-card,#app.settings-page .detail-card { border-radius:var(--card-radius)!important; }
+#app.settings-page .switch-row { min-height:56px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+#app.settings-page .switch-row:last-of-type { border-bottom:0; }
+#app.settings-page input[type=checkbox] { accent-color:var(--accent); }
 #app .version-label { display:block; width:100%; min-height:44px; margin:4px 0 16px; border:0; border-radius:0!important; background:transparent; color:var(--text-secondary); text-align:center; }
 #app .changelog-dialog { max-width:min(90vw,400px); padding:20px; border:1px solid var(--line); background:var(--surface); color:var(--text-primary); }
 #app .changelog-dialog::backdrop { background:rgba(0,0,0,.58); }
@@ -2555,13 +2555,13 @@ html,body {
 #app .field [aria-invalid=true] { border-color:var(--error); }
 #app .field-error { color:var(--error); font-size:12px; }
 #app .field-warning { color:var(--warning-ink); }
-#app .forecast-page { gap:16px; }
-#app .forecast-page :is(.forecast-simple-hero,.forecast-hero) { overflow:hidden; padding:20px; border:1px solid var(--line); border-top:2px solid var(--accent); background:var(--surface); }
-#app .forecast-page .forecast-simple-hero::before { content:none!important; display:none!important; }
-#app .forecast-page .forecast-simple-hero h2 { margin:4px 0 8px; font-size:19px; }
-#app .forecast-page .forecast-number { margin:8px 0; color:var(--accent); font-size:clamp(38px,12vw,54px); line-height:1.05; }
-#app .forecast-page .forecast-number span { display:block; color:var(--text-secondary); font-size:14px; font-weight:500; }
-#app .forecast-page .forecast-band { display:flex; align-items:center; gap:8px; color:var(--text-secondary); }
+#app.forecast-page { gap:16px; }
+#app.forecast-page :is(.forecast-simple-hero,.forecast-hero) { overflow:hidden; padding:20px; border:1px solid var(--line); border-top:2px solid var(--accent); background:var(--surface); }
+#app.forecast-page .forecast-simple-hero::before { content:none!important; display:none!important; }
+#app.forecast-page .forecast-simple-hero h2 { margin:4px 0 8px; font-size:19px; }
+#app.forecast-page .forecast-number { margin:8px 0; color:var(--accent); font-size:clamp(38px,12vw,54px); line-height:1.05; }
+#app.forecast-page .forecast-number span { display:block; color:var(--text-secondary); font-size:14px; font-weight:500; }
+#app.forecast-page .forecast-band { display:flex; align-items:center; gap:8px; color:var(--text-secondary); }
 #app .forecast-range-help { position:relative; flex:none; }
 #app .forecast-range-help>summary { width:32px; height:32px; display:grid; place-items:center; border-radius:50%; background:var(--field); color:var(--text-secondary); list-style:none; cursor:pointer; }
 #app .forecast-range-help>summary::-webkit-details-marker { display:none; }
@@ -2579,27 +2579,27 @@ html,body {
 #app .forecast-video-summary details>summary::-webkit-details-marker { display:none; }
 #app .forecast-video-summary details[open] { padding-bottom:8px; }
 #app .forecast-video-summary details ol { display:grid; gap:8px; padding-left:22px; color:var(--text-secondary); font-size:12px; }
-#app .forecast-page .forecast-simple-plan { border:1px solid var(--line); border-radius:var(--card-radius); background:var(--surface); }
-#app .forecast-page .forecast-simple-plan .duration-control+.duration-control { margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
-#app .forecast-page .duration-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-#app .forecast-page .duration-value { display:inline-flex; align-items:center; gap:4px; }
-#app .forecast-page .duration-value input { width:76px; min-height:40px; padding:8px 8px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); text-align:right; }
-#app .forecast-page .duration-track { display:grid; grid-template-columns:36px minmax(0,1fr) 36px; align-items:center; gap:8px; margin-top:8px; }
-#app .forecast-page .duration-track button { width:36px; height:36px; min-height:36px; padding:0; border:1px solid var(--line); border-radius:9px!important; background:var(--field); color:var(--text-primary); font-size:18px; }
-#app .forecast-page .duration-slider { width:100%; height:36px; min-height:36px; margin:0; padding:0; border:0; background:transparent; accent-color:var(--accent); }
-#app .forecast-page .duration-slider::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:linear-gradient(to right,var(--accent) 0,var(--accent) var(--duration-fill,0%),var(--line) var(--duration-fill,0%),var(--line) 100%); }
-#app .forecast-page .duration-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); box-shadow:none; }
-#app .forecast-page .duration-slider::-moz-range-track { height:4px; border-radius:4px; background:var(--line); }
-#app .forecast-page .duration-slider::-moz-range-progress { height:4px; border-radius:4px; background:var(--accent); }
-#app .forecast-page .duration-slider::-moz-range-thumb { width:18px; height:18px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); }
+#app.forecast-page .forecast-simple-plan { border:1px solid var(--line); border-radius:var(--card-radius); background:var(--surface); }
+#app.forecast-page .forecast-simple-plan .duration-control+.duration-control { margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+#app.forecast-page .duration-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#app.forecast-page .duration-value { display:inline-flex; align-items:center; gap:4px; }
+#app.forecast-page .duration-value input { width:76px; min-height:40px; padding:8px 8px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); text-align:right; }
+#app.forecast-page .duration-track { display:grid; grid-template-columns:36px minmax(0,1fr) 36px; align-items:center; gap:8px; margin-top:8px; }
+#app.forecast-page .duration-track button { width:36px; height:36px; min-height:36px; padding:0; border:1px solid var(--line); border-radius:9px!important; background:var(--field); color:var(--text-primary); font-size:18px; }
+#app.forecast-page .duration-slider { width:100%; height:36px; min-height:36px; margin:0; padding:0; border:0; background:transparent; accent-color:var(--accent); }
+#app.forecast-page .duration-slider::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:linear-gradient(to right,var(--accent) 0,var(--accent) var(--duration-fill,0%),var(--line) var(--duration-fill,0%),var(--line) 100%); }
+#app.forecast-page .duration-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); box-shadow:none; }
+#app.forecast-page .duration-slider::-moz-range-track { height:4px; border-radius:4px; background:var(--line); }
+#app.forecast-page .duration-slider::-moz-range-progress { height:4px; border-radius:4px; background:var(--accent); }
+#app.forecast-page .duration-slider::-moz-range-thumb { width:18px; height:18px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); }
 #app .duration-step-hint { margin:0; color:var(--text-secondary); font-size:12px; }
-#app .forecast-page .forecast-import-actions { display:grid; grid-template-columns:1fr; gap:8px; margin:0 0 12px; }
-#app .forecast-page .forecast-import-button { min-height:48px; padding:8px; line-height:1.3; white-space:normal; }
-:root[data-text-scale="large"] #app .forecast-page { padding-bottom:72px; }
-:root[data-text-scale="large"] #app .forecast-page .forecast-import-actions { grid-template-columns:1fr; }
-#app .forecast-page .forecast-metrics { gap:12px; }
-#app .forecast-page .metric { border-color:var(--line); }
-#app .forecast-page .metric strong { font-weight:600; }
+#app.forecast-page .forecast-import-actions { display:grid; grid-template-columns:1fr; gap:8px; margin:0 0 12px; }
+#app.forecast-page .forecast-import-button { min-height:48px; padding:8px; line-height:1.3; white-space:normal; }
+:root[data-text-scale="large"] #app.forecast-page { padding-bottom:72px; }
+:root[data-text-scale="large"] #app.forecast-page .forecast-import-actions { grid-template-columns:1fr; }
+#app.forecast-page .forecast-metrics { gap:12px; }
+#app.forecast-page .metric { border-color:var(--line); }
+#app.forecast-page .metric strong { font-weight:600; }
 #app .import-quality-details { margin:8px 0; }
 #app .import-quality-details p { margin:0; padding:0 16px 12px; font-size:12px; overflow-wrap:anywhere; }
 #app .payment-status-action,#app .period-slot-edit { min-height:40px; }
@@ -2619,10 +2619,10 @@ html,body {
   #homeDeck .hero-pace strong { font-size:clamp(36px,11vw,46px); }
   #app .period-day>summary { grid-template-columns:minmax(0,1fr) auto; }
   #app .period-day-chevron { display:none; }
-  #app .forecast-page .forecast-import-actions { grid-template-columns:1fr; }
+  #app.forecast-page .forecast-import-actions { grid-template-columns:1fr; }
 }
 @media(max-width:420px) {
-  #app .forecast-page .forecast-import-actions { grid-template-columns:1fr; }
+  #app.forecast-page .forecast-import-actions { grid-template-columns:1fr; }
 }
 @media(prefers-reduced-motion:reduce) {
   #app *,#app *::before,#app *::after { scroll-behavior:auto!important; transition-duration:.01ms!important; animation-duration:.01ms!important; }
