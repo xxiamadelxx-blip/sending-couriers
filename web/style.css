@@ -2448,7 +2448,7 @@ html,body {
 #app .home-stack { position:relative; display:grid; gap:var(--space-4); padding-left:12px; }
 #app .home-stack::before { content:""; position:absolute; z-index:0; top:24px; bottom:24px; left:4px; width:1px; background:var(--line); pointer-events:none; }
 #app .home-stack > :not(.home-empty) { position:relative; z-index:1; }
-#app .home-stack > :not(.home-empty)::after { content:""; position:absolute; left:-12px; top:24px; width:5px; height:5px; border:1px solid var(--bg); border-radius:50%; background:var(--accent); pointer-events:none; }
+#app .home-stack > :not(.home-empty)::after { content:""; position:absolute; left:-10px; top:24px; width:5px; height:5px; border:1px solid var(--bg); border-radius:50%; background:var(--accent); pointer-events:none; }
 #app .home-empty { margin:0; padding:20px; border:1px solid var(--line); background:var(--surface); }
 #app .home-empty .home-empty-symbol { width:40px; height:40px; display:grid; place-items:center; border:1px solid var(--line); border-radius:12px!important; background:var(--field); color:var(--accent); }
 #app .home-empty h2 { margin:4px 0 0; font-size:24px; line-height:1.2; letter-spacing:-.02em; }
@@ -2509,12 +2509,12 @@ html,body {
 #app .period-day>summary::-webkit-details-marker,#app .payment-more>summary::-webkit-details-marker { display:none; }
 #app .period-day>summary::before { content:""; position:absolute; left:0; top:16px; bottom:16px; width:2px; border-radius:0 2px 2px 0; background:var(--accent); }
 #app .period-day[open]>summary::before { background:var(--accent); }
-#app .period-day-title { display:grid; gap:4px; min-width:0; }
+#app .period-day-title { grid-column:1; grid-row:1; display:grid; gap:4px; min-width:0; }
 #app .period-day-title small { color:var(--text-secondary); }
-#app .period-day-figures { display:grid; justify-items:end; gap:4px; }
+#app .period-day-figures { grid-column:2; grid-row:1; min-width:0; display:grid; justify-items:end; gap:4px; }
 #app .period-day-figures strong { color:var(--text-primary); font-size:19px; }
-#app .period-day-figures small { color:var(--text-secondary); text-align:right; }
-#app .period-day-chevron { display:grid; place-items:center; color:var(--text-secondary); }
+#app .period-day-figures small { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px 8px; min-width:0; color:var(--text-secondary); line-height:1.35; text-align:right; }
+#app .period-day-chevron { grid-column:3; grid-row:1; display:grid; place-items:center; color:var(--text-secondary); }
 #app .period-day-slots { display:grid; gap:8px; padding:0 12px 12px; }
 #app .period-day-slot { padding:12px; border:1px solid var(--line); border-radius:var(--inner-radius)!important; background:var(--field); }
 #app .period-slot-header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
