@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 const app=await readFile(new URL('../web/app.mjs',import.meta.url),'utf8');
 const css=await readFile(new URL('../web/style.css',import.meta.url),'utf8');
 const qa=await readFile(new URL('../qa/ui_audit_matrix.py',import.meta.url),'utf8');
+const forecast=await readFile(new URL('../web/forecast-ui.mjs',import.meta.url),'utf8');
 
 test('UI M1: slot edit form groups hours and money without discarding any existing field',()=>{
  const section=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
@@ -76,15 +77,20 @@ test('UI M2: native Android file picker opens and cancel preserves both forecast
 });
 
 test('UI M2 native 200% font: both time bases are reachable, independently operable and persisted',()=>{
-  for(const action of ['Слот: плюс 15 минут','Слот: минус 15 минут',
-                       'Из них буду работать: плюс 15 минут','Из них буду работать: минус 15 минут']){
-    assert.ok(qa.includes(action),'missing Android 200% interaction: '+action);
+  assert.match(qa,/FORECAST_STEP_MINUTES = 30/);
+  for(const action of ['Слот: плюс','Слот: минус',
+                       'Из них буду работать: плюс','Из них буду работать: минус']){
+    assert.ok(qa.includes(`f'${action} {FORECAST_STEP_MINUTES} минут'`),
+      'missing Android 200% interaction: '+action);
   }
   for(const capture of ['font-2.0-slot-plus','font-2.0-active-plus','font-2.0-both-restored']){
     assert.ok(qa.includes(capture),'missing real-device screenshot: '+capture);
   }
-  assert.match(qa,/durations\(after_slot_plus\) == \[14\.25, 8\]/);
-  assert.match(qa,/durations\(after_active_plus\) == \[14, 8\.25\]/);
+  assert.match(forecast,/durationField\('todaySlotHours','Полный слот',slot,'',30\)/);
+  assert.match(forecast,/durationField\('todayWorkHours','Из них буду работать',work,'',30\)/);
+  assert.match(qa,/durations\(after_slot_plus\) == \[14\.5, 8\]/);
+  assert.match(qa,/durations\(after_active_plus\) == \[14, 8\.5\]/);
+  assert.match(qa,/Thumb drag must use four 30-minute detents/);
   assert.match(qa,/200% round-trip values changed after process death/);
   assert.match(qa,/bb\[3\] <= nav_box\[1\]/);
 });

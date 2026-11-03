@@ -12,6 +12,8 @@ import emulator_smoke as device
 from empty_state_contract import assert_empty_home, assert_empty_history, assert_empty_backup
 from xlsx_import_smoke import exported_state
 
+FORECAST_STEP_MINUTES = 30
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', type=Path, required=True)
 parser.add_argument('--phase', choices=['before', 'after'], required=True)
@@ -244,8 +246,8 @@ def main():
         assert device.find_node(closed, 'Главная') is not None, 'Export modal did not restore the home screen'
     if args.phase == 'after' and args.focus != 'content':
         device.tap_node('Прогноз')
-        for _ in range(6):
-            device.tap_node('Из них буду работать: минус 15 минут')
+        for _ in range(3):
+            device.tap_node(f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут')
         device.tap_node('Главная')
         device.adb('shell', 'am', 'force-stop', device.PACKAGE)
         device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
@@ -254,8 +256,8 @@ def main():
         root = capture('plan-6-5-after-process-restart')
         fields = [n.get('text', '') for n in root.iter('node') if n.get('class') == 'android.widget.EditText']
         assert len(fields) == 2 and [float(v.replace(',', '.')) for v in fields] == [14, 6.5], fields
-        for _ in range(6):
-            device.tap_node('Из них буду работать: плюс 15 минут')
+        for _ in range(3):
+            device.tap_node(f'Из них буду работать: плюс {FORECAST_STEP_MINUTES} минут')
         root = device.dump('duration-gesture-before')
         assert durations(root) == [14, 8], 'Restore before gesture checks failed'
         slider = next(n for n in root.iter('node') if n.get('class') == 'android.widget.SeekBar'
@@ -268,9 +270,9 @@ def main():
         thumb = b[0] + 51 + (b[2]-b[0]-102) // 3  # 34 dp thumb, value 8/24, density 3.
         device.adb('shell', 'input', 'swipe', str(thumb), str(y), str(thumb+120), str(y), '450')
         root = capture('duration-thumb-drag')
-        assert durations(root) == [14, 9], 'Thumb drag must use four 15-minute detents'
+        assert durations(root) == [14, 10], 'Thumb drag must use four 30-minute detents'
         for _ in range(4):
-            device.tap_node('Из них буду работать: минус 15 минут')
+            device.tap_node(f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут')
         device.tap_node('Главная')
     for width, size in [(360, '1080x2400'), (390, '1170x2532')]:
         device.adb('shell', 'wm', 'size', size)
@@ -439,9 +441,10 @@ def main():
             nav = device.find_node(root, 'Главная')
             nav_box = list(map(int, re.findall(r'\d+', nav.get('bounds', ''))))
             assert len(nav_box) == 4
-            for label in ('Слот: минус 15 минут', 'Слот: плюс 15 минут',
-                          'Из них буду работать: минус 15 минут',
-                          'Из них буду работать: плюс 15 минут'):
+            for label in (f'Слот: минус {FORECAST_STEP_MINUTES} минут',
+                          f'Слот: плюс {FORECAST_STEP_MINUTES} минут',
+                          f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут',
+                          f'Из них буду работать: плюс {FORECAST_STEP_MINUTES} минут'):
                 node = device.find_node(root, label)
                 bb = list(map(int, re.findall(r'\d+', node.get('bounds', '')))) if node is not None else []
                 assert len(bb) == 4 and bb[2] > bb[0] and bb[1] >= 0 and bb[3] <= nav_box[1], (
@@ -451,20 +454,20 @@ def main():
                     f'200% slider action below 48dp: {label} {bb}'
                 )
             assert durations(root) == [14, 8], f'Unexpected 200% baseline: {durations(root)}'
-            device.tap_node('Слот: плюс 15 минут')
+            device.tap_node(f'Слот: плюс {FORECAST_STEP_MINUTES} минут')
             after_slot_plus = capture('font-2.0-slot-plus')
-            assert durations(after_slot_plus) == [14.25, 8], (
+            assert durations(after_slot_plus) == [14.5, 8], (
                 f'Full slot action changed wrong field: {durations(after_slot_plus)}'
             )
-            device.tap_node('Слот: минус 15 минут')
+            device.tap_node(f'Слот: минус {FORECAST_STEP_MINUTES} минут')
             restored_slot = device.dump('font-2.0-slot-restored')
             assert durations(restored_slot) == [14, 8]
-            device.tap_node('Из них буду работать: плюс 15 минут')
+            device.tap_node(f'Из них буду работать: плюс {FORECAST_STEP_MINUTES} минут')
             after_active_plus = capture('font-2.0-active-plus')
-            assert durations(after_active_plus) == [14, 8.25], (
+            assert durations(after_active_plus) == [14, 8.5], (
                 f'Active-hours action changed wrong field: {durations(after_active_plus)}'
             )
-            device.tap_node('Из них буду работать: минус 15 минут')
+            device.tap_node(f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут')
             restored_both = capture('font-2.0-both-restored')
             assert durations(restored_both) == [14, 8], (
                 f'200% button round trip lost original values: {durations(restored_both)}'
