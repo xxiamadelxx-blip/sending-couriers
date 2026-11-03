@@ -8,6 +8,12 @@ export function weatherLocation(data,now=new Date()){
  const last=history.at(-1);if(last)return {weatherCity:last.zone,timezone:last.timezone??'Europe/Moscow',source:'history'};
  return {weatherCity:'',timezone:p?.timezone??'Europe/Moscow',source:'unknown'};
 }
+export function resolvedWeatherLocation(raw,profile){
+ if(raw?.requestedCity!==profile.weatherCity || (raw.requestedTimezone??raw.timezone)!==profile.timezone || typeof raw.timezone!=='string')throw new Error('Погода относится к другой местности или часовому поясу.');
+ try { new Intl.DateTimeFormat('ru-RU',{timeZone:raw.timezone}).format(new Date()); }
+ catch { throw new Error('Некорректный часовой пояс погоды.'); }
+ return {...profile,timezone:raw.timezone};
+}
 export function weatherCache(raw,profile,now=new Date()){
  if(raw?.provider!=='Open-Meteo'||raw.requestedCity!==profile.weatherCity||raw.timezone!==profile.timezone||!raw.hourly)throw new Error('Погода относится к другой местности или часовому поясу.');
  const h=raw.hourly;if(!Array.isArray(h.time)||!Array.isArray(h.temperature_2m)||!Array.isArray(h.weather_code)||h.time.length>100)throw new Error('Неполные погодные данные.');
