@@ -132,7 +132,7 @@ test('Android smoke expectations use the current import plural and payout label'
  const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
  const form=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
  assert.match(xlsx,/История загружена: 1 день/);
- assert.match(form,/LABELS = \\(.*Выплачено/s);
+ assert.ok(form.includes("LABELS = ('Часы за слот', 'Заказы за слот', 'Выплачено'"), 'Large-text smoke must use the current payout field label');
  assert.doesNotMatch(form,/Вознаграждение/);
 });
 
