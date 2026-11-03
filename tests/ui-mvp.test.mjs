@@ -112,6 +112,7 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
 
 test('UI M2: narrow and large-text forecast import actions use one readable column',()=>{
  assert.match(css,/#app\.settings-page \.payment-settings form\s*\{\s*display:grid;\s*gap:16px;/);
+ assert.match(css,/#app\.settings-page \.payment-more>summary::after\s*\{\s*content:"";/,'decorative chevron must not become part of the summary accessible name');
  assert.match(css,/#app\.forecast-page \.forecast-import-actions\s*\{\s*display:grid;\s*grid-template-columns:1fr;/);
  assert.match(css,/@media\(max-width:380px\)\s*\{[\s\S]*?#app\.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
  assert.match(css,/@media\(max-width:420px\)\s*\{\s*#app\.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
