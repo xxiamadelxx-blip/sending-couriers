@@ -185,6 +185,22 @@ Independent visual inspection of the **GREEN UI-012** artifact [#40237133128](ht
 
 **Status:** UI-013 **BLOCKED** (confirmed visual defect after 3 unsuccessful native correction cycles); UI-M2/M3 remain **OPEN**. Preserve strict failure assertions, do not hide test or claim release; no more UI-013 blind iteration inside this task. Forecast money, historical facts and owner signing chain unchanged.
 
+### UI-013 reopened by explicit user continuation · 3 November 2026 · BLOCKED after three new cycles
+
+The 26 October freeze remains historical. The user's direct request to continue the clipped-text repair reopened this one criterion for three bounded November correction cycles. Acceptance remains unchanged: at 200% text scale with numeric IME open, the complete focused label and input must remain within the form scroll viewport and above visible Save. No assertion was relaxed.
+
+| Cycle | Source SHA | Android 35 run | Finding |
+| --- | --- | --- | --- |
+| 1 | `513800e03f71c9b7a5b8d8c73c77b8642ce642b4` | [#219](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41659965044) | Large-font form FAIL; action-layout gate also exposed below-fold period/settings actions. |
+| 2 | `944a06ea007f8c76baaff268b33e9391ffd8c92c` | [#220](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41666803018) | Action layout PASS (36 layouts / 252 controls); large-font form still FAIL with the label above the scroll viewport. |
+| 3 | `2e46bc1ca49c9836f750da8b3079e7aa3c7e728a` | [#221](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41673073473) | Label is visible, but the focused input extends 15px below the scroll viewport; strict large-font criterion FAIL. |
+
+**Exact-SHA Android evidence:** #221 ran 3 Nov 2026 16:19:52–16:50:19 UTC on Android 35. CI used synthetic merge SHA `7d18394ae4ce64721a2e140068120bc4b8ce82c7`; the test-only APK SHA256 is `d659d0ddea928ea8c37ec852f65d4597b19eb00f8545d16107fee29ce017dc5d`. Artifact [ID 13251297343](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41673073473/artifacts/13251297343), digest `sha256:b63582d45c2b0659a37680b76556799537478287224bca09d31df123fb19630e`. I downloaded and inspected `ui-independent-gates/ui-independent-gates.json`, the native XML, and `ui-form-200/200-form-failure.png`. At 390dp/light and font scale 2.0, label bounds are `[48,654][1122,762]`, focused input `[48,783][1122,948]`, scroll viewport `[45,603][1125,933]`, and Save `[48,972][1122,1158]`. The label and Save are visible; 15px of the input extends below the scroll viewport. The full field criterion therefore remains FAIL, despite the change in the visible symptom.
+
+**Independent gates at #221:** `ui_matrix PASS` (test APK SHA above; visualAuditStatus=NOT_VERIFIED); `action_layout PASS` (36 layouts / 252 named 48dp controls); `native_edit_labels FAIL` (UiAutomator omits `Вознаграждение`; TalkBack speech was not tested); `xlsx_import PASS` (two imports, two synthetic events); `large_font_form FAIL`; `transfer_upgrade PASS` with a temporary test signer only. Overall CI **FAIL**, not timeout. The test runner preserved its strict assertion. Local checks at source SHA: `npm test` 217/217; targeted Python unit tests 25/25; `py_compile`; `git diff --check`.
+
+**Status:** UI-013 is **BLOCKED after three November attempts**. Do not retry this same issue again within this continuation or loosen its acceptance. UI-M2/M3 remain OPEN; no visual design PASS or release PASS. The PR remains draft/open/unmerged. TalkBack and owner-signed on-device update remain NOT RUN.
+
 ### Independent UI-M2 accessibility semantics subset, following UI-013 block · 26 October 2026
 
 Scoped measurable next task: read actual Android35 UiAutomator XML from **six** surfaces (home, forecast, history, form, settings, export modal), reject visible clickable **non-edit** controls without accessible name, and independently require 48dp roles/names for five navigation buttons, both `SeekBar` values and +/- actions, history edit controls, Settings Save and four export actions. Empty `EditText` nodes remain **unverified for spoken labels** despite visible HTML labels, because `uiautomator` XML does not establish what TalkBack says.
