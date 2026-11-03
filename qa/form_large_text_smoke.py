@@ -13,9 +13,9 @@ import emulator_smoke as device
 OUT = device.ROOT / 'qa-results' / 'ui-form-200'
 OUT.mkdir(parents=True, exist_ok=True)
 device.OUT = OUT
-LABELS = ('Часы за слот', 'Заказы за слот', 'Вознаграждение',
+LABELS = ('Часы за слот', 'Заказы за слот', 'Выплачено',
           'Налог', 'Комиссия парка', 'Чаевые', 'Отдельные бонусы')
-VALUES = {'Часы за слот': '1', 'Заказы за слот': '2', 'Вознаграждение': '300'}
+VALUES = {'Часы за слот': '1', 'Заказы за слот': '2', 'Выплачено': '300'}
 
 def bounds(node):
     return list(map(int, re.findall(r'\d+', node.get('bounds', '')))) if node is not None else []
@@ -107,7 +107,7 @@ def enter_and_check(label, value, point, mode):
         f'scroll={bounds(form_scroll(root))}'
     )
     snap(f'200-{mode}-{label}-IME-label-fully-visible')
-    if label == 'Вознаграждение':
+    if label == 'Выплачено':
         snap('200-390-light-IME-save-visible')
     device.adb('shell', 'input', 'text', value)
     edited = device.dump(f'200-{mode}-{label}-typed')
@@ -181,7 +181,7 @@ def main():
         snap(f'200-{mode}-form-first')
         for label in LABELS:
             point = scroll_until_input(label, f'200-{mode}-{label}')
-            if label in ('Вознаграждение', 'Отдельные бонусы'):
+            if label in ('Выплачено', 'Отдельные бонусы'):
                 snap(f'200-{mode}-{label}-reachable')
             if mode == '390-light' and label in VALUES:
                 enter_and_check(label, VALUES[label], point, mode)

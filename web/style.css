@@ -2497,7 +2497,7 @@ html,body {
 #homeDeck .calculation { border:1px solid var(--line); border-radius:var(--inner-radius); background:var(--surface); }
 #app .page-heading { min-height:56px; gap:12px; margin:0 0 20px; padding:0 0 12px; border-bottom:1px solid var(--line); }
 #app .page-heading h1 { flex:1; margin:0; font-size:23px; letter-spacing:-.02em; }
-#app .back,#app .export-icon,#app .theme-toggle,#app .period-arrow { width:44px; height:44px; min-width:44px; min-height:44px; display:grid; place-items:center; padding:0; border:1px solid var(--line); background:var(--surface); color:var(--text-secondary); }
+#app .back,#app .export-icon,#app .theme-toggle,#app .period-arrow { width:48px; height:48px; min-width:48px; min-height:48px; display:grid; place-items:center; padding:0; border:1px solid var(--line); background:var(--surface); color:var(--text-secondary); }
 #app .back svg,#app .export-icon svg,#app .theme-toggle svg,#app .period-arrow svg { width:18px!important; height:18px!important; }
 #app .period-navigation { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:8px; margin-bottom:20px; }
 #app .period-arrow { border-radius:var(--control-radius)!important; }
@@ -2586,7 +2586,7 @@ html,body {
 #app.forecast-page .duration-value input { width:76px; min-height:40px; padding:8px 8px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); text-align:right; }
 #app.forecast-page .duration-track { display:grid; grid-template-columns:48px minmax(0,1fr) 48px; align-items:center; gap:8px; margin-top:8px; }
 #app.forecast-page .duration-track button { width:48px; height:48px; min-height:48px; padding:0; border:1px solid var(--line); border-radius:9px!important; background:var(--field); color:var(--text-primary); font-size:18px; }
-#app.forecast-page .duration-slider { width:100%; height:36px; min-height:36px; margin:0; padding:0; border:0; background:transparent; accent-color:var(--accent); }
+#app.forecast-page .duration-slider { width:100%; height:48px; min-height:48px; margin:0; padding:0; border:0; background:transparent; accent-color:var(--accent); }
 #app.forecast-page .duration-slider::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:linear-gradient(to right,var(--accent) 0,var(--accent) var(--duration-fill,0%),var(--line) var(--duration-fill,0%),var(--line) 100%); }
 #app.forecast-page .duration-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); box-shadow:none; }
 #app.forecast-page .duration-slider::-moz-range-track { height:4px; border-radius:4px; background:var(--line); }

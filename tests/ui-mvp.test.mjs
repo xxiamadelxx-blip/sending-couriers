@@ -123,6 +123,19 @@ test('UI M2: forecast step buttons retain 48dp targets after page styles apply',
  assert.match(css,/#app\.forecast-page \.duration-track\s*\{[^}]*grid-template-columns:48px minmax\(0,1fr\) 48px;/);
  assert.match(css,/#app\.forecast-page \.duration-track button\s*\{[^}]*width:48px; height:48px; min-height:48px;/);
 });
+test('UI M2: sliders and header controls retain 48dp targets after page styles apply',()=>{
+ assert.match(css,/#app \.back,#app \.export-icon,#app \.theme-toggle,#app \.period-arrow \{ width:48px; height:48px; min-width:48px; min-height:48px;/);
+ assert.match(css,/#app\.forecast-page \.duration-slider \{ width:100%; height:48px; min-height:48px;/);
+});
+
+test('Android smoke expectations use the current import plural and payout label',async()=>{
+ const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
+ const form=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
+ assert.match(xlsx,/История загружена: 1 день/);
+ assert.match(form,/LABELS = \\(.*Выплачено/s);
+ assert.doesNotMatch(form,/Вознаграждение/);
+});
+
 
 test('UI M2: large text forecast reserves scroll room above the fixed navigation',()=>{
  assert.match(css,/:root\[data-text-scale="large"\] #app\.forecast-page \{ padding-bottom:72px;/);

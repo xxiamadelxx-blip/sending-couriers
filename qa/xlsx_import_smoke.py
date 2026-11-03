@@ -65,7 +65,7 @@ def choose_workbook():
                 tap(node)
     _, file = wait_node(NAME, 15)
     tap(file)
-    ready = wait_node("История загружена: 1 дней", 20)[0]
+    ready = wait_node("История загружена: 1 день", 20)[0]
     assert find_node(ready, "Прогноз") is not None, "Forecast did not return after XLSX import"
     assert find_node(ready, "Не удалось прочитать файл") is None
     wait_node(NO_WORK_HISTORY_LABEL, 25)
