@@ -499,6 +499,7 @@ function installLargeTextFormLabelFocusGuard() {
   const scroll = app.querySelector('.form-scroll');
   const save = app.querySelector('.save-area');
   if (!scroll || !save) return;
+  let settleTimer = null;
   const align = () => {
     if (!app.classList.contains('form-page')) return;
     const input = scroll.querySelector('.form-grid .field input:focus');
@@ -519,18 +520,27 @@ function installLargeTextFormLabelFocusGuard() {
     // without depending on whether this WebView reports the IME resize.
     // Only use space already available above Save; Save itself stays fixed.
     const offset = Math.min(missing, room);
-    scroll.style.paddingTop = offset > 0 ? `${offset}px` : '';
-    if (offset > 0) scroll.scrollTop = Math.max(0, scroll.scrollTop - offset);
+    // Keep the spacer while this input stays focused. Clearing it on a later
+    // resize can pull the label back under the fixed heading.
+    if (offset > 0) {
+      scroll.style.paddingTop = `${offset}px`;
+      scroll.scrollTop = Math.max(0, scroll.scrollTop - offset);
+    }
   };
   const schedule = () => {
     requestAnimationFrame(() => requestAnimationFrame(align));
-    setTimeout(align, 140);
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(align, 420);
   };
+  const reset = () => { scroll.style.paddingTop = ''; };
   scroll.addEventListener('focusin', schedule);
+  scroll.addEventListener('focusout', reset);
   window.visualViewport?.addEventListener('resize', schedule);
   window.addEventListener('resize', schedule);
   formLabelFocusCleanup = () => {
+    clearTimeout(settleTimer);
     scroll.removeEventListener('focusin', schedule);
+    scroll.removeEventListener('focusout', reset);
     window.visualViewport?.removeEventListener('resize', schedule);
     window.removeEventListener('resize', schedule);
   };

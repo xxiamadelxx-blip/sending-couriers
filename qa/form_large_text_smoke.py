@@ -91,10 +91,49 @@ def focused_field_completely_visible(root, label):
             and sb[1] <= lb[1] < lb[3] <= lower
             and sb[1] <= eb[1] < eb[3] <= lower)
 
+def wait_for_keyboard_layout(label, mode, timeout=3.0):
+    """Wait for keyboard geometry and WebView focus scrolling to settle."""
+    deadline = time.monotonic() + timeout
+    previous = None
+    stable_samples = 0
+    keyboard_open_at = None
+    stable_since = None
+    root = None
+    attempt = 0
+    while time.monotonic() < deadline:
+        root = device.dump(f'200-{mode}-{label}-ime-settle-{attempt}')
+        attempt += 1
+        webview = next((n for n in root.iter('node')
+                        if n.get('class') == 'android.webkit.WebView'), None)
+        web_bounds = bounds(webview)
+        save_bounds = bounds(device.find_node(root, 'Сохранить слот'))
+        signature = (web_bounds, bounds(form_scroll(root)),
+                     bounds(device.find_node(root, label)),
+                     bounds(input_after_label(root, label)), save_bounds)
+        keyboard_open = (len(web_bounds) == 4 and len(save_bounds) == 4
+                         and 0 < save_bounds[1] < save_bounds[3] <= web_bounds[3]
+                         and web_bounds[3] < 2100)
+        now = time.monotonic()
+        if keyboard_open:
+            keyboard_open_at = keyboard_open_at or now
+        else:
+            keyboard_open_at = None
+        if keyboard_open and signature == previous:
+            stable_samples += 1
+            if (stable_since is not None and stable_samples >= 1
+                    and now - keyboard_open_at >= .65 and now - stable_since >= .5):
+                return root
+        else:
+            stable_samples = 0
+            stable_since = now if keyboard_open else None
+        previous = signature
+        time.sleep(.12)
+    return root
+
 
 def enter_and_check(label, value, point, mode):
     device.adb('shell', 'input', 'tap', str(point[0]), str(point[1]))
-    root = device.dump(f'200-{mode}-{label}-ime')
+    root = wait_for_keyboard_layout(label, mode)
     webview = next((n for n in root.iter('node') if n.get('class') == 'android.webkit.WebView'), None)
     wb, pb = bounds(webview), bounds(device.find_node(root, 'Сохранить слот'))
     assert len(wb) == len(pb) == 4, f'IME/save elements absent for {label}'

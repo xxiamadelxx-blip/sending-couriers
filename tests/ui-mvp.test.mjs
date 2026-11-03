@@ -136,8 +136,10 @@ test('UI M2: large-text form keeps the focused label visible without relying on 
  const guard=app.slice(start,end);
  assert.match(guard,/const offset = Math\.min\(missing, room\)/);
  assert.match(guard,/if \(!label\) \{\s*scroll\.style\.paddingTop = ''/);
- assert.match(guard,/scroll\.style\.paddingTop = offset > 0 \? `\$\{offset\}px` : ''/);
- assert.match(guard,/if \(offset > 0\) scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
+ assert.match(guard,/if \(offset > 0\) \{\s*scroll\.style\.paddingTop = `\$\{offset\}px`/);
+ assert.match(guard,/scroll\.addEventListener\('focusout', reset\)/);
+ assert.match(guard,/settleTimer = setTimeout\(align, 420\)/);
+ assert.match(guard,/if \(offset > 0\) \{[\s\S]*?scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
 });
 
 test('Android smoke returns from XLSX picker and verifies saved facts and current payout label',async()=>{
@@ -204,6 +206,8 @@ test('release: transfer build and manifest agree on 1.7.27/code41 and keep the 1
 test('UI-013 full 200% label remains visible after opening IME, not just input and Save',async()=>{
  const f=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
  assert.match(css,/:root\[data-text-scale="large"\] \.form-page \.form-grid \.field input\{\s*scroll-margin-block-start:42px;/);
+ assert.match(f,/root = wait_for_keyboard_layout\(label, mode\)/);
+ assert.match(f,/now - keyboard_open_at >= \.65[\s\S]*?now - stable_since >= \.5/);
  assert.match(f,/assert focused_field_completely_visible\(root, label\)/);
  assert.match(f,/IME-label-fully-visible/);
 });
@@ -211,7 +215,8 @@ test('UI-013 full 200% label remains visible after opening IME, not just input a
 test('UI-013: 200% native form focus repositions whole label after viewport changes',()=>{
  assert.match(app,/function installLargeTextFormLabelFocusGuard\(\)/);
  assert.match(app,/const offset = Math\.min\(missing, room\);/);
- assert.match(app,/scroll\.style\.paddingTop = offset > 0 \?/);
+ assert.match(app,/scroll\.addEventListener\('focusout', reset\)/);
+ assert.match(app,/settleTimer = setTimeout\(align, 420\)/);
  assert.match(app,/scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
  assert.match(app,/window\.visualViewport\?\.addEventListener\('resize', schedule\)/);
  assert.match(app,/scroll\.addEventListener\('focusin', schedule\)/);
