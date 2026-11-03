@@ -2584,8 +2584,8 @@ html,body {
 #app.forecast-page .duration-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 #app.forecast-page .duration-value { display:inline-flex; align-items:center; gap:4px; }
 #app.forecast-page .duration-value input { width:76px; min-height:40px; padding:8px 8px; border:1px solid var(--line); background:var(--field); color:var(--text-primary); text-align:right; }
-#app.forecast-page .duration-track { display:grid; grid-template-columns:36px minmax(0,1fr) 36px; align-items:center; gap:8px; margin-top:8px; }
-#app.forecast-page .duration-track button { width:36px; height:36px; min-height:36px; padding:0; border:1px solid var(--line); border-radius:9px!important; background:var(--field); color:var(--text-primary); font-size:18px; }
+#app.forecast-page .duration-track { display:grid; grid-template-columns:48px minmax(0,1fr) 48px; align-items:center; gap:8px; margin-top:8px; }
+#app.forecast-page .duration-track button { width:48px; height:48px; min-height:48px; padding:0; border:1px solid var(--line); border-radius:9px!important; background:var(--field); color:var(--text-primary); font-size:18px; }
 #app.forecast-page .duration-slider { width:100%; height:36px; min-height:36px; margin:0; padding:0; border:0; background:transparent; accent-color:var(--accent); }
 #app.forecast-page .duration-slider::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:linear-gradient(to right,var(--accent) 0,var(--accent) var(--duration-fill,0%),var(--line) var(--duration-fill,0%),var(--line) 100%); }
 #app.forecast-page .duration-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px; border:2px solid var(--bg); border-radius:50%; background:var(--accent); box-shadow:none; }

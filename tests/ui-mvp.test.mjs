@@ -119,6 +119,11 @@ test('UI M2: narrow and large-text forecast import actions use one readable colu
  assert.match(css,/:root\[data-text-scale="large"\] #app\.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
 });
 
+test('UI M2: forecast step buttons retain 48dp targets after page styles apply',()=>{
+ assert.match(css,/#app\.forecast-page \.duration-track\s*\{[^}]*grid-template-columns:48px minmax\(0,1fr\) 48px;/);
+ assert.match(css,/#app\.forecast-page \.duration-track button\s*\{[^}]*width:48px; height:48px; min-height:48px;/);
+});
+
 test('UI M2: large text forecast reserves scroll room above the fixed navigation',()=>{
  assert.match(css,/:root\[data-text-scale="large"\] #app\.forecast-page \{ padding-bottom:72px;/);
  assert.match(qa,/action_bounds\[3\] <= nav_bounds\[1\]/);
