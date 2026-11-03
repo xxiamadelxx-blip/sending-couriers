@@ -66,6 +66,7 @@ jobs:
           test "$(wc -c < m4-models/tessdata/rus.traineddata)" -eq 3861738
           test "$(wc -c < m4-models/tessdata/eng.traineddata)" -eq 4113088
       - name: Build isolated test APK, preserve release signing
+        id: build-ui-apk
         run: |
           cp -a . "$RUNNER_TEMP/courier-ui-source"
           python3 "$RUNNER_TEMP/courier-ui-source/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/courier-ui-test-only.apk"
@@ -77,6 +78,13 @@ jobs:
                   if source.is_file():
                       assert apk.read('assets/www/'+source.name) == source.read_bytes(), source
           PY
+      - name: Publish current-source test APK for review
+        if: always() && steps.build-ui-apk.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: courier-ui-test-only-${{ github.sha }}
+          path: ${{ runner.temp }}/courier-ui-test-only.apk
+          if-no-files-found: error
       - name: Build isolated transfer package for owner signing
         run: |
           cp -a . "$RUNNER_TEMP/courier-transfer-source"
