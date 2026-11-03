@@ -61,16 +61,12 @@ class AndroidSmokeOracleTests(TestCase):
         adb.assert_called_once_with("shell", "wm", "size")
         tap.assert_called_once_with("Сохранить слот")
 
-    def test_xlsx_import_waits_for_full_accessible_no_work_history_label(self):
-        root = ET.fromstring(
-            '<hierarchy><node text="Пока мало данных о рабочем времени" /></hierarchy>'
-        )
-        label = device.NO_WORK_HISTORY_LABEL
-        self.assertEqual(label, "Пока мало данных о рабочем времени")
-        self.assertIsNotNone(device.find_node(root, label))
-        self.assertIsNone(device.find_node(root, "Пока мало данных"))
+    def test_xlsx_import_checks_durable_import_summary(self):
         smoke = MODULE.with_name("xlsx_import_smoke.py").read_text(encoding="utf-8")
-        self.assertIn("wait_node(NO_WORK_HISTORY_LABEL, 25)", smoke)
+        self.assertIn('wait_node("История и импорт", 20)', smoke)
+        self.assertIn('wait_node("Состав импортированной истории", 20)', smoke)
+        self.assertIn("Даты: 1 · события: 2", smoke)
+        self.assertIn("Imported history summary did not show one date and two order events", smoke)
 
     def test_add_slot_never_taps_reward_field_outside_scroll_view(self):
         offscreen = ET.fromstring('''<hierarchy>
