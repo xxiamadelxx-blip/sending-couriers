@@ -2371,7 +2371,7 @@ body{background-image:none!important;background-attachment:initial}
 .form-page input#reward,.form-page input#dailyHours,.form-page input#dailyOrders{font-family:Roboto,"Golos Text",system-ui,sans-serif;font-weight:500;letter-spacing:0}
 .period-overview::before,.forecast-simple-hero::before,.appearance-card::before{content:none!important;display:none!important}
 #app .period-overview h2,#app .payment-settings h2,#app .home-premiums .card-heading{text-transform:none;letter-spacing:-.02em;font-weight:620}
-#app .form-section-heading{border-bottom:1px solid var(--line);font-size:15px;font-weight:600;letter-spacing:0;text-transform:none}
+#app .form-section-heading{border-bottom:0;font-size:15px;font-weight:600;letter-spacing:0;text-transform:none}
 .payment-settings .pager-tabs button{font-weight:520;letter-spacing:0;text-transform:none}
 .appearance-card{border-top:1px solid var(--line)}
 
