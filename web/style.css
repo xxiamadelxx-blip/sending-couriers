@@ -86,7 +86,7 @@ progress::-webkit-progress-bar{background:var(--gauge-track)}
 .theme-field{margin:14px 0 0}.theme-field select{width:100%;min-height:48px;font-size:16px}
 .payment-period{margin:18px 0 12px}.payment-period select{width:100%;min-height:48px}
 .payment-settings .form-grid{margin:0}.payment-settings .field-unit{font-size:12px;right:12px}
-.payment-settings .field:not(.full)>label{min-height:41px}
+.payment-settings .field:not(.full):not(.payment-period)>label{min-height:41px}
 .payment-settings .with-unit{padding-right:80px}.payment-settings #hourlyRate,.payment-settings #paceBonusPercent,.payment-settings #cycleBonusPercent{padding-right:34px}
 .payment-settings #savePaymentTerms{width:100%;margin-top:8px}
 .payment-rule{padding:12px 0;border-bottom:1px solid var(--line)}.payment-rule>span,.payment-rule>strong{display:block}.payment-rule>strong{color:var(--ink)}
@@ -532,7 +532,7 @@ input,select,textarea,.field input,.forecast-page .field input{border-radius:4px
 #homeDeck .home-focus .payment-status strong{color:var(--console-hero-ink)}
 #homeDeck .home-focus .payment-status p{color:var(--console-label)}
 #homeDeck .home-focus .payment-status.met svg{color:var(--signal-panel)}
-#homeDeck .home-focus .payment-status.risk strong{color:#ff9683}
+#homeDeck .home-focus .payment-status.risk strong{color:var(--error)}
 #homeDeck .income-hero{background:var(--signal-panel);color:#1b2226;border:0;border-radius:3px;box-shadow:none;clip-path:polygon(0 0,100% 0,100% calc(100% - 17px),calc(100% - 17px) 100%,0 100%);padding:22px 20px 28px}
 #homeDeck .income-hero h2{color:#343a3e;font-size:11px;font-weight:900;letter-spacing:.15em;text-transform:uppercase}
 #homeDeck .income-hero .major-amount{font-family:ui-monospace,"Roboto Mono",monospace;font-weight:900;font-size:clamp(37px,11.2vw,57px);letter-spacing:-.075em;color:#151b1e;line-height:1.05;margin:15px 0 17px}
