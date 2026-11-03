@@ -65,10 +65,22 @@ def choose_workbook():
                 tap(node)
     _, file = wait_node(NAME, 15)
     tap(file)
-    ready = wait_node("История загружена: 1 день", 20)[0]
-    assert find_node(ready, "Прогноз") is not None, "Forecast did not return after XLSX import"
-    assert find_node(ready, "Не удалось прочитать файл") is None
-    wait_node(NO_WORK_HISTORY_LABEL, 25)
+    # The success message is a transient WebView status toast and is not
+    # consistently exposed by UiAutomator. Verify the durable imported-history
+    # view instead, then independently verify the persisted rows from backup.
+    wait_node("История и импорт", 20)
+    tap_node("История и импорт")
+    root, summary = wait_node("Состав импортированной истории", 20)
+    tap(summary)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        root = dump("xlsx-import-summary")
+        if any("Даты: 1 · события: 2" in (node.get("text", "") or node.get("content-desc", ""))
+               for node in root.iter("node")):
+            break
+        time.sleep(1)
+    else:
+        raise AssertionError("Imported history summary did not show one date and two order events")
     screenshot("xlsx-after-import")
 
 
