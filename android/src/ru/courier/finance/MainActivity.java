@@ -374,7 +374,7 @@ public final class MainActivity extends Activity {
                     runOnUiThread(() -> { if (!isFinishing()) web.evaluateJavascript("window.receiveWeather("+JSONObject.quote(result)+")",null); });
                 } catch (Exception e) {
                     String failure = e instanceof WeatherClient.HttpStatusException
-                        ? "HTTP " + ((WeatherClient.HttpStatusException)e).status : e.getClass().getSimpleName();
+                        ? "HTTP " + ((WeatherClient.HttpStatusException)e).status + " (" + ((WeatherClient.HttpStatusException)e).category + ")" : e.getClass().getSimpleName();
                     android.util.Log.w("CourierWeather", "Weather request failed: " + failure);
                     runOnUiThread(() -> { if (!isFinishing()) web.evaluateJavascript("window.weatherFailed && window.weatherFailed()",null); });
                 } finally { weatherLoading=false; }

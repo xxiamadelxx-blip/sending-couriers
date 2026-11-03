@@ -13,7 +13,8 @@ import org.json.JSONObject;
 public final class WeatherClient {
     static final class HttpStatusException extends Exception {
         final int status;
-        HttpStatusException(int status) { this.status = status; }
+        final String category;
+        HttpStatusException(int status, String category) { this.status = status; this.category = category; }
     }
     private static JSONObject get(String address) throws Exception {
         URL url = new URL(address);
@@ -22,7 +23,19 @@ public final class WeatherClient {
         connection.setConnectTimeout(7000); connection.setReadTimeout(7000); connection.setInstanceFollowRedirects(false);
         try {
             int status = connection.getResponseCode();
-            if (status != 200) throw new HttpStatusException(status);
+            if (status != 200) {
+                String category = "other";
+                try (InputStream in = connection.getErrorStream()) {
+                    if (in != null) {
+                        byte[] bytes = new byte[4096]; int n = in.read(bytes);
+                        String body = n > 0 ? new String(bytes, 0, n, StandardCharsets.UTF_8).toLowerCase(java.util.Locale.ROOT) : "";
+                        if (body.contains("timezone") || body.contains("time zone")) category = "timezone";
+                        else if (body.contains("latitude") || body.contains("longitude")) category = "coordinates";
+                        else if (body.contains("hourly") || body.contains("weather_code")) category = "forecast fields";
+                    }
+                } catch (Exception ignored) { }
+                throw new HttpStatusException(status, category);
+            }
             try (InputStream in=connection.getInputStream(); ByteArrayOutputStream out=new ByteArrayOutputStream()) {
                 byte[] buffer=new byte[4096]; int n;
                 while((n=in.read(buffer))!=-1) { out.write(buffer,0,n); if(out.size()>200000) throw new IllegalArgumentException(); }
