@@ -6,7 +6,16 @@ import re
 import time
 from pathlib import Path
 
-from emulator_smoke import OUT, adb, dump, find_node, screenshot, tap_node, wait_node
+from emulator_smoke import (
+    NO_WORK_HISTORY_LABEL,
+    OUT,
+    adb,
+    dump,
+    find_node,
+    screenshot,
+    tap_node,
+    wait_node,
+)
 from make_partial_xlsx import create
 
 NAME = "Courier-QA-partial.xlsx"
@@ -59,7 +68,7 @@ def choose_workbook():
     ready = wait_node("История загружена: 1 дней", 20)[0]
     assert find_node(ready, "Прогноз") is not None, "Forecast did not return after XLSX import"
     assert find_node(ready, "Не удалось прочитать файл") is None
-    wait_node("Пока мало данных", 25)  # Same insufficient-history state, new approved wording.
+    wait_node(NO_WORK_HISTORY_LABEL, 25)
     screenshot("xlsx-after-import")
 
 

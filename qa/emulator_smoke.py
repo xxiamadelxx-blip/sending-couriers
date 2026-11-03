@@ -20,6 +20,7 @@ APK = ROOT / "qa" / "Courier-Finance-1.7.11.apk"
 EXPECTED = "0daa53d8fa79bfd2d19c4c0a16c36a065c24ee0cbb390fec3ca0ef302b50ef58"
 PACKAGE = "ru.courier.finance"
 ACTIVITY = f"{PACKAGE}/.MainActivity"
+NO_WORK_HISTORY_LABEL = "Пока мало данных о рабочем времени"
 
 
 def adb(*args, binary=False, check=True):
@@ -121,7 +122,7 @@ def tap_visible_node(name, attempts=6):
     their stale/off-screen bounds can hit the fixed FAB, so only tap after the
     control is fully inside the viewport and above the bottom navigation.
     """
-    dimensions = re.findall(r"(\\d+)x(\\d+)", adb("shell", "wm", "size"))
+    dimensions = re.findall(r"(\d+)x(\d+)", adb("shell", "wm", "size"))
     if not dimensions:
         raise AssertionError("Unable to read emulator screen size")
     width, height = map(int, dimensions[-1])
@@ -130,8 +131,8 @@ def tap_visible_node(name, attempts=6):
         root = dump(f"scroll-{safe_name}-{attempt}")
         node = find_node(root, name)
         nav = find_node(root, "Главная")
-        bounds = list(map(int, re.findall(r"\\d+", node.get("bounds", "")))) if node is not None else []
-        nav_bounds = list(map(int, re.findall(r"\\d+", nav.get("bounds", "")))) if nav is not None else []
+        bounds = list(map(int, re.findall(r"\d+", node.get("bounds", "")))) if node is not None else []
+        nav_bounds = list(map(int, re.findall(r"\d+", nav.get("bounds", "")))) if nav is not None else []
         safe_bottom = min(height, nav_bounds[1]) if len(nav_bounds) == 4 else height
         if (len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1]
                 and bounds[0] >= 0 and bounds[2] <= width
