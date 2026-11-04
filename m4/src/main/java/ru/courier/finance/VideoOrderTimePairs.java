@@ -148,35 +148,6 @@ public final class VideoOrderTimePairs {
             }
             for(Map.Entry<String,Support> candidate:selected) {
                 Support support=candidate.getValue();
-                // Two real orders can have identical start and completion
-                // minutes. Keep them separate when each order number is
-                // independently observed in at least two frames; one noisy
-                // reading alone must not create another order.
-                Map<String,Set<String>> framesByNumber=new HashMap<>();
-                for(Map.Entry<String,Set<String>> observation:support.orderNumbersByFrame.entrySet()) {
-                    if(observation.getValue().size()!=1) continue;
-                    String id=observation.getValue().iterator().next();
-                    framesByNumber.computeIfAbsent(id,k->new HashSet<>()).add(observation.getKey());
-                }
-                List<String> independentlyObserved=new ArrayList<>();
-                for(Map.Entry<String,Set<String>> id:framesByNumber.entrySet())
-                    if(id.getValue().size()>=2) independentlyObserved.add(id.getKey());
-                if(independentlyObserved.size()>=2) {
-                    for(String id:independentlyObserved) {
-                        Set<String> hashes=framesByNumber.get(id);
-                        Map<String,Set<String>> moneyByFrame=new HashMap<>();
-                        Map<String,Integer> confidenceByFrame=new HashMap<>();
-                        for(String hash:hashes) {
-                            if(support.amountsByFrame.containsKey(hash)) moneyByFrame.put(hash,support.amountsByFrame.get(hash));
-                            if(support.confidenceByFrame.containsKey(hash)) confidenceByFrame.put(hash,support.confidenceByFrame.get(hash));
-                        }
-                        Set<String> amounts=new HashSet<>();
-                        for(Set<String> values:moneyByFrame.values()) amounts.addAll(values);
-                        pairs.add(new Pair(candidate.getKey(),entry.getKey(),id,consensus(moneyByFrame),
-                            averageConfidence(confidenceByFrame),new HashSet<>(java.util.Collections.singleton(id)),amounts,hashes.size()));
-                    }
-                    continue;
-                }
                 String number=consensus(support.orderNumbersByFrame);
                 String amount=consensus(support.amountsByFrame);
                 int confidence=averageConfidence(support.confidenceByFrame);
