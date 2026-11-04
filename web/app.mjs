@@ -264,8 +264,13 @@ function openExportDialog() {
   $('#exportPeriodLabel').textContent = `ОТЧЁТ · ${periodLabel(selectedPeriod)}`;
   $('#exportDialog').showModal();
 }
+function compactPeriodLabel(id) {
+  const { start, end } = periodFor(id);
+  const dayMonth = date => `${date.slice(8, 10)}.${date.slice(5, 7)}`;
+  return `${dayMonth(start)}${start.slice(0, 4) !== end.slice(0, 4) ? '.' + start.slice(0, 4) : ''}–${dayMonth(end)}.${end.slice(0, 4)}`;
+}
 function navigation() {
-  return `<div class="period-navigation"><button class="period-arrow" id="previousPeriod" aria-label="Предыдущий период" title="Предыдущий период" type="button">${icon['chevron-left']}</button><select id="periodPicker" class="period-select" aria-label="Расчётный период">${periods().map(id => `<option value="${id}" ${id === selectedPeriod ? 'selected' : ''}>${esc(periodLabel(id))}</option>`).join('')}</select><button class="period-arrow" id="nextPeriod" aria-label="Следующий период" title="Следующий период" type="button">${icons.chevron}</button></div>`;
+  return `<div class="period-navigation"><button class="period-arrow" id="previousPeriod" aria-label="Предыдущий период" title="Предыдущий период" type="button">${icon['chevron-left']}</button><select id="periodPicker" class="period-select" aria-label="Расчётный период">${periods().map(id => `<option value="${id}" ${id === selectedPeriod ? 'selected' : ''}>${esc(compactPeriodLabel(id))}</option>`).join('')}</select><button class="period-arrow" id="nextPeriod" aria-label="Следующий период" title="Следующий период" type="button">${icons.chevron}</button></div>`;
 }
 function bindNavigation(rerender) {
   $('#periodPicker').addEventListener('change', e => { selectedPeriod = e.target.value; rerender(); });
