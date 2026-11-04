@@ -71,7 +71,6 @@ function warmForecast() {
 }
 function openForecast(initial = 'today') {
   if(!leaveForecast())return;
-  try { recoverStoredVideoEvidence(); } catch(error) { console.warn('Video recovery failed:',error?.message??error); }
   const synced=syncSlots(state.forecast,state.entries);
   const updated=evaluateForecasts(snapshotIfPossible(synced));
   if (JSON.stringify(updated) !== JSON.stringify(state.forecast)) {
@@ -147,7 +146,6 @@ window.receiveNativeForecasts = raw => {
 function refreshNativeForecasts() {
   try {
     const imports=Native?.pendingVideoResults?.();if(imports)window.receivePendingVideoResults(imports);
-    if(view==='forecast') recoverStoredVideoEvidence();
     const pending=Native?.pendingNativeForecasts?.();if(pending)window.receiveNativeForecasts(pending);
   }
   catch(error) {
