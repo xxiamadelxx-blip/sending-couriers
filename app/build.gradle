@@ -87,6 +87,10 @@ android {
             manifest.srcFile '../m4/debug/AndroidManifest.xml'
             java.srcDirs = ['../tests/m4probe']
         }
+        m4Qa {
+            manifest.srcFile '../tests/m4qa/AndroidManifest.xml'
+            java.srcDirs = ['../tests/m4qa']
+        }
         test { java.srcDirs = ['../tests/m4unit'] }
     }
     testOptions { unitTests.returnDefaultValues = true }
