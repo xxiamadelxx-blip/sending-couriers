@@ -296,4 +296,11 @@ test('Add Slot form has aligned responsive money fields and no dash placeholders
  assert.match(css,/\.form-page \.slot-mode-options \[role="radio"\]/);
 });
 
-\ntest('startup uses the approved system mark without a second native splash overlay',async()=>{\n const activity=await readFile(new URL('../android/src/ru/courier/finance/MainActivity.java',import.meta.url),'utf8');\n const splash=await readFile(new URL('../android/res/values-v31/styles.xml',import.meta.url),'utf8');\n assert.doesNotMatch(activity,/createLaunch\\(|addView\\(launch/);\n assert.match(splash,/@drawable\\/approved_mark/);\n assert.doesNotMatch(splash,/@drawable\\/launch_mark/);\n});\n
+
+test('startup uses the approved system mark without a second native splash overlay',async()=>{
+ const activity=await readFile(new URL('../android/src/ru/courier/finance/MainActivity.java',import.meta.url),'utf8');
+ const splash=await readFile(new URL('../android/res/values-v31/styles.xml',import.meta.url),'utf8');
+ assert.doesNotMatch(activity,/createLaunch\\(|addView\\(launch/);
+ assert.match(splash,/@drawable\\/approved_mark/);
+ assert.doesNotMatch(splash,/@drawable\\/launch_mark/);
+});
