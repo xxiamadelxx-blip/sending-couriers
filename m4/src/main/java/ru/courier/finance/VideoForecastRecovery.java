@@ -11,8 +11,10 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -147,6 +149,21 @@ public final class VideoForecastRecovery {
                         VideoOrderTimePairs.Pair shared=VideoOrderTimePairs.commonTimesForDistinctOrders(
                             completionPairs,counts.get(row[1]));
                         if(shared==null) { ambiguousMatches++;continue; }
+                        Set<String> knownIds=new HashSet<>();
+                        boolean conflicting=false;
+                        String sharedStart=toUtc(shared.accepted),sharedEnd=toUtc(shared.completed);
+                        for(String[] other:rows) {
+                            if(!row[1].equals(other[1])) continue;
+                            if((other[2]!=null&&!other[2].equals(sharedStart))
+                                    ||(other[3]!=null&&!other[3].equals(sharedEnd))) conflicting=true;
+                            if(other[4]!=null) {
+                                boolean found=false;
+                                for(VideoOrderTimePairs.Pair candidate:completionPairs)
+                                    if(other[4].equals(candidate.orderNumber)) found=true;
+                                if(!found||!knownIds.add(other[4])) conflicting=true;
+                            }
+                        }
+                        if(conflicting) { ambiguousMatches++;continue; }
                         if(row[4]==null) pair=shared;
                         else for(VideoOrderTimePairs.Pair candidate:completionPairs)
                             if(row[4].equals(candidate.orderNumber)) pair=candidate;
