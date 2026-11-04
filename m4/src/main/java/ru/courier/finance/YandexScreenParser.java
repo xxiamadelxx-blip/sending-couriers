@@ -188,6 +188,24 @@ public final class YandexScreenParser {
                 }
             }
             if(conflicting) continue;
+            // The focused crop usually excludes the total at the top of the
+            // card. Preserve a full-screen total only when it belongs to the
+            // same order and all available readings agree.
+            if(fieldValue(detail,"total_kopecks")==null) {
+                Field total=null; boolean disagree=false;
+                for(Candidate prior:primary.candidates) {
+                    if(!"ORDER_DETAIL".equals(prior.candidateType)
+                            ||!number.equals(fieldValue(prior,"order_number"))) continue;
+                    for(Field field:prior.fields) if("total_kopecks".equals(field.name)) {
+                        if(total!=null&&!total.value.equals(field.value)) disagree=true;
+                        else total=field;
+                    }
+                }
+                if(total!=null&&!disagree) {
+                    List<Field> fields=new ArrayList<>(detail.fields); fields.add(total);
+                    detail=new Candidate(detail.candidateType,detail.ruleScore,fields);
+                }
+            }
             accepted.removeIf(prior->"ORDER_DETAIL".equals(prior.candidateType));
             accepted.add(detail);
             changed=true;
