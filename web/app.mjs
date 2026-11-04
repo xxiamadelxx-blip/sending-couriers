@@ -71,6 +71,7 @@ function warmForecast() {
 }
 function openForecast(initial = 'today') {
   if(!leaveForecast())return;
+  try { recoverStoredVideoEvidence(); } catch(error) { console.warn('Video recovery failed:',error?.message??error); }
   const synced=syncSlots(state.forecast,state.entries);
   const updated=evaluateForecasts(snapshotIfPossible(synced));
   if (JSON.stringify(updated) !== JSON.stringify(state.forecast)) {
@@ -146,7 +147,7 @@ window.receiveNativeForecasts = raw => {
 function refreshNativeForecasts() {
   try {
     const imports=Native?.pendingVideoResults?.();if(imports)window.receivePendingVideoResults(imports);
-    recoverStoredVideoEvidence();
+    if(view==='forecast') recoverStoredVideoEvidence();
     const pending=Native?.pendingNativeForecasts?.();if(pending)window.receiveNativeForecasts(pending);
   }
   catch(error) {
@@ -383,7 +384,7 @@ function periodDetails() {
         <div><span>Общий доход цикла</span><strong id="cycleTotalIncome">${esc(money(cycle.totalIncome))}</strong></div>
         <div><span class="cycle-premium-label">${esc(cycleBonusLabel(cycle,s.terms))}<button type="button" class="inline-help" aria-label="Как считается премия за 12 недель" title="Премия считается по доходу цикла и ставкам, действовавшим в даты записей. Выплата не подтверждена.">${icon['info-circle']}</button></span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
       </div>
-      <p class="cycle-bonus-note">${!cycle.start ? 'Укажите дату начала цикла.' : cycle.status === 'not-started' ? 'Цикл ещё не начался.' : cycle.totalIncome == null ? 'Пока нет дохода по известным часам.' : 'Расчётная премия, выплата не подтверждена.'}${cycle.opening ? ` Включено накопленное до ${esc(formatDate(cycle.opening.through))}; ${cycle.excludedCount} старых записей не посчитаны повторно.` : ''}${cycle.missingHours ? ` Записей без часов: ${cycle.missingHours}.` : ''}${cycle.boundaryNote ? ' Есть старые интервалы: расчёт приблизительный.' : ''}</p>
+      <p class="cycle-bonus-note">${!cycle.start ? 'Укажите дату начала цикла.' : cycle.status === 'not-started' ? 'Цикл ещё не начался.' : cycle.totalIncome == null ? 'Пока нет дохода по известным часам.' : 'Расчётная премия, выплата не подтверждена.'}${cycle.missingHours ? ` Записей без часов: ${cycle.missingHours}.` : ''}${cycle.boundaryNote ? ' Есть старые интервалы: расчёт приблизительный.' : ''}</p>
       ${cycle.start ? `<progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress>` : ''}
       <details id="cycleConfig" class="cycle-config"><summary id="configureCycle">Настройки премии и накопленного дохода${icons.down}</summary>
         <form id="settingsForm" novalidate>
@@ -597,7 +598,7 @@ function form(id = null, returnTo = 'history') {
     <details class="additional slot-working"><summary>Рабочее время дня</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
-  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = 'Введите'; });
+  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = '0.0'; });
   installLargeTextFormLabelFocusGuard();
   $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });
   let workingDirty=false;
