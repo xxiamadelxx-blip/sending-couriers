@@ -141,20 +141,37 @@ public final class VideoForecastRecovery {
                 if(pair==null) {
                     List<VideoOrderTimePairs.Pair> completionPairs=byCompletion.get(row[1]);
                     if(completionPairs==null||completionPairs.isEmpty()) { unmatchedPairs++;continue; }
-                    if(counts.get(row[1])!=1) { ambiguousMatches++;continue; }
+                    if(counts.get(row[1])!=1) {
+                        // The rows need no arbitrary identity assignment when
+                        // all independently observed cards have the same times.
+                        VideoOrderTimePairs.Pair shared=VideoOrderTimePairs.commonTimesForDistinctOrders(
+                            completionPairs,counts.get(row[1]));
+                        if(shared==null) { ambiguousMatches++;continue; }
+                        if(row[4]==null) pair=shared;
+                        else for(VideoOrderTimePairs.Pair candidate:completionPairs)
+                            if(row[4].equals(candidate.orderNumber)) pair=candidate;
+                        if(pair==null) { ambiguousMatches++;continue; }
+                        String sharedAccepted=toUtc(pair.accepted),sharedCompleted=toUtc(pair.completed);
+                        if((row[2]!=null&&!row[2].equals(sharedAccepted))
+                                ||(row[3]!=null&&!row[3].equals(sharedCompleted))) {
+                            ambiguousMatches++;continue;
+                        }
+                    }
                     List<VideoOrderTimePairs.Pair> compatible=new ArrayList<>();
                     for(VideoOrderTimePairs.Pair candidate:completionPairs) {
                         if(row[4]!=null&&candidate.orderNumber!=null&&!candidate.orderNumber.equals(row[4])) continue;
                         compatible.add(candidate);
                     }
-                    if(compatible.size()>1&&row[5]!=null) {
+                    if(pair==null&&compatible.size()>1&&row[5]!=null) {
                         List<VideoOrderTimePairs.Pair> amountMatches=new ArrayList<>();
                         for(VideoOrderTimePairs.Pair candidate:compatible)
                             if(row[5].equals(candidate.amount)||candidate.amounts.contains(row[5])) amountMatches.add(candidate);
                         if(amountMatches.size()==1) compatible=amountMatches;
                     }
-                    if(compatible.size()!=1) { ambiguousMatches++;continue; }
-                    pair=compatible.get(0);
+                    if(pair==null) {
+                        if(compatible.size()!=1) { ambiguousMatches++;continue; }
+                        pair=compatible.get(0);
+                    }
                 }
                 boolean orderIdMatches=row[4]!=null&&!pair.orderNumbers.isEmpty()
                     &&pair.orderNumbers.contains(row[4]);

@@ -13,6 +13,18 @@ import java.util.Set;
 public final class VideoOrderTimePairs {
     private VideoOrderTimePairs() {}
 
+    /** Return shared times only when every same-minute row has its own observed card. */
+    static Pair commonTimesForDistinctOrders(List<Pair> pairs,int rowCount) {
+        if(pairs==null||rowCount<2||pairs.size()!=rowCount) return null;
+        Pair first=pairs.get(0);
+        Set<String> ids=new HashSet<>();
+        for(Pair pair:pairs) {
+            if(pair.frames<2||pair.orderNumber==null||!ids.add(pair.orderNumber)
+                    ||!first.accepted.equals(pair.accepted)||!first.completed.equals(pair.completed)) return null;
+        }
+        return first;
+    }
+
     public static final class Frame {
         public final String hash,text;
         public final List<YandexScreenParser.Candidate> savedCandidates;

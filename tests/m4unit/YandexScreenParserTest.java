@@ -13,7 +13,16 @@ public final class YandexScreenParserTest {
             new VideoOrderTimePairs.Frame("a1",a),new VideoOrderTimePairs.Frame("a2",a),
             new VideoOrderTimePairs.Frame("list",list),new VideoOrderTimePairs.Frame("b1",b),
             new VideoOrderTimePairs.Frame("b2",b));
-        assertEquals(2,VideoOrderTimePairs.extract(separated).size());
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(separated);
+        assertEquals(2,pairs.size());
+        assertNotNull(VideoOrderTimePairs.commonTimesForDistinctOrders(pairs,2));
+        assertNull(VideoOrderTimePairs.commonTimesForDistinctOrders(pairs,3));
+        String otherTime=b.replace("11:51","11:52");
+        java.util.List<VideoOrderTimePairs.Pair> different=VideoOrderTimePairs.extract(java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("a1",a),new VideoOrderTimePairs.Frame("a2",a),
+            new VideoOrderTimePairs.Frame("list",list),new VideoOrderTimePairs.Frame("b1",otherTime),
+            new VideoOrderTimePairs.Frame("b2",otherTime)));
+        assertNull(VideoOrderTimePairs.commonTimesForDistinctOrders(different,2));
         java.util.List<VideoOrderTimePairs.Frame> noisy=java.util.Arrays.asList(
             new VideoOrderTimePairs.Frame("a1",a),new VideoOrderTimePairs.Frame("a2",a),
             new VideoOrderTimePairs.Frame("b1",b),new VideoOrderTimePairs.Frame("b2",b));
