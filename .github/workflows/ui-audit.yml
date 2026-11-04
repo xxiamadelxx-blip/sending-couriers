@@ -91,7 +91,7 @@ jobs:
           python3 "$RUNNER_TEMP/courier-transfer-source/build.py" --sdk "$ANDROID_HOME" --variant transferRelease --output "$RUNNER_TEMP/courier-transfer-test-only.apk"
           cp "$RUNNER_TEMP/courier-transfer-source/build/aligned.apk" "$RUNNER_TEMP/courier-transfer-unsigned.apk"
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$RUNNER_TEMP/apksigner.jar"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='43' versionName='1.7.29'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='44' versionName='1.7.30'"
       - name: Preserve fresh unsigned transfer APK for owner signing
         uses: actions/upload-artifact@v4
         with:
