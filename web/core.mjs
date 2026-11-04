@@ -53,7 +53,14 @@ export function parseInteger(raw, label) {
 }
 export function parseHours(raw) {
   const s = String(raw ?? '').trim().replace(',', '.');
-  if (s.includes(':')) {\n    const match = /^(\\d+):([0-5]\\d)$/.exec(s);\n    if (!match) throw new Error('Часы за день: введите время в формате ЧЧ:ММ.');\n    const hours = Number(match[1]) + Number(match[2]) / 60;\n    if (hours > 1000000) throw new Error('Часы за день: число слишком велико.');\n    return Math.round(hours * 100) / 100;\n  }\n  if (!/^\d+(?:\.\d{1,2})?$/.test(s)) throw new Error('Часы за день: введите 0 или положительное число, до двух знаков после запятой.');
+  if (s.includes(':')) {
+    const match = /^(\d+):([0-5]\d)$/.exec(s);
+    if (!match) throw new Error('Часы за день: введите время в формате ЧЧ:ММ.');
+    const hours = Number(match[1]) + Number(match[2]) / 60;
+    if (hours > 1000000) throw new Error('Часы за день: число слишком велико.');
+    return Math.round(hours * 100) / 100;
+  }
+  if (!/^\d+(?:\.\d{1,2})?$/.test(s)) throw new Error('Часы за день: введите 0 или положительное число, до двух знаков после запятой.');
   if (Number(s) > 1000000) throw new Error('Часы за день: число слишком велико.');
   return Math.round(Number(s) * 100) / 100;
 }
