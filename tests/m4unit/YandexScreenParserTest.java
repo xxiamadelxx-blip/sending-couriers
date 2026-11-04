@@ -4,6 +4,21 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class YandexScreenParserTest {
+    @Test public void sameTimesSplitOnlyWhenSeparateCardsHaveListBetweenThem() {
+        String h="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\nНомер заказа ";
+        String t="\nНачало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
+        String a=h+"261101-2693515"+t,b=h+"261101-2693516"+t;
+        String list="Яндекс Про\nЗаказы\n12:03 100,00 ₽ >";
+        java.util.List<VideoOrderTimePairs.Frame> separated=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("a1",a),new VideoOrderTimePairs.Frame("a2",a),
+            new VideoOrderTimePairs.Frame("list",list),new VideoOrderTimePairs.Frame("b1",b),
+            new VideoOrderTimePairs.Frame("b2",b));
+        assertEquals(2,VideoOrderTimePairs.extract(separated).size());
+        java.util.List<VideoOrderTimePairs.Frame> noisy=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("a1",a),new VideoOrderTimePairs.Frame("a2",a),
+            new VideoOrderTimePairs.Frame("b1",b),new VideoOrderTimePairs.Frame("b2",b));
+        assertTrue(VideoOrderTimePairs.extract(noisy).size()<=1);
+    }
     @Test public void focusedCardKeepsTotalOnlyForTheSameOrder() {
         String card="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\nНомер заказа 261101-2693515\n"
             +"Начало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
