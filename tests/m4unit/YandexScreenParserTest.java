@@ -37,6 +37,12 @@ public final class YandexScreenParserTest {
         YandexScreenParser.Result merged=YandexScreenParser.withFocusedOrderDetail(primary,focused,"");
         assertTrue(merged.candidates.stream().filter(c->"ORDER_DETAIL".equals(c.candidateType))
             .flatMap(c->c.fields.stream()).anyMatch(f->"total_kopecks".equals(f.name)&&"10000".equals(f.value)));
+        YandexScreenParser.Result missingId=YandexScreenParser.parse(card.replace("261101-2693515",""));
+        YandexScreenParser.Result matchedTimes=YandexScreenParser.withFocusedOrderDetail(missingId,focused,"");
+        assertEquals("10000",field(find(matchedTimes,"ORDER_DETAIL"),"total_kopecks"));
+        YandexScreenParser.Result differentStart=YandexScreenParser.parse(
+            card.replace("261101-2693515","").replace("11:51","11:50"));
+        assertNull(field(find(YandexScreenParser.withFocusedOrderDetail(differentStart,focused,""),"ORDER_DETAIL"),"total_kopecks"));
         YandexScreenParser.Result other=YandexScreenParser.withFocusedOrderDetail(primary,
             focused.replace("261101-2693515","261101-2693516"),"");
         assertFalse(other.candidates.stream().filter(c->"ORDER_DETAIL".equals(c.candidateType))

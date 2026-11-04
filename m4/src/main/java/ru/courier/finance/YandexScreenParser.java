@@ -194,8 +194,14 @@ public final class YandexScreenParser {
             if(fieldValue(detail,"total_kopecks")==null) {
                 Field total=null; boolean disagree=false;
                 for(Candidate prior:primary.candidates) {
-                    if(!"ORDER_DETAIL".equals(prior.candidateType)
-                            ||!number.equals(fieldValue(prior,"order_number"))) continue;
+                    if(!"ORDER_DETAIL".equals(prior.candidateType)) continue;
+                    String priorNumber=fieldValue(prior,"order_number");
+                    boolean sameId=number.equals(priorNumber);
+                    boolean sameTimes=priorNumber==null
+                        &&fieldValue(prior,"started_at")!=null&&fieldValue(prior,"completed_at")!=null
+                        &&fieldValue(prior,"started_at").equals(fieldValue(detail,"started_at"))
+                        &&fieldValue(prior,"completed_at").equals(fieldValue(detail,"completed_at"));
+                    if(!sameId&&!sameTimes) continue;
                     for(Field field:prior.fields) if("total_kopecks".equals(field.name)) {
                         if(total!=null&&!total.value.equals(field.value)) disagree=true;
                         else total=field;
