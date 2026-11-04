@@ -28,7 +28,7 @@ public final class M4QaInputActivity extends Activity {
             load.setEnabled(false); status.setText("Подготовка файлов…");
             new Thread(() -> {
                 try {
-                    copy("qa-input/report.mp4","qa-video.mp4","video/mp4",true);
+                    for(int i=1;i<=4;i++) copy("qa-input/report"+i+".mp4","qa-video-"+i+".mp4","video/mp4",true);
                     copy("qa-input/backup.json","qa-backup.json","application/json",false);
                     runOnUiThread(() -> {status.setText("Файлы подготовлены");load.setEnabled(true);});
                 } catch(Exception e) {
