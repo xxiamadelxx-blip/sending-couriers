@@ -202,15 +202,15 @@ test('CI Android runner preserves XLSX and transfer gates with independent exit 
   assert.match(runner,/return 0 if json\.loads\(output\.read_text\(\)\)\['result'\] == 'PASS' else 1/);
 });
 
-test('release: transfer build and manifest agree on 1.7.33/code47 and keep the 1.7.14/code28 upgrade path',async()=>{
+test('release: transfer build and manifest agree on 1.7.34/code48 and keep the 1.7.14/code28 upgrade path',async()=>{
  const manifest=await readFile(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8');
  const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
  const build=await readFile(new URL('../build.py',import.meta.url),'utf8');
  const workflow=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
- assert.match(manifest,/android:versionCode="47" android:versionName="1\.7\.33"/);
- assert.match(core,/export const APP_VERSION = '1\.7\.33';/);
- assert.match(build,/Courier-Finance-1\.7\.33\.apk/);
- assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='47' versionName='1.7.33'"));
+ assert.match(manifest,/android:versionCode="48" android:versionName="1\.7\.34"/);
+ assert.match(core,/export const APP_VERSION = '1\.7\.34';/);
+ assert.match(build,/Courier-Finance-1\.7\.34\.apk/);
+ assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='48' versionName='1.7.34'"));
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
  assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
 });
@@ -296,3 +296,4 @@ test('Add Slot form has aligned responsive money fields and no dash placeholders
  assert.match(css,/\.form-page \.slot-mode-options \[role="radio"\]/);
 });
 
+\ntest('startup uses the approved system mark without a second native splash overlay',async()=>{\n const activity=await readFile(new URL('../android/src/ru/courier/finance/MainActivity.java',import.meta.url),'utf8');\n const splash=await readFile(new URL('../android/res/values-v31/styles.xml',import.meta.url),'utf8');\n assert.doesNotMatch(activity,/createLaunch\\(|addView\\(launch/);\n assert.match(splash,/@drawable\\/approved_mark/);\n assert.doesNotMatch(splash,/@drawable\\/launch_mark/);\n});\n

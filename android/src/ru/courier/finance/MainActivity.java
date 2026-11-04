@@ -51,7 +51,6 @@ public final class MainActivity extends Activity {
     private static final int MAX_BYTES = 8_000_000;
     private WebView web;
     private FrameLayout root;
-    private View launch;
     private SharedPreferences preferences;
     private CourierDatabase factMirrorDatabase;
     private final ExecutorService factMirrorExecutor = Executors.newSingleThreadExecutor();
@@ -141,8 +140,6 @@ public final class MainActivity extends Activity {
             }
         });
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        launch = createLaunch();
-        root.addView(launch, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
         applyAppearance(darkTheme);
         root.requestApplyInsets();
@@ -158,29 +155,6 @@ public final class MainActivity extends Activity {
         return new WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", null, new ByteArrayInputStream(new byte[0]));
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private View createLaunch() {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setGravity(Gravity.CENTER);
-        layout.setBackgroundColor(0xFF10151A);
-
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.launch_mark);
-        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        layout.addView(icon, new LinearLayout.LayoutParams(dp(120), dp(120)));
-
-        TextView title = new TextView(this);
-        title.setText("Courier Income");
-        title.setTextColor(0xFFF4F2EC);
-        title.setTextSize(24);
-        title.setGravity(Gravity.CENTER);
-        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-2, -2);
-        titleParams.topMargin = dp(12);
-        layout.addView(title, titleParams);
-        return layout;
-    }
-
     private void applyAppearance(boolean dark) {
         darkTheme = dark;
         setTheme(dark ? R.style.AppThemeDark : R.style.AppThemeLight);
@@ -338,7 +312,7 @@ public final class MainActivity extends Activity {
                 return result.getPath().startsWith(root.getPath()+File.separator)&&(!result.exists()||result.delete());
             }catch(Exception ignored){return false;}
         }
-        @JavascriptInterface public void ready() { runOnUiThread(() -> { if (launch != null) { root.removeView(launch); launch = null; } }); }
+        @JavascriptInterface public void ready() { }
         @JavascriptInterface public void importVideo() {
             runOnUiThread(() -> {
                 try {
