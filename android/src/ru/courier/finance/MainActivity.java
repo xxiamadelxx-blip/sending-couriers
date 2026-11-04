@@ -263,6 +263,12 @@ public final class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public String readState() { return storedState(); }
+        @JavascriptInterface public String readSlotDraft() { return preferences.getString("slot_form_draft", ""); }
+        @JavascriptInterface public void saveSlotDraft(String draft) {
+            if (draft == null || draft.length() > 16384) return;
+            preferences.edit().putString("slot_form_draft", draft).apply();
+        }
+        @JavascriptInterface public void clearSlotDraft() { preferences.edit().remove("slot_form_draft").apply(); }
         @JavascriptInterface public String readVideoOrderEvidence(String sourceSha256) {
             try { return VideoForecastRecovery.reconcileAndRead(MainActivity.this,factMirrorDatabase,sourceSha256); }
             catch(Exception failure) {

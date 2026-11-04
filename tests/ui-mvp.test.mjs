@@ -16,7 +16,7 @@ test('UI M1: slot edit form groups hours and money without discarding any existi
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));
- assert.ok(section.indexOf('class="period-days"') < section.indexOf('class="period-notice"'), 'Show editable day records before payout conditions');
+ assert.doesNotMatch(section,/\$\{paymentStatus\(s\)\}/, 'Do not duplicate the Home warning');
  assert.ok(section.indexOf('class="period-days"') < section.indexOf('class="detail-card cycle-settings period-cycle-compact"'), 'Cycle settings belong below daily records');
  assert.ok(section.includes('data-entry') || section.includes("querySelectorAll('.period-slot-edit')"));
  assert.doesNotMatch(section,/class="detail-card period-overview"/);
@@ -27,8 +27,8 @@ test('Period cycle disclosure uses one chevron, not the inline icon and pseudo a
  assert.match(css,/#configureCycle::after\s*\{\s*content:\s*none/);
 });
 test('Settings hourly-rate field keeps all three digits inside the compact input',()=>{
- assert.match(app,/rateInput\.style\.width = `\$\{Math\.max\(3\.25, Math\.min\(10, rateInput\.value\.length \+ \.25\)\)\}ch`/);
- assert.match(css,/#app\.settings-page \.payment-settings \.tariff-rate #hourlyRate\s*\{[^}]*padding-inline:\s*0/);
+ assert.match(app,/rateInput\.style\.width = `calc\(/);
+ assert.match(css,/#app\.settings-page \.payment-settings \.tariff-rate #hourlyRate\s*\{[^}]*padding-inline:\s*12px/);
 });
 test('Period payout action has the same transparent accent style and 48dp target as Home',()=>{
  assert.match(css,/#app \.payment-status-action\s*\{[^}]*min-height:\s*48px[^}]*background:\s*transparent[^}]*color:\s*var\(--accent\)/);
@@ -202,15 +202,15 @@ test('CI Android runner preserves XLSX and transfer gates with independent exit 
   assert.match(runner,/return 0 if json\.loads\(output\.read_text\(\)\)\['result'\] == 'PASS' else 1/);
 });
 
-test('release: transfer build and manifest agree on 1.7.28/code42 and keep the 1.7.14/code28 upgrade path',async()=>{
+test('release: transfer build and manifest agree on 1.7.29/code43 and keep the 1.7.14/code28 upgrade path',async()=>{
  const manifest=await readFile(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8');
  const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
  const build=await readFile(new URL('../build.py',import.meta.url),'utf8');
  const workflow=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
- assert.match(manifest,/android:versionCode="42" android:versionName="1\.7\.28"/);
- assert.match(core,/export const APP_VERSION = '1\.7\.28';/);
- assert.match(build,/Courier-Finance-1\.7\.28\.apk/);
- assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='42' versionName='1.7.28'"));
+ assert.match(manifest,/android:versionCode="43" android:versionName="1\.7\.29"/);
+ assert.match(core,/export const APP_VERSION = '1\.7\.29';/);
+ assert.match(build,/Courier-Finance-1\.7\.29\.apk/);
+ assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='43' versionName='1.7.29'"));
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
  assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
 });

@@ -327,7 +327,7 @@ function summary() {
     <p class="home-empty-copy">Добавьте слот, чтобы увидеть темп, доход и выплаты.</p>
     <button class="button primary" id="homeEmptyAdd" type="button">${icon.plus}Добавить первый слот</button>
   </section>`;
-  const filledPanel=`<section class="home-focus" aria-label="Темп и условие выплаты">${rhythm.outerHTML}${status.outerHTML}</section>
+  const filledPanel=`<section class="home-focus" aria-label="Темп периода">${rhythm.outerHTML}</section>${status.outerHTML}
     ${incomePanel.outerHTML}
     <section class="home-premiums detail-card">${premiumHTML}${cycle.boundaryNote ? `<details class="calculation boundary-note"><summary>Есть старые интервалы</summary><p>${esc(cycle.boundaryNote)}</p></details>` : ''}</section>
     ${calculation.outerHTML}`;
@@ -371,7 +371,6 @@ function periodDetails() {
       <div class="period-days-heading"><h2 id="periodDaysHeading">Записи по дням</h2></div>
       <div class="period-days-list">${daily}</div>
     </section>
-    <div class="period-notice">${paymentStatus(s)}</div>
     <section class="detail-card cycle-settings period-cycle-compact" aria-label="Цикл премии">
       <div class="cycle-header"><h2>12 недель</h2>${cycle.start ? `<span>Цикл ${cycle.cycleNumber} · День ${cycle.elapsedDays} из 84</span>` : ''}</div>
       ${cycle.start ? `<p class="cycle-bonus-dates">${esc(formatDate(cycle.start))} — ${esc(formatDate(cycle.end))}</p>` : ''}
@@ -466,7 +465,7 @@ function settings() {
   // including after loading another date's historical tariff.
   const rateInput = $('#hourlyRate');
   const sizeRateInput = () => {
-    rateInput.style.width = `${Math.max(3.25, Math.min(10, rateInput.value.length + .25))}ch`;
+    rateInput.style.width = `calc(${Math.max(3, Math.min(8, rateInput.value.length + 1))}ch + 24px)`;
   };
   rateInput.addEventListener('input', sizeRateInput);
   sizeRateInput();
@@ -595,7 +594,7 @@ function form(id = null, returnTo = 'history') {
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
   app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = 'Введите'; });
   installLargeTextFormLabelFocusGuard();
-  $('#goBack').addEventListener('click', () => { returnTo === 'period' ? periodDetails() : history(); });
+  $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });
   let workingDirty=false;
   function renderWorking(date) {
     workingDirty=false;
@@ -708,8 +707,14 @@ function form(id = null, returnTo = 'history') {
       $('#'+key).setAttribute('aria-invalid', String(Boolean(error)));
     }
   }
+  const draftKeys=['date','dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus'];
+  const saveFormDraft=()=>{
+    if (!Native?.saveSlotDraft) return;
+    const fields=Object.fromEntries(draftKeys.map(key=>[key,$('#'+key).value]));
+    Native.saveSlotDraft(JSON.stringify({version:1,id:original?.id??null,returnTo,fields}));
+  };
   for (const key of ['dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus']) {
-    $('#'+key).addEventListener('input', () => { refreshInlineValidation(); refreshDeductions(); refreshSlotPreview(); $('#formError').hidden = true; });
+    $('#'+key).addEventListener('input', () => { refreshInlineValidation(); refreshDeductions(); refreshSlotPreview(); $('#formError').hidden = true; saveFormDraft(); });
   }
   refreshInlineValidation();
   refreshDeductions();
@@ -725,7 +730,7 @@ function form(id = null, returnTo = 'history') {
     catch { $('#formPeriod').textContent = ''; }
     refreshSlotHint();
     renderWorking(event.target.value);
-    refreshInlineValidation(); refreshDeductions(); refreshSlotPreview();
+    refreshInlineValidation(); refreshDeductions(); refreshSlotPreview(); saveFormDraft();
   });
   $('#dayForm').addEventListener('submit', event => {
     event.preventDefault();
@@ -744,6 +749,7 @@ function form(id = null, returnTo = 'history') {
         next=withSlotWorkingTime(next,fields.date,{mode,...actual});
       }
       persist(next);
+      Native?.clearSlotDraft?.();
       selectedPeriod = periodFor(fields.date).id;
       document.activeElement?.blur();
       (returnTo === 'period' ? periodDetails : summary)(); notify('Запись сохранена');
@@ -756,7 +762,7 @@ function form(id = null, returnTo = 'history') {
   });
   $('#deleteDay')?.addEventListener('click', () => {
     if (!confirm('Удалить только эту запись?')) return;
-    try { persist({ ...state, entries: state.entries.filter(row => row.id !== editingId) }); (returnTo === 'period' ? periodDetails : history)(); notify('Запись удалена'); }
+    try { persist({ ...state, entries: state.entries.filter(row => row.id !== editingId) }); Native?.clearSlotDraft?.(); (returnTo === 'period' ? periodDetails : history)(); notify('Запись удалена'); }
     catch (error) { notify(error.message); }
   });
   resetScroll();
@@ -907,6 +913,7 @@ window.appBack = () => {
   if (openDialog) { openDialog.close(); return true; }
   if (view === 'summary') return false;
   if (view === 'forecast' && forecastScreen?.back()) return true;
+  if (view === 'form') Native?.clearSlotDraft?.();
   if (view === 'form' || view === 'closure') history(); else summary();
   return true;
 };
@@ -921,6 +928,17 @@ try {
     catch(error) { notify(error.message); }
   }
   refreshNativeForecasts();
+  try {
+    const draft=JSON.parse(Native?.readSlotDraft?.() || 'null');
+    if(draft?.version===1 && draft.fields && (!draft.id || state.entries.some(entry=>entry.id===draft.id))) {
+      form(draft.id || null, draft.returnTo === 'period' ? 'period' : 'history');
+      for(const key of ['date','dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus']) {
+        const input=$('#'+key),value=draft.fields[key];
+        if(input && typeof value==='string') { input.value=value; input.dispatchEvent(new Event(key==='date'?'change':'input',{bubbles:true})); }
+      }
+      notify('Незавершённый слот восстановлен');
+    }
+  } catch { /* An invalid draft never changes stored records. */ }
 } catch (error) {
   app.innerHTML = `<div class="fatal"><h1>Не удалось открыть данные</h1><p>${esc(error.message)}</p><p>Сохранённые записи не изменены. Можно восстановить резервную копию JSON.</p><button id="recover" class="button primary" type="button">Открыть резервную копию</button><input id="recoverFile" type="file" accept=".json,application/json" hidden></div>`;
   $('#recover').addEventListener('click', () => { if (Native) Native.importData(); else $('#recoverFile').click(); });
@@ -929,5 +947,5 @@ try {
 Native?.ready();
 
 // Refresh date boundaries on return from the background; never promise an exact background alarm.
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{refreshNativeForecasts();persist({...state},true);if(view==='summary')summary();}catch(error){notify(error.message);}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{refreshNativeForecasts();}catch(error){notify(error.message);}});
 

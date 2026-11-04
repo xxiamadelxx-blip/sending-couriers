@@ -369,7 +369,7 @@ h1,.page-heading h1{font-size:27px;line-height:1.2;letter-spacing:-.6px}
 #homeDeck .home-focus .hero-pace strong.compact{font-size:39px}
 #homeDeck .home-focus .hero-pace strong.wide{font-size:28px}
 #homeDeck .home-focus .gauge,#homeDeck .home-focus .gauge canvas{width:106px;height:106px}
-#homeDeck .home-focus .meters{margin-top:18px;padding:16px 0;gap:12px}
+#homeDeck .home-focus .meters{margin-top:0;padding:16px;gap:12px}
 #homeDeck .home-focus .meter-value{font-size:24px;letter-spacing:-.65px;font-variant-numeric:tabular-nums}
 #homeDeck .home-focus .meter-label{font-size:12px}
 #homeDeck .home-focus .norm-row{padding:10px 0 5px;min-height:48px;font-size:13px}
@@ -521,7 +521,7 @@ input,select,textarea,.field input,.forecast-page .field input{border-radius:4px
 #homeDeck .home-focus .hero-pace strong.wide{font-size:clamp(29px,7.8vw,36px)}
 #homeDeck .home-focus .gauge-label strong{color:var(--signal-panel);font-family:ui-monospace,monospace;font-weight:850}
 #homeDeck .home-focus .gauge-label span{color:var(--console-label)}
-#homeDeck .home-focus .gauge-label[data-state="below"] strong{color:#ff9683}
+#homeDeck .home-focus .gauge-label[data-state="below"] strong{color:var(--accent)}
 #homeDeck .home-focus .meters{border-top:1px solid #62707a;border-bottom:1px solid #62707a;gap:10px}
 #homeDeck .home-focus .meter-value{font-size:clamp(25px,7vw,32px);color:var(--console-hero-ink);font-family:ui-monospace,monospace;font-weight:850;letter-spacing:-.06em}
 #homeDeck .home-focus .meter-value .unit{color:var(--console-label);font-size:.6em}
@@ -1895,7 +1895,7 @@ dialog .button{margin:8px 0 0}
   --nav-surface:#e1ddd3;
   --error:#a52d24;
   --warning-ink:#805000;
-  --gauge-track:#cbc8c0;
+  --gauge-track:#e9c7b9;
   --gauge-pending:#a93718;
   --gauge-good:#8c5900;
   --home-accent:#a93718;
@@ -2417,6 +2417,7 @@ html,body {
   font-family:Golos,Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;
   font-weight:400;
 }
+#app.form-page { min-height:0; padding-bottom:calc(8px + var(--safe-bottom)); }
 #app * { font-variant-numeric:tabular-nums; font-weight:400; }
 #app :is(h1,h2,h3,strong,b,button,label,summary,dt,dd,.meter-value,.major-amount,.amount) { font-weight:600; }
 #app :is(p,.hint,.quiet,.muted,small,.field-note,.forecast-work-note,.period-day small,.payment-rule span) { color:var(--text-secondary); font-weight:400; }
@@ -2471,7 +2472,7 @@ html,body {
 #homeDeck .meter-value { margin:0; color:var(--text-primary); font-size:22px; line-height:1.1; }
 #homeDeck .meter-value span:last-child { color:var(--text-secondary); font-size:12px; font-weight:500; }
 #homeDeck .meter-label { margin:4px 0 0; color:var(--text-secondary); font-size:12px; }
-#homeDeck .payment-status { display:grid; grid-template-columns:18px minmax(0,1fr); gap:12px; margin:0; padding:16px; border:0; border-top:1px solid var(--line); border-radius:0 0 var(--card-radius) var(--card-radius); background:var(--nav-surface); }
+#homeDeck .payment-status { display:grid; grid-template-columns:18px minmax(0,1fr); gap:12px; margin:0; padding:16px; border:1px solid var(--line); border-radius:var(--card-radius); background:var(--surface); }
 #homeDeck .payment-status strong { color:var(--error); }
 #homeDeck .payment-status p { margin:4px 0 0; color:var(--text-secondary); font-size:13px; }
 #homeDeck .payment-status-action { min-height:40px; margin:4px 0 -4px; padding:4px 0; border:0; background:transparent; color:var(--accent); text-align:left; text-decoration:underline; text-underline-offset:3px; }
@@ -2505,7 +2506,7 @@ html,body {
 #app .page-heading h1 { flex:1; margin:0; font-size:23px; letter-spacing:-.02em; }
 #app .back,#app .export-icon,#app .theme-toggle,#app .period-arrow { width:48px; height:48px; min-width:48px; min-height:48px; display:grid; place-items:center; padding:0; border:1px solid var(--line); background:var(--surface); color:var(--text-secondary); }
 #app .back svg,#app .export-icon svg,#app .theme-toggle svg,#app .period-arrow svg { width:18px!important; height:18px!important; }
-#app .period-navigation { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:8px; margin-bottom:20px; }
+#app .period-navigation { display:grid; grid-template-columns:48px minmax(0,1fr) 48px; gap:8px; margin-bottom:20px; }
 #app .period-arrow { border-radius:var(--control-radius)!important; }
 #app .period-days-heading { margin:0 0 12px; }
 #app .period-days-heading h2 { margin:0; font-size:18px; font-weight:600; }
@@ -2646,7 +2647,7 @@ html,body {
 
 /* Keep the compact rate readable, retain one cycle disclosure icon, and make
    the shared payment-settings action consistent across Home and Period. */
-#app.settings-page .payment-settings .tariff-rate #hourlyRate { padding-inline:0; }
+#app.settings-page .payment-settings .tariff-rate #hourlyRate { min-width:5ch; padding-inline:12px; }
 .period-page .period-cycle-compact #configureCycle::after { content:none; }
 #app .payment-status-action {
   display:inline-flex;

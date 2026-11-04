@@ -15,11 +15,11 @@ test('Home empty state keeps the existing package glyph after the staircase icon
   assert.match(app,/class="home-empty-symbol" aria-hidden="true">\$\{icon\.package\}/);
   assert.doesNotMatch(app,/brand_mark\.png/);
 });
-test('pace and payout decision are grouped in semantic reading order',()=>{
-  assert.match(app,/class="home-focus" aria-label="Темп и условие выплаты"/);
-  assert.match(app,/\$\{rhythm\.outerHTML\}\$\{status\.outerHTML\}/);
+test('pace and payout decision are separate cards in reading order',()=>{
+  assert.match(app,/class="home-focus" aria-label="Темп периода"/);
+  assert.match(app,/\$\{rhythm\.outerHTML\}<\/section>\$\{status\.outerHTML\}/);
   assert.match(app,/\$\{incomePanel\.outerHTML\}/);
-  assert.match(css,/#homeDeck \.home-focus \.payment-status/);
+  assert.match(css,/#homeDeck \.payment-status\s*\{[^}]*border-radius:var\(--card-radius\)/);
 });
 test('home dashboard presents the premium ledger once, outside the gold income slab',()=>{
   assert.match(app,/const incomePanel=income\.cloneNode\(true\);\s*incomePanel\.querySelector\('#openPremiums'\)\?\.remove\(\)/);
