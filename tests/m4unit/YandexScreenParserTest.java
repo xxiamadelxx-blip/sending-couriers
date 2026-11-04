@@ -642,6 +642,23 @@ public final class YandexScreenParserTest {
         assertEquals(1,((Integer)fact(facts,"recoveredOrderRows")).intValue());
     }
 
+    @Test public void writesTimePairWhenDisplayedMinutesAreEqual() throws Exception {
+        String slot="Слот: 200,00 ₽\n341234567\n2 заказа · 2 км\nЗаказы 200,00 ₽\n"
+            +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
+        String list="Яндекс Про\nЗаказы\n11:20 100,00 ₽ >\n11:40 100,00 ₽ >";
+        VideoImportProcessor.Result video=videoWith(slot,list,
+            detailCard("261017-1111111","11:20","11:20","100,00 ₽"),
+            detailCard("261017-2222222","11:25","11:40","100,00 ₽"));
+        Object facts=extractFacts(video);
+        assertEquals(2,((java.util.List<?>)fact(facts,"deliveries")).size());
+        Object first=null;
+        for(Object order:(java.util.List<?>)fact(facts,"orders"))
+            if("261017-1111111".equals(fact(order,"orderNumber"))) first=order;
+        assertNotNull(first);
+        assertEquals(680,((Integer)fact(first,"acceptedMinute")).intValue());
+        assertEquals(680,((Integer)fact(first,"deliveredMinute")).intValue());
+    }
+
     @Test public void keepsVerifiedListMoneyWhenCardSubtotalDoesNotReconcile() throws Exception {
         String slot="Слот: 200,00 ₽\n341234567\n2 заказа · 2 км\nЗаказы 200,00 ₽\n"
             +"Начало 2026.10.17 07:30\nЗавершение 2026.10.17 22:00";
