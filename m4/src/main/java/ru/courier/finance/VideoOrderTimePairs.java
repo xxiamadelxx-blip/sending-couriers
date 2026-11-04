@@ -41,9 +41,11 @@ public final class VideoOrderTimePairs {
         final Set<String> frames=new HashSet<>(),orderNumbers=new HashSet<>(),amounts=new HashSet<>();
         final Map<String,Set<String>> orderNumbersByFrame=new HashMap<>(),amountsByFrame=new HashMap<>();
         final Map<String,Integer> confidenceByFrame=new HashMap<>();
+        final Map<String,Integer> cardEventByFrame=new HashMap<>();
 
-        void add(String frame,String number,String amount,Integer confidence) {
+        void add(String frame,String number,String amount,Integer confidence,int event) {
             frames.add(frame);
+            cardEventByFrame.put(frame,event);
             if(number!=null) {
                 orderNumbers.add(number);
                 orderNumbersByFrame.computeIfAbsent(frame,k->new HashSet<>()).add(number);
@@ -70,10 +72,20 @@ public final class VideoOrderTimePairs {
         // the same time pair. This prevents a one-digit OCR mistake from
         // turning one real order into two separate time pairs.
         Map<String,Map<String,Support>> byCompletion=new HashMap<>();
+        int cardEvent=0; boolean listSeen=false,cardSeen=false;
         for(Frame frame:frames) {
             if(frame.hash==null||frame.text==null||frame.text.length()>20000) continue;
             List<YandexScreenParser.Candidate> candidates=new ArrayList<>(frame.savedCandidates);
             candidates.addAll(YandexScreenParser.parse(frame.text).candidates);
+            boolean hasCard=false,hasList=false;
+            for(YandexScreenParser.Candidate candidate:candidates) {
+                hasCard |= "ORDER_DETAIL".equals(candidate.candidateType);
+                hasList |= "ORDER_LIST_ROW".equals(candidate.candidateType) || "SLOT_DETAIL".equals(candidate.candidateType);
+            }
+            // Only a recognised list screen separates card visits; an OCR
+            // failure on the current card does not prove another visit.
+            if(!hasCard&&hasList&&cardSeen) listSeen=true;
+            if(hasCard) { if(listSeen) cardEvent++; listSeen=false; cardSeen=true; }
             for(YandexScreenParser.Candidate candidate:candidates) {
                 if(!"ORDER_DETAIL".equals(candidate.candidateType)
                         ||!"COMPLETED".equals(field(candidate,"status"))) continue;
@@ -94,7 +106,7 @@ public final class VideoOrderTimePairs {
                     String rawConfidence=field(candidate,"time_pair_confidence");
                     if(rawConfidence!=null) confidence=Integer.valueOf(rawConfidence);
                 } catch(NumberFormatException ignored) { }
-                support.add(frame.hash,number,amount,confidence);
+                support.add(frame.hash,number,amount,confidence,cardEvent);
             }
         }
         List<Pair> pairs=new ArrayList<>();
@@ -148,6 +160,37 @@ public final class VideoOrderTimePairs {
             }
             for(Map.Entry<String,Support> candidate:selected) {
                 Support support=candidate.getValue();
+                Map<String,Set<String>> framesById=new HashMap<>();
+                Map<String,Set<Integer>> eventsById=new HashMap<>();
+                for(Map.Entry<String,Set<String>> observation:support.orderNumbersByFrame.entrySet()) {
+                    if(observation.getValue().size()!=1) continue;
+                    String id=observation.getValue().iterator().next(),hash=observation.getKey();
+                    framesById.computeIfAbsent(id,k->new HashSet<>()).add(hash);
+                    eventsById.computeIfAbsent(id,k->new HashSet<>()).add(support.cardEventByFrame.get(hash));
+                }
+                List<String> separate=new ArrayList<>();
+                for(String id:framesById.keySet()) if(framesById.get(id).size()>=2) separate.add(id);
+                boolean eventsDistinct=separate.size()>=2;
+                Set<Integer> seenEvents=new HashSet<>();
+                for(String id:separate) for(Integer event:eventsById.get(id))
+                    if(!seenEvents.add(event)) eventsDistinct=false;
+                if(eventsDistinct) {
+                    for(String id:separate) {
+                        Set<String> hashes=framesById.get(id),amounts=new HashSet<>();
+                        Map<String,Set<String>> moneyByFrame=new HashMap<>();
+                        Map<String,Integer> confidences=new HashMap<>();
+                        for(String hash:hashes) {
+                            if(support.amountsByFrame.containsKey(hash)) {
+                                moneyByFrame.put(hash,support.amountsByFrame.get(hash));
+                                amounts.addAll(support.amountsByFrame.get(hash));
+                            }
+                            if(support.confidenceByFrame.containsKey(hash)) confidences.put(hash,support.confidenceByFrame.get(hash));
+                        }
+                        pairs.add(new Pair(candidate.getKey(),entry.getKey(),id,consensus(moneyByFrame),
+                            averageConfidence(confidences),new HashSet<>(java.util.Collections.singleton(id)),amounts,hashes.size()));
+                    }
+                    continue;
+                }
                 String number=consensus(support.orderNumbersByFrame);
                 String amount=consensus(support.amountsByFrame);
                 int confidence=averageConfidence(support.confidenceByFrame);
