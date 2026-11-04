@@ -158,11 +158,14 @@ function day(input) {
   const workingMin=precision==='intervals' ? duration(list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end])) : number(input.workingMin,1440);
   if(precision==='total' && workingMin==null) fail('Укажите суммарное время работы.');
   const orderRanges=orderEvidence.filter(o=>o.confirmed&&o.acceptedMin!=null&&o.deliveredMin!=null).map(o=>[Math.max(0,o.acceptedMin),Math.min(1440,o.deliveredMin)]).filter(([a,b])=>a<b);
+  // Equal displayed minutes preserve the timestamps, but the hidden seconds
+  // leave the duration unknown; they are not proof of zero time on delivery.
+  const hasUnknownDeliveryDuration=orderEvidence.some(o=>o.confirmed&&o.acceptedMin!=null&&o.acceptedMin===o.deliveredMin);
   const pause=list.filter(i=>i.state==='UNAVAILABLE').map(i=>[i.start,i.end]);
   const conflicts=[...(input.sourceConflicts??[]).map(String).slice(0,50)];
   if(orders!=null&&orderEvidence.length>orders) conflicts.push('Список содержит больше заказов, чем подтверждённый итог. Проверьте возможные дубликаты.');
   if(orderRanges.some(a=>pause.some(b=>overlap(a,b)>0))) conflicts.push('Личная пауза пересекается с выполняемой доставкой. Уточните время.');
-  const onOrderMin=orderRanges.length?duration(orderRanges):null;
+  const onOrderMin=!hasUnknownDeliveryDuration&&orderRanges.length?duration(orderRanges):null;
   const completeEvidence=input.evidenceComplete===true && orders!=null && orderEvidence.length===orders && orderEvidence.every(o=>o.confirmed&&o.acceptedMin!=null&&o.deliveredMin!=null);
   const workRanges=list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end]);
   const busyInside=duration(orderRanges.flatMap(a=>workRanges.map(b=>[Math.max(a[0],b[0]),Math.min(a[1],b[1])]).filter(([a,b])=>a<b)));
@@ -184,7 +187,7 @@ function day(input) {
   return {date:input.date,timezone,zone:String(input.zone??'').slice(0,120),profileVersion:integer(input.profileVersion,100000),fieldSources,
     orders,ordersConfirmed:input.ordersConfirmed===true,completed:input.completed!==false,asOfMinute:integer(input.asOfMinute,1440),appAccountedMin:number(input.appAccountedMin,1440),accountedConfirmed:input.accountedConfirmed===true,
     intervals:list,precision,workingMin,workConfirmed,unavailableMin:workConfirmed&&precision==='intervals'?duration(pause):null,
-    onOrderMin,availableNoOrderMin:workConfirmed&&precision==='intervals'&&completeEvidence&&!conflicts.length?Math.max(0,workingMin-busyInside):null,
+    onOrderMin,availableNoOrderMin:workConfirmed&&precision==='intervals'&&completeEvidence&&!hasUnknownDeliveryDuration&&!conflicts.length?Math.max(0,workingMin-busyInside):null,
     countedNonWorkingMin:workConfirmed?duration(list.filter(i=>i.state==='UNAVAILABLE'&&i.paymentCounted==='YES').map(i=>[i.start,i.end])):null,
     unknownMin:precision==='intervals'?1440-duration(list.filter(i=>i.state!=='UNKNOWN').map(i=>[i.start,i.end])):null,
     orderEvidence,evidenceComplete:completeEvidence,rawComplete:orders!=null&&orderEvidence.length===orders,sourceNotes:Array.isArray(input.sourceNotes)?input.sourceNotes.slice(0,20).map(v=>String(v).slice(0,3000)):[],estimatedIntervals:intervals(input.estimatedIntervals??[]),estimatedExposureJustified:input.estimatedExposureJustified===true,exposureBlocks:(input.exposureBlocks??[]).slice(0,100).map(b=>({...intervals([b])[0],orders:integer(b.orders),status:String(b.status),source:String(b.source??'').slice(0,300)})),conflicts,sourceConflicts:(input.sourceConflicts??[]).map(String).slice(0,50),

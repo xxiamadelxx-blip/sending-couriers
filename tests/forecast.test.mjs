@@ -4,6 +4,11 @@ import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,impo
 import {emptyState,normalizeState,mergeImport,upsertEntry,calculate,forecastFinances,setPaymentTerms} from '../web/core.mjs';
 const profile=(data=emptyForecast(),patch={})=>saveProfile(data,{effectiveFrom:'2026-01-01',timezone:'Europe/Moscow',zone:'Test',outsidePayment:'UNKNOWN',week:Array.from({length:7},()=>({intervals:parseWindows('09:00–14:00;17:00–21:00'),accountedMin:840})),...patch},'2026-01-01T00:00:00Z');
 const confirmed=(date,orders=27)=>({date,orders,ordersConfirmed:true,precision:'intervals',intervals:[...parseWindows('09:00–14:00;17:00–21:00'),...parseWindows('07:00–09:00;14:00–17:00','UNAVAILABLE')],workConfirmed:true,appAccountedMin:840,accountedConfirmed:true});
+test('same displayed minute does not become known zero delivery duration',()=>{
+ const entry={...confirmed('2026-10-01',2),orderEvidence:[{id:'same-minute',visibleMin:600,acceptedMin:600,deliveredMin:600,confirmed:true},{id:'ordinary',visibleMin:630,acceptedMin:610,deliveredMin:630,confirmed:true}],evidenceComplete:true};
+ const d=saveDay(profile(),entry).days[entry.date];
+ assert.equal(d.orderEvidence.length,2);assert.equal(d.availableNoOrderMin,null);assert.equal(d.onOrderMin,null);
+});
 function history(n=30) { let d=profile();for(let i=0;i<n;i++)d=saveDay(d,confirmed(addDays('2026-09-01',i),27+i%3));return d; }
 test('schema 1–6 migration retains money, slots, unknowns, forecast backup and old merge',()=>{
  let s=emptyState();s=upsertEntry(s,{date:'2026-10-01',dailyHours:14,dailyOrders:27,reward:2400,tips:80});s.forecast=history(5);
