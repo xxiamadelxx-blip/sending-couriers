@@ -159,26 +159,25 @@ public final class MainActivity extends Activity {
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private View createLaunch() {
-        // Keep the original SHIFT CONTROL glyph; show it floating on graphite.
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
         layout.setBackgroundColor(0xFF10151A);
-        FrameLayout mark = new FrameLayout(this);
-        View halo = new View(this);
-        GradientDrawable radial = new GradientDrawable();
-        radial.setShape(GradientDrawable.OVAL);
-        radial.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        radial.setGradientCenter(0.5f, 0.5f);
-        radial.setGradientRadius(dp(140));
-        radial.setColors(new int[]{0x24FF7952, 0x0DFFBD57, 0x0010151A});
-        halo.setBackground(radial);
-        mark.addView(halo, new FrameLayout.LayoutParams(dp(280), dp(280), Gravity.CENTER));
+
         ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.approved_mark);
+        icon.setImageResource(R.drawable.launch_mark);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        mark.addView(icon, new FrameLayout.LayoutParams(dp(164), dp(164), Gravity.CENTER));
-        layout.addView(mark, new LinearLayout.LayoutParams(dp(280), dp(280)));
+        layout.addView(icon, new LinearLayout.LayoutParams(dp(120), dp(120)));
+
+        TextView title = new TextView(this);
+        title.setText("Courier Income");
+        title.setTextColor(0xFFF4F2EC);
+        title.setTextSize(24);
+        title.setGravity(Gravity.CENTER);
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-2, -2);
+        titleParams.topMargin = dp(12);
+        layout.addView(title, titleParams);
         return layout;
     }
 

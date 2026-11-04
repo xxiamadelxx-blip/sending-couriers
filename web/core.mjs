@@ -2,7 +2,7 @@ import { emptyForecast, normalizeForecast, mergeForecast, forecastReport, weekPl
 export const RATE = 360;
 export const THRESHOLD = 1.8;
 export const SCHEMA_VERSION = 6;
-export const APP_VERSION = '1.7.32';
+export const APP_VERSION = '1.7.33';
 export const MIN_PAYMENT_HOURS = 80;
 export const PREMIUM_PACE = 2.8;
 export const PREMIUM_PERCENT = 5;
@@ -53,7 +53,7 @@ export function parseInteger(raw, label) {
 }
 export function parseHours(raw) {
   const s = String(raw ?? '').trim().replace(',', '.');
-  if (!/^\d+(?:\.\d{1,2})?$/.test(s)) throw new Error('Часы за день: введите 0 или положительное число, до двух знаков после запятой.');
+  if (s.includes(':')) {\n    const match = /^(\\d+):([0-5]\\d)$/.exec(s);\n    if (!match) throw new Error('Часы за день: введите время в формате ЧЧ:ММ.');\n    const hours = Number(match[1]) + Number(match[2]) / 60;\n    if (hours > 1000000) throw new Error('Часы за день: число слишком велико.');\n    return Math.round(hours * 100) / 100;\n  }\n  if (!/^\d+(?:\.\d{1,2})?$/.test(s)) throw new Error('Часы за день: введите 0 или положительное число, до двух знаков после запятой.');
   if (Number(s) > 1000000) throw new Error('Часы за день: число слишком велико.');
   return Math.round(Number(s) * 100) / 100;
 }

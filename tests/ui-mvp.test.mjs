@@ -202,15 +202,15 @@ test('CI Android runner preserves XLSX and transfer gates with independent exit 
   assert.match(runner,/return 0 if json\.loads\(output\.read_text\(\)\)\['result'\] == 'PASS' else 1/);
 });
 
-test('release: transfer build and manifest agree on 1.7.32/code46 and keep the 1.7.14/code28 upgrade path',async()=>{
+test('release: transfer build and manifest agree on 1.7.33/code47 and keep the 1.7.14/code28 upgrade path',async()=>{
  const manifest=await readFile(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8');
  const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
  const build=await readFile(new URL('../build.py',import.meta.url),'utf8');
  const workflow=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
- assert.match(manifest,/android:versionCode="46" android:versionName="1\.7\.32"/);
- assert.match(core,/export const APP_VERSION = '1\.7\.32';/);
- assert.match(build,/Courier-Finance-1\.7\.32\.apk/);
- assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='46' versionName='1.7.32'"));
+ assert.match(manifest,/android:versionCode="47" android:versionName="1\.7\.33"/);
+ assert.match(core,/export const APP_VERSION = '1\.7\.33';/);
+ assert.match(build,/Courier-Finance-1\.7\.33\.apk/);
+ assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='47' versionName='1.7.33'"));
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
  assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
 });
@@ -289,7 +289,7 @@ test('Add Slot form uses accessible in-app work-mode choice rather than Android 
 test('Add Slot form has aligned responsive money fields and no dash placeholders',()=>{
  const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
  assert.doesNotMatch(page,/input\.placeholder = '—'/,'empty numeric inputs must remain empty without visual dashes');
- assert.match(page,/input\.placeholder = '0\.0'/);
+ assert.match(page,/input\.id === 'dailyHours' \? '00:00'/);\n  assert.match(page,/input\.id === 'dailyOrders' \? '0'/);
  assert.match(css,/\.form-page \.field-box\{[^}]*min-height:54px/);
  assert.match(css,/\.form-page \.form-grid\{[^}]*align-items:start/);
  assert.match(css,/\.form-page \.slot-mode-options \[role="radio"\]/);

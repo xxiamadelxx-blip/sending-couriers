@@ -508,7 +508,7 @@ function settings() {
   $('#showChangelog').addEventListener('click', () => $('#changelogDialog').showModal()); resetScroll();
 }
 function field(key, label, value = '', { unit = '₽', full = false, integer = false, labelClass = '', note = '', signed = false, validation = false } = {}) {
-  return `<div class="field${full ? ' full' : ''}"><label for="${key}" class="${labelClass}">${label}</label><div class="field-box"><input id="${key}" name="${key}" type="text" aria-label="${esc(label)}" inputmode="${integer ? 'numeric' : 'decimal'}" autocomplete="off" maxlength="${integer ? 7 : 14}" class="with-unit${key === 'dailyOrders' ? ' orders-input' : ''}" value="${esc(value)}" aria-describedby="${key}-note${validation ? ` ${key}-error` : ''}" ${validation ? 'aria-invalid="false"' : ''} ${signed ? '' : ''}><span class="field-unit${key === 'dailyOrders' ? ' orders' : ''}" aria-hidden="true">${unit}</span></div>${note ? `<span class="field-note" id="${key}-note">${note}</span>` : `<span id="${key}-note" hidden></span>`}${validation ? `<span class="field-error" id="${key}-error" role="status" hidden></span>` : ''}</div>`;
+  return `<div class="field${full ? ' full' : ''}"><label for="${key}" class="${labelClass}">${label}</label><div class="field-box"><input id="${key}" name="${key}" type="text" aria-label="${esc(label)}" inputmode="${key === 'dailyHours' ? 'text' : integer ? 'numeric' : 'decimal'}" autocomplete="off" maxlength="${integer ? 7 : 14}" class="with-unit${key === 'dailyOrders' ? ' orders-input' : ''}" value="${esc(value)}" aria-describedby="${key}-note${validation ? ` ${key}-error` : ''}" ${validation ? 'aria-invalid="false"' : ''} ${signed ? '' : ''}><span class="field-unit${key === 'dailyOrders' ? ' orders' : ''}" aria-hidden="true">${unit}</span></div>${note ? `<span class="field-note" id="${key}-note">${note}</span>` : `<span id="${key}-note" hidden></span>`}${validation ? `<span class="field-error" id="${key}-error" role="status" hidden></span>` : ''}</div>`;
 }
 // UI-013: WebView native IME auto-scrolls the focused input into view
 // but may hide its human label behind the fixed page heading at 200% text.
@@ -596,7 +596,7 @@ function form(id = null, returnTo = 'history') {
     <details class="additional slot-working"><summary>Рабочее время дня</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
-  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = '0.0'; });
+  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = input.id === 'dailyHours' ? '00:00' : input.id === 'dailyOrders' ? '0' : '0.0'; });
   installLargeTextFormLabelFocusGuard();
   $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });
   let workingDirty=false;
