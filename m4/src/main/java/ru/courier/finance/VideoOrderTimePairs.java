@@ -107,7 +107,7 @@ public final class VideoOrderTimePairs {
                 try { accepted=LocalDateTime.parse(start);completed=LocalDateTime.parse(end); }
                 catch(Exception invalid) { continue; }
                 Duration duration=Duration.between(accepted,completed);
-                if(duration.isNegative()||duration.isZero()||duration.compareTo(Duration.ofHours(12))>0) continue;
+                if(duration.isNegative()||duration.compareTo(Duration.ofHours(12))>0) continue;
                 String number=field(candidate,"order_number"),amount=field(candidate,"total_kopecks");
                 if(number!=null&&!number.matches("[0-9]{6}-[0-9]{4,}")) number=null;
                 if(amount!=null&&!amount.matches("[0-9]+")) amount=null;

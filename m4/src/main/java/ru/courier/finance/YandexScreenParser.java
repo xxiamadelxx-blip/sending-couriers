@@ -169,7 +169,9 @@ public final class YandexScreenParser {
                 end=LocalDateTime.parse(fieldValue(detail,"completed_at"));
             } catch(Exception incomplete) { continue; }
             java.time.Duration duration=java.time.Duration.between(start,end);
-            if(duration.isNegative()||duration.isZero()||duration.compareTo(java.time.Duration.ofHours(12))>0) continue;
+            // The report shows minutes, not seconds: equal displayed minutes
+            // do not mean that the actual delivery had zero duration.
+            if(duration.isNegative()||duration.compareTo(java.time.Duration.ofHours(12))>0) continue;
             Integer focusedIdConfidence=integerField(detail,"order_number_confidence");
             Integer focusedTimeConfidence=integerField(detail,"time_pair_confidence");
             boolean conflicting=false;

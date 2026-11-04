@@ -4,6 +4,21 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class YandexScreenParserTest {
+    @Test public void acceptsSameDisplayedStartAndCompletionMinute() {
+        String card="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\nНомер заказа 123456-1234567\n"
+            +"Начало 2026.11.03 21:13\nЗавершение 2026.11.03 21:13";
+        YandexScreenParser.Result focused=YandexScreenParser.withFocusedOrderDetail(
+            YandexScreenParser.parse(""),card,"");
+        assertNotNull(find(focused,"ORDER_DETAIL"));
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("one",card,focused.candidates),
+            new VideoOrderTimePairs.Frame("two",card,focused.candidates)));
+        assertEquals(1,pairs.size());
+        assertEquals(pairs.get(0).accepted,pairs.get(0).completed);
+        String invalid=card.replace("Начало 2026.11.03 21:13","Начало 2026.11.03 21:14");
+        assertTrue(VideoOrderTimePairs.extract(java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("one",invalid),new VideoOrderTimePairs.Frame("two",invalid))).isEmpty());
+    }
     @Test public void sameTimesSplitOnlyWhenSeparateCardsHaveListBetweenThem() {
         String h="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\nНомер заказа ";
         String t="\nНачало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";

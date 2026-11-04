@@ -376,7 +376,7 @@ public final class M4ForecastFactWriter {
             Long amount=parseLong(field(detail,"total_kopecks"));
             if(number==null||start==null||end==null||amount==null||amount<0) continue;
             if(!facts.date.equals(start.toLocalDate().toString())||!facts.date.equals(end.toLocalDate().toString())
-                    ||!end.isAfter(start)) continue;
+                    ||end.isBefore(start)) continue;
             int startMinute=start.getHour()*60+start.getMinute(),endMinute=end.getHour()*60+end.getMinute();
             if(startMinute<facts.slotStartMinute||endMinute>facts.slotEndMinute) continue;
             if(!orderIds.add(number)) continue;
@@ -423,7 +423,7 @@ public final class M4ForecastFactWriter {
             String orderNumber=field(detail,"order_number"),startText=field(detail,"started_at"),endText=field(detail,"completed_at");
             LocalDateTime start=parseLocal(startText),end=parseLocal(endText);
             if(orderNumber==null||start==null||end==null||!facts.date.equals(start.toLocalDate().toString())
-                    ||!facts.date.equals(end.toLocalDate().toString())||!end.isAfter(start)
+                    ||!facts.date.equals(end.toLocalDate().toString())||end.isBefore(start)
                     ||attachedOrderNumbers.contains(orderNumber)) continue;
             int startMinute=start.getHour()*60+start.getMinute();
             int minute=end.getHour()*60+end.getMinute();
