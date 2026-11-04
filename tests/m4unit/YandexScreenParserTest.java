@@ -4,6 +4,34 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class YandexScreenParserTest {
+    @Test public void repeatedDistinctOrderIdsWithIdenticalTimesRemainDistinct() {
+        String head="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\nНомер заказа ";
+        String tail="\nНачало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
+        String a=head+"261101-2693515"+tail,b=head+"261101-2693516"+tail;
+        java.util.List<VideoOrderTimePairs.Frame> frames=java.util.Arrays.asList(
+            new VideoOrderTimePairs.Frame("a1",a),new VideoOrderTimePairs.Frame("a2",a),
+            new VideoOrderTimePairs.Frame("b1",b),new VideoOrderTimePairs.Frame("b2",b));
+        java.util.List<VideoOrderTimePairs.Pair> pairs=VideoOrderTimePairs.extract(frames);
+        assertEquals(2,pairs.size());
+        assertEquals(2,pairs.stream().map(p->p.orderNumber).distinct().count());
+        // One noisy ID reading cannot create a second order.
+        assertEquals(1,VideoOrderTimePairs.extract(frames.subList(0,3)).size());
+    }
+    @Test public void focusedCardKeepsTotalOnlyForTheSameOrder() {
+        String card="Заказ\nИтого 100,00 ₽\nДетали\nСтатус Завершён\nНомер заказа 261101-2693515\n"
+            +"Начало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
+        String focused="Детали\nСтатус Завершён\nНомер заказа 261101-2693515\n"
+            +"Начало 2026.11.01 11:51\nЗавершение 2026.11.01 12:03";
+        YandexScreenParser.Result primary=YandexScreenParser.parse(card);
+        YandexScreenParser.Result merged=YandexScreenParser.withFocusedOrderDetail(primary,focused,"");
+        assertTrue(merged.candidates.stream().filter(c->"ORDER_DETAIL".equals(c.candidateType))
+            .flatMap(c->c.fields.stream()).anyMatch(f->"total_kopecks".equals(f.name)&&"10000".equals(f.value)));
+        YandexScreenParser.Result other=YandexScreenParser.withFocusedOrderDetail(primary,
+            focused.replace("261101-2693515","261101-2693516"),"");
+        assertFalse(other.candidates.stream().filter(c->"ORDER_DETAIL".equals(c.candidateType))
+            .anyMatch(c->c.fields.stream().anyMatch(f->"order_number".equals(f.name)&&"261101-2693516".equals(f.value))
+                &&c.fields.stream().anyMatch(f->"total_kopecks".equals(f.name))));
+    }
     @Test public void completedCardSurvivesOcrDamageToStatusLabel() {
         String card="Заказ\nИтого 100,00 ₽\nДетали\n"
             +"oS Завершён\nКоэффициент спроса 1.0\nНомер заказа 123456-1234567\n"
