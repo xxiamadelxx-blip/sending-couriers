@@ -97,7 +97,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Existing finance, count, and import regressions
-        run: npm test
+        run: |
+          npm test
+          node --test tests/hours-format.test.mjs
       - name: Existing native count model regression
         run: |
           mkdir -p "$RUNNER_TEMP/m4-model-classes"

@@ -289,7 +289,8 @@ test('Add Slot form uses accessible in-app work-mode choice rather than Android 
 test('Add Slot form has aligned responsive money fields and no dash placeholders',()=>{
  const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
  assert.doesNotMatch(page,/input\.placeholder = '—'/,'empty numeric inputs must remain empty without visual dashes');
- assert.match(page,/input\.id === 'dailyHours' \? '00:00'/);\n  assert.match(page,/input\.id === 'dailyOrders' \? '0'/);
+ assert.match(page,/input\.id === 'dailyHours' \? '00:00'/);
+  assert.match(page,/input\.id === 'dailyOrders' \? '0'/);
  assert.match(css,/\.form-page \.field-box\{[^}]*min-height:54px/);
  assert.match(css,/\.form-page \.form-grid\{[^}]*align-items:start/);
  assert.match(css,/\.form-page \.slot-mode-options \[role="radio"\]/);
