@@ -2,7 +2,7 @@ import { emptyForecast, normalizeForecast, mergeForecast, forecastReport, weekPl
 export const RATE = 360;
 export const THRESHOLD = 1.8;
 export const SCHEMA_VERSION = 6;
-export const APP_VERSION = '1.7.34';
+export const APP_VERSION = '1.7.35';
 export const MIN_PAYMENT_HOURS = 80;
 export const PREMIUM_PACE = 2.8;
 export const PREMIUM_PERCENT = 5;
@@ -435,6 +435,39 @@ export function calculate(state, id, asOf = null) {
     grossUserIncome: accrued == null ? null : accruedIncome(accrued, separateBonus ?? 0),
     estimatedYandexOwed: remaining,
     closure: state.closures[id] ?? null
+  };
+}
+export function calculatePeriodPayout(state, id, asOf = today()) {
+  const window = periodFor(id);
+  const result = calculate(state, id);
+  const periodHasEnded = dateMillis(asOf) > dateMillis(window.end);
+  let pacePremium = 0, cyclePremium = 0;
+
+  // Keep the bonus estimates out of an unfinished fortnight. A closed period
+  // already has a user-entered final adjustment, which may include those bonuses.
+  if (periodHasEnded && !result.closure) {
+    if (result.paymentConditions.complete && result.pacePremium != null && result.pacePremium > 0) {
+      pacePremium = result.pacePremium;
+    }
+    const cycle = calculatePremiumCycle(state, window.end);
+    const cyclePaysInWindow = cycle.start && cycle.end >= window.start && cycle.end <= window.end;
+    if (cyclePaysInWindow && cycle.premium != null && cycle.missingHours === 0 && cycle.boundaryEntries.length === 0) {
+      cyclePremium = cycle.premium;
+    }
+  }
+
+  const premiumCents = Math.round(pacePremium * 100) + Math.round(cyclePremium * 100);
+  const premiumTotal = premiumCents / 100;
+  const amount = result.estimatedYandexOwed == null
+    ? null
+    : (Math.round(result.estimatedYandexOwed * 100) + premiumCents) / 100;
+  return {
+    amount,
+    baseOwed: result.estimatedYandexOwed,
+    pacePremium,
+    cyclePremium,
+    premiumTotal,
+    periodEnd: window.end
   };
 }
 export function calculateDay(state, date) {

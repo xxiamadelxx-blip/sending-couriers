@@ -2541,7 +2541,19 @@ html,body {
 #app .period-cycle-compact { margin-top:16px; }
 #app .cycle-bonus-metrics { gap:12px; }
 #app .cycle-bonus-metrics strong { color:var(--accent); font-size:20px; }
-#app .inline-help { width:28px; height:28px; min-width:28px; min-height:28px; display:inline-grid; place-items:center; margin-left:4px; padding:0; border:0; border-radius:50%; background:var(--accent-wash); color:var(--accent); vertical-align:middle; }
+#app .inline-help { width:48px; height:48px; min-width:48px; min-height:48px; display:inline-grid; place-items:center; margin:0 0 0 4px; padding:0; border:0; border-radius:50%; background:var(--accent-wash); color:var(--accent); vertical-align:middle; }
+#app .inline-help svg { width:18px; height:18px; }
+#homeDeck .payouts>.payout-owed { display:block; min-width:0; }
+#homeDeck .payout-owed-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; min-width:0; }
+#homeDeck .payout-owed-heading h2 { min-width:0; }
+#homeDeck .payout-owed-heading #summaryOwed { min-width:0; text-align:right; }
+#homeDeck .payout-premium-breakdown { display:grid; gap:4px; margin-top:4px; color:var(--income-ink); font-size:12px; line-height:1.35; font-variant-numeric:tabular-nums; }
+#homeDeck .payout-premium-breakdown>div { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+#homeDeck .payout-premium-breakdown span { min-width:0; overflow-wrap:anywhere; }
+#homeDeck .payout-premium-breakdown strong,#homeDeck .payout-premium-breakdown small { color:var(--income-ink); font-size:11px; line-height:1.35; font-weight:500; text-align:right; overflow-wrap:anywhere; }
+#app #cycleHelpDialog { max-width:min(92vw,420px); }
+#app #cycleHelpDialog p { margin:8px 0; }
+#app #cycleHelpDialog .button { min-height:48px; }
 #app .payment-settings,#app.settings-page>.detail-card,#app.settings-page>.appearance-card { margin-bottom:16px; }
 #app.settings-page .detail-card,#app.settings-page .appearance-card,#app.forecast-page .detail-card { padding:16px; border:1px solid var(--line); background:var(--surface); }
 #app.settings-page .payment-more,#app.forecast-page .calculation,#app .import-quality-details { border:1px solid var(--line); border-radius:var(--inner-radius); background:var(--field); }

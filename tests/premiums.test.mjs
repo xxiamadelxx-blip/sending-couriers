@@ -24,6 +24,45 @@ test('unknown and zero counters stay distinct for pace premium', () => {
   assert.equal(core.calculate(add(core.emptyState(), '2026-10-02', 0, 0), '2026-10-02').pacePremium, null);
 });
 
+test('completed payout window adds the eligible 2-week and 12-week premiums once', () => {
+  let state = core.updateSettings(core.emptyState(), { premiumCycleStart: '2026-08-21' });
+  state = add(state, '2026-08-21', 10, 28);
+  state = add(state, '2026-11-01', 8, 28, { reward: 500 });
+  const beforeEnd = core.calculatePeriodPayout(state, '2026-10-30', '2026-11-12');
+  assert.equal(beforeEnd.premiumTotal, 0, 'bonuses do not enter the payout before the final day ends');
+  assert.equal(beforeEnd.amount, 2380);
+
+  const due = core.calculatePeriodPayout(state, '2026-10-30', '2026-11-13');
+  assert.equal(due.pacePremium, 144); // 8h × 360 ₽ × 5%, exact pace 3.5
+  assert.equal(due.cyclePremium, 324); // (10h + 8h) × 360 ₽ × 5%
+  assert.equal(due.premiumTotal, 468);
+  assert.equal(due.baseOwed, 2380);
+  assert.equal(due.amount, 2848);
+
+  const current = state.entries.find(entry => entry.date === '2026-11-01');
+  const alreadyPaid = core.upsertEntry(state, { ...current, reward: 3348 }, current.id);
+  assert.equal(core.calculatePeriodPayout(alreadyPaid, '2026-10-30', '2026-11-13').amount, 0,
+    'actual reward already includes the bonuses, so the outstanding amount reaches zero');
+});
+
+test('payout bonuses require complete qualifying facts and are not repeated in adjacent fortnights', () => {
+  let state = core.updateSettings(core.emptyState(), { premiumCycleStart: '2026-08-21' });
+  state = add(state, '2026-09-01', null, null);
+  state = add(state, '2026-11-01', 8, null, { reward: 0 });
+  let payout = core.calculatePeriodPayout(state, '2026-10-30', '2026-11-13');
+  assert.equal(payout.pacePremium, 0, 'unknown orders cannot confirm the two-week bonus');
+  assert.equal(payout.cyclePremium, 0, 'an entry with unknown hours keeps the 12-week premium uncertain');
+
+  state = add(state, '2026-11-14', 10, 20, { reward: 0 });
+  payout = core.calculatePeriodPayout(state, '2026-11-13', '2026-11-27');
+  assert.equal(payout.cyclePremium, 0, 'the Nov 12 cycle-end premium is not repeated in the next fortnight');
+  assert.equal(payout.pacePremium, 0, 'a 2.0 pace does not meet the 2.8 premium target');
+
+  state.closures['2026-10-30'] = { finalAdjustment: 468, note: 'includes bonuses', closedAt: '2026-11-13T00:00:00Z' };
+  payout = core.calculatePeriodPayout(state, '2026-10-30', '2026-11-13');
+  assert.equal(payout.premiumTotal, 0, 'closed-period final adjustments are not double-counted');
+});
+
 test('12-week start setting never changes two-week periods, slots or closures', () => {
   let state = add(core.emptyState(), '2026-10-02', 8, 24);
   state.closures['2026-10-02'] = { finalAdjustment: 700, note: 'fact', closedAt: '2026-10-16T00:00:00Z' };

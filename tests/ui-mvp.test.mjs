@@ -5,6 +5,7 @@ const app=await readFile(new URL('../web/app.mjs',import.meta.url),'utf8');
 const css=await readFile(new URL('../web/style.css',import.meta.url),'utf8');
 const qa=await readFile(new URL('../qa/ui_audit_matrix.py',import.meta.url),'utf8');
 const forecast=await readFile(new URL('../web/forecast-ui.mjs',import.meta.url),'utf8');
+const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
 
 test('UI M1: slot edit form groups hours and money without discarding any existing field',()=>{
  const section=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
@@ -25,6 +26,17 @@ test('Period cycle disclosure uses one chevron, not the inline icon and pseudo a
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.match(section,/id="configureCycle">Настройки премии и накопленного дохода\$\{icons\.down\}/);
  assert.match(css,/#configureCycle::after\s*\{\s*content:\s*none/);
+});
+test('Payout info opens an explanation and the completed payout exposes both premium components',()=>{
+ const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
+ assert.match(section,/id="cycleHelpButton"[^>]*aria-haspopup="dialog"[^>]*aria-controls="cycleHelpDialog"/);
+ assert.match(section,/id="cycleHelpDialog"[\s\S]*?id="closeCycleHelp"/);
+ assert.match(section,/cycleHelp\.showModal\(\)/);
+ assert.match(app,/calculatePeriodPayout\(state, selectedPeriod\)/);
+ assert.match(app,/id="summaryOwedPremium"[\s\S]*?За темп:[\s\S]*?За 12 недель:/);
+ assert.match(core,/export function calculatePeriodPayout\(state, id, asOf = today\(\)\)/);
+ assert.match(css,/#homeDeck \.payouts>\.payout-owed \{ display:block;/);
+ assert.match(css,/#app \.inline-help \{ width:48px; height:48px; min-width:48px; min-height:48px;/);
 });
 test('Settings hourly-rate field keeps all three digits inside the compact input',()=>{
  assert.match(app,/rateInput\.style\.width = `calc\(/);
@@ -202,15 +214,15 @@ test('CI Android runner preserves XLSX and transfer gates with independent exit 
   assert.match(runner,/return 0 if json\.loads\(output\.read_text\(\)\)\['result'\] == 'PASS' else 1/);
 });
 
-test('release: transfer build and manifest agree on 1.7.34/code48 and keep the 1.7.14/code28 upgrade path',async()=>{
+test('release: transfer build and manifest agree on 1.7.35/code49 and keep the 1.7.14/code28 upgrade path',async()=>{
  const manifest=await readFile(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8');
  const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
  const build=await readFile(new URL('../build.py',import.meta.url),'utf8');
  const workflow=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
- assert.match(manifest,/android:versionCode="48" android:versionName="1\.7\.34"/);
- assert.match(core,/export const APP_VERSION = '1\.7\.34';/);
- assert.match(build,/Courier-Finance-1\.7\.34\.apk/);
- assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='48' versionName='1.7.34'"));
+ assert.match(manifest,/android:versionCode="49" android:versionName="1\.7\.35"/);
+ assert.match(core,/export const APP_VERSION = '1\.7\.35';/);
+ assert.match(build,/Courier-Finance-1\.7\.35\.apk/);
+ assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='49' versionName='1.7.35'"));
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='28' versionName='1.7.14'"));
  assert.ok(workflow.includes('git archive 4f295c0eefd9d6fb4e2b0652297f93cbee915d08'));
 });

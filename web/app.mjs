@@ -1,6 +1,6 @@
 import {
   today, periodFor, shiftPeriod, formatDate, periodLabel, emptyState, normalizeState,
-  calculate, calculateDay, newEntryId, hoursText, money, paceText, reserveText, plural, accruedIncome, calculateScenario, parseInteger,
+  calculate, calculateDay, calculatePeriodPayout, newEntryId, hoursText, money, paceText, reserveText, plural, accruedIncome, calculateScenario, parseInteger,
   upsertEntry, mergeImport, parseCycleIncomeReport, parseMoney, parseHours, markdownReport, deductionChecks,
   TAX_PERCENT_MIN, TAX_PERCENT_MAX, PARK_COMMISSION_PERCENT,
   calculatePremiumCycle, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft, applyPaymentTermsFromDate,
@@ -276,10 +276,12 @@ function bindNavigation(rerender) {
   $('#previousPeriod').addEventListener('click', () => { selectedPeriod = shiftPeriod(selectedPeriod, -1).id; rerender(); });
   $('#nextPeriod').addEventListener('click', () => { selectedPeriod = shiftPeriod(selectedPeriod, 1).id; rerender(); });
 }
-function financeHint(s) {
+function financeHint(s, payout) {
   if (s.hours == null) return s.latest ? 'Выплаты сохранены. Введите часы за день — появится расчёт дохода.' : 'Добавьте первый день — появятся ваши показатели.';
   const rates = s.rateBreakdown.map(part => hoursText(part.hours) + ' ч × ' + money(part.hourlyRate) + '/ч = ' + money(part.base)).join('; ');
-  return 'Начислено: ' + rates + ' + чаевые ' + money(s.tips) + ' − удержания ' + money(s.deductions) + ' = ' + money(s.accruedIncome) + '. Выплачено ' + money(s.paidReward) + '; осталось выплатить ' + money(s.estimatedYandexOwed) + '. Условия выплаты зависят от темпа от ' + goalText(s.terms.basePace) + ' заказа/ч.';
+  const remaining = payout?.amount ?? s.estimatedYandexOwed;
+  const premiums = payout?.premiumTotal > 0 ? ` Расчётные премии в сумме: ${money(payout.premiumTotal)} (за темп ${money(payout.pacePremium)}, за 12 недель ${money(payout.cyclePremium)}).` : '';
+  return 'Начислено: ' + rates + ' + чаевые ' + money(s.tips) + ' − удержания ' + money(s.deductions) + ' = ' + money(s.accruedIncome) + '. Выплачено ' + money(s.paidReward) + '; осталось выплатить ' + money(remaining) + '.' + premiums + ' Условия выплаты зависят от темпа от ' + goalText(s.terms.basePace) + ' заказа/ч.';
 }
 function cycleBonusLabel(cycle, terms) {
   const rates = [...new Set([...cycle.breakdown.map(row => row.cycleBonusPercent), ...(cycle.openingPercent == null ? [] : [cycle.openingPercent])])];
@@ -305,13 +307,13 @@ function paymentStatus(s) {
 function summary() {
   if(!leaveForecast())return;
   app.className = 'overview'; view = 'summary'; editingId = null;
-  const s = calculate(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
+  const s = calculate(state, selectedPeriod), payout = calculatePeriodPayout(state, selectedPeriod), cycle = calculatePremiumCycle(state, cycleDate());
   const gap = s.pace == null ? null : Math.max(0, s.requiredOrders - s.orders);
   app.innerHTML=`<header class="overview-top"><div class="overview-toolbar">${weatherWidget()}<div class="header-tools"><button class="export-icon" id="export" type="button" aria-label="Экспорт для ChatGPT" title="Экспорт для ChatGPT">${icons.share}</button>${themeButton()}</div></div><h1>Рабочий ритм</h1><button class="period-button" id="choosePeriod" type="button" aria-label="Выбрать расчётный период">${icon.calendar}${esc(periodLabel(selectedPeriod))}${icons.down}</button>${s.closure?'<p class="summary-close-status">Период закрыт</p>':''}</header>
     <section class="rhythm" aria-labelledby="paceTitle"><div class="pace-hero"><div><h2 id="paceTitle">Темп периода</h2><p id="summaryPace" class="hero-pace"><strong class="${paceText(s.pace).length > 7 ? 'wide' : paceText(s.pace).length > 5 ? 'compact' : ''}">${paceText(s.pace)}</strong> заказа/ч</p></div><div class="gauge"><canvas id="paceGauge" role="img" aria-label="${s.pace == null ? 'Пока нет данных о темпе' : `Выполнение нормы: ${Math.round(s.pace / s.terms.basePace * 100)}%`}"></canvas><div class="gauge-label" data-state="${s.paymentConditions.paceMet === false ? 'below' : 'other'}"><strong>${s.pace == null ? '—' : Math.round(s.pace / s.terms.basePace * 100) + '%'}</strong><span>Цель ${goalText(s.terms.basePace)}<br>заказа/ч</span></div></div></div>
     <div class="meters" aria-label="Сумма часов и заказов за период"><div class="meter">${icon.clock}<div><p class="meter-value${meterSize(hoursText(s.hours))}" id="summaryHours">${hoursText(s.hours)}<span class="unit"> ч</span></p><p class="meter-label">отработано</p></div></div><div class="meter">${icon.package}<div><p class="meter-value${meterSize(s.orders)}"><span id="summaryOrders">${s.orders ?? '—'}</span><span class="orders-unit"> ${s.orders == null ? 'заказов' : orderWord(s.orders)}</span></p><p class="meter-label">выполнено</p></div></div></div>
     <div class="pace-block"><div class="norm-row">${icon.target}<span>До нормы</span><div><strong>${gap ?? '—'}${gap == null ? '' : ' ' + orderWord(gap)}</strong></div></div>${s.reserve != null && s.reserve > 0 ? '<p class="reserve-line" id="summaryReserve">Запас времени без заказов: ' + reserveText(s.reserve) + '</p>' : ''}${s.pace != null && !s.matchedCounters ? '<p class="hint" id="paceNote">Неполные данные · темп по введённым итогам</p>' : ''}</div></section>${paymentStatus(s)}
-    <section class="income-hero" aria-labelledby="incomeTitle"><h2 id="incomeTitle">Общий доход</h2><div id="summaryGross">${amount(s.grossUserIncome, true)}</div><div class="income-parts"><div><span>За часы</span><strong>${esc(money(s.hourlyBase))}</strong></div><div><span>Чаевые</span><strong>${esc(money(s.tips))}</strong></div><div><span>Бонусы отдельно</span><strong>${esc(money(s.separateBonus))}</strong></div><div><span>Удержания</span><strong>${esc(money(s.deductions))}</strong></div></div><section class="payouts" aria-label="Выплаты"><div id="summaryPaid"><h2>Выплачено</h2>${amount(s.paidReward)}</div><div><h2>Осталось выплатить</h2><div id="summaryOwed">${amount(s.estimatedYandexOwed)}</div></div></section><button class="premiums-card" id="openPremiums" type="button"><span class="card-heading">Расчётные премии${icons.chevron}</span><span class="premium-teasers"><span>${icon['chart-bar']}<span>За темп · ${percentText(s.terms.paceBonusPercent)}%<strong id="summaryPacePremium">${esc(money(s.pacePremium))}</strong>${s.pace != null && s.pace < s.terms.premiumPace ? '<small class="premium-reason">Темп ниже цели ' + goalText(s.terms.premiumPace) + ' заказа/ч</small>' : ''}</span></span><span>${icon.gift}<span>${esc(cycleBonusLabel(cycle, s.terms))}<strong id="summaryCyclePremium">${esc(money(cycle.premium))}</strong></span></span></span></button></section><details class="calculation"><summary>Расчёт дохода</summary><p class="hint" id="financeHint">${esc(financeHint(s))}</p></details>`;
+    <section class="income-hero" aria-labelledby="incomeTitle"><h2 id="incomeTitle">Общий доход</h2><div id="summaryGross">${amount(s.grossUserIncome, true)}</div><div class="income-parts"><div><span>За часы</span><strong>${esc(money(s.hourlyBase))}</strong></div><div><span>Чаевые</span><strong>${esc(money(s.tips))}</strong></div><div><span>Бонусы отдельно</span><strong>${esc(money(s.separateBonus))}</strong></div><div><span>Удержания</span><strong>${esc(money(s.deductions))}</strong></div></div><section class="payouts" aria-label="Выплаты"><div id="summaryPaid"><h2>Выплачено</h2>${amount(s.paidReward)}</div><div class="payout-owed"><div class="payout-owed-heading"><h2>Осталось выплатить</h2><div id="summaryOwed">${amount(payout.amount)}</div></div>${payout.premiumTotal > 0 && payout.amount != null ? `<div class="payout-premium-breakdown" id="summaryOwedPremium"><div><span>В том числе расчётные премии</span><strong>${esc(money(payout.premiumTotal))}</strong></div><small>За темп: ${esc(money(payout.pacePremium))}</small><small>За 12 недель: ${esc(money(payout.cyclePremium))}</small></div>` : ''}</div></section><button class="premiums-card" id="openPremiums" type="button"><span class="card-heading">Расчётные премии${icons.chevron}</span><span class="premium-teasers"><span>${icon['chart-bar']}<span>За темп · ${percentText(s.terms.paceBonusPercent)}%<strong id="summaryPacePremium">${esc(money(s.pacePremium))}</strong>${s.pace != null && s.pace < s.terms.premiumPace ? '<small class="premium-reason">Темп ниже цели ' + goalText(s.terms.premiumPace) + ' заказа/ч</small>' : ''}</span></span><span>${icon.gift}<span>${esc(cycleBonusLabel(cycle, s.terms))}<strong id="summaryCyclePremium">${esc(money(cycle.premium))}</strong></span></span></span></button></section><details class="calculation"><summary>Расчёт дохода</summary><p class="hint" id="financeHint">${esc(financeHint(s,payout))}</p></details>`;
   // WebView 124 prunes named passive panels. Keep real headings and readouts
   // available to accessibility without adding stops to keyboard Tab navigation.
   app.querySelectorAll('#paceTitle,#summaryPace,.meter-value,#summaryPacePremium,#summaryCyclePremium').forEach(node=>node.tabIndex=-1);
@@ -380,7 +382,7 @@ function periodDetails() {
       ${cycle.start ? `<p class="cycle-bonus-dates">${esc(formatDate(cycle.start))} — ${esc(formatDate(cycle.end))}</p>` : ''}
       <div class="cycle-bonus-metrics" aria-label="Накопление премии">
         <div><span>Общий доход цикла</span><strong id="cycleTotalIncome">${esc(money(cycle.totalIncome))}</strong></div>
-        <div><span class="cycle-premium-label">${esc(cycleBonusLabel(cycle,s.terms))}<button type="button" class="inline-help" aria-label="Как считается премия за 12 недель" title="Премия считается по доходу цикла и ставкам, действовавшим в даты записей. Выплата не подтверждена.">${icon['info-circle']}</button></span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
+        <div><span class="cycle-premium-label">${esc(cycleBonusLabel(cycle,s.terms))}<button type="button" class="inline-help" id="cycleHelpButton" aria-label="Как выплачивается премия за 12 недель" aria-haspopup="dialog" aria-controls="cycleHelpDialog">${icon['info-circle']}</button></span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
       </div>
       <p class="cycle-bonus-note">${!cycle.start ? 'Укажите дату начала цикла.' : cycle.status === 'not-started' ? 'Цикл ещё не начался.' : cycle.totalIncome == null ? 'Пока нет дохода по известным часам.' : 'Расчётная премия, выплата не подтверждена.'}${cycle.missingHours ? ` Записей без часов: ${cycle.missingHours}.` : ''}${cycle.boundaryNote ? ' Есть старые интервалы: расчёт приблизительный.' : ''}</p>
       ${cycle.start ? `<progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress>` : ''}
@@ -403,11 +405,21 @@ function periodDetails() {
         </form>
       </details>
     </section>
+    <dialog id="cycleHelpDialog" aria-labelledby="cycleHelpTitle" aria-describedby="cycleHelpDescription">
+      <h2 id="cycleHelpTitle">Как выплачивается премия за 12 недель</h2>
+      <p id="cycleHelpDescription">Премия добавляется к расчётной сумме выплаты в том двухнедельном периоде, в который попадает конец 84-дневного цикла. В сумме «Осталось выплатить» она появится после окончания этого периода.</p>
+      <p>Премия за темп добавляется после окончания двухнедельного периода, если введены часы и заказы по всем его записям и достигнут настроенный порог премии. В общей сумме ниже показано, сколько приходится на каждую премию.</p>
+      <p>Это расчёт ожидаемой выплаты, не отметка о получении денег. В уже закрытом периоде премии повторно не добавляются: там учитывается зафиксированная финальная доплата.</p>
+      <button class="button primary" id="closeCycleHelp" type="button">Понятно</button>
+    </dialog>
     <div class="actions period-actions">
       <button class="button quiet" id="periodHistory" type="button">Записи периода${icons.chevron}</button>
       <button class="button quiet export-action" id="periodExport" type="button">${icons.share}Экспорт для ChatGPT</button>
     </div>`;
   bottomNav('period'); $('#goBack').addEventListener('click', summary); bindNavigation(periodDetails);
+  const cycleHelp=$('#cycleHelpDialog');
+  $('#cycleHelpButton').addEventListener('click',()=>cycleHelp.showModal());
+  $('#closeCycleHelp').addEventListener('click',()=>cycleHelp.close());
   function previewCycle() {
     try {
       const next = updateSettings(state, { premiumCycleStart: $('#premiumCycleStart').value });
