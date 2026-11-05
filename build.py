@@ -110,4 +110,3 @@ with zipfile.ZipFile(output) as apk:
     assert apk.testzip() is None
 assert output.read_bytes() == signed.read_bytes()
 print('APK:', output, 'bytes:', output.stat().st_size)
-

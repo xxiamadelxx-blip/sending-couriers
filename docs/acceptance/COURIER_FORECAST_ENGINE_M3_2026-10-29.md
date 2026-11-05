@@ -1,6 +1,6 @@
 # M3 — Нативный автономный прогноз числа заказов
 
-**Основание:** M2 PR #5, исходный SHA 947a727b4727cb3c5cc1a6d26692efc5a7bc6d19.  
+**Основание:** M2 PR #5, исходный SHA 947a727b4727cb3c5cc1a6d26692efc5a7bc6d19.\
 **Статус:** PASS / CLOSED для нативного автономного движка. Продуктовый код — `236ba16c8c5e74801bca11475bf4a8222b472dde`; финальная Android 35 приёмка — [GitHub Actions #41149675968](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/41149675968), harness commit `51502194c6df39d5d876ace4cdee810b53ea0e3f`.
 
 ## Критерии

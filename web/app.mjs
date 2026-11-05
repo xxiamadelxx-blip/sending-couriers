@@ -964,4 +964,3 @@ Native?.ready();
 
 // Refresh date boundaries on return from the background; never promise an exact background alarm.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){if(view==='forecast')forecastScreen?.flush();return;}try{refreshNativeForecasts();}catch(error){notify(error.message);}});
-

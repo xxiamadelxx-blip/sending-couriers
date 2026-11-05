@@ -1,4 +1,6 @@
 /build/
+/.metrics/
+/target/
 /signing/**
 !/signing/README.md
 /verification/
@@ -7,6 +9,8 @@
 /.gradle/
 /m4-models/
 /m4-fixture/
+__pycache__/
+*.py[cod]
 *.keystore
 *.jks
 *.xlsx

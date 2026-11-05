@@ -230,4 +230,3 @@ jobs:
           path: ${{ runner.temp }}/m4-artifacts/*.png
           retention-days: 1
           if-no-files-found: warn
-

@@ -360,6 +360,100 @@ function mergeVideoSlots(existing=[],incoming=[]) {
   }
   return rows;
 }
+function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
+  const orderCount=integer(input.slotOrderCount??input.orders,1000000);
+  if(orderCount==null)fail('Видео-слот не содержит подтверждённого количества заказов.');
+  const slotId=suppliedSlotId||`legacy:${String(input.sourceHash??inputSource).slice(-120)}`;
+  const slot={slotId,orderCount,sourceHash:String(input.sourceHash??'').slice(0,64),source:String(inputSource).slice(0,200),
+    startedAt:String(input.startedAt??'').slice(0,40),completedAt:String(input.completedAt??'').slice(0,40),conflicts:[]};
+  const slots=(old?.videoSlots??[]).slice(),slotIndex=slots.findIndex(item=>item.slotId===slotId);
+  let slotAdded=false,slotConflictAdded=false,slotConflict=false;
+  if(slotIndex<0){slots.push(slot);slotAdded=true;}
+  else if(slots[slotIndex].orderCount!==orderCount) {
+    slotConflict=true;
+    const existing=slots[slotIndex],rows=[...(existing.conflicts??[])];
+    if(!rows.some(row=>row.orderCount===orderCount&&row.sourceHash===slot.sourceHash)) {
+      rows.push({orderCount,sourceHash:slot.sourceHash,source:slot.source});
+      slots[slotIndex]={...existing,conflicts:rows.slice(-10)};slotConflictAdded=true;
+    }
+  }
+  const hasDailyTotal=Boolean(old?.ordersConfirmed&&old.ordersScope!=='video_slots');
+  const staleMismatch=`Заказы: сохранено ${old?.orders}, новый источник ${orderCount}. Подтвердите итог дня.`;
+  const repairedLegacyConflict=Boolean(hasDailyTotal&&old?.source?.startsWith('video:')&&old.sourceConflicts?.includes(staleMismatch));
+  let sourceConflicts=[...new Set([...(old?.sourceConflicts??[]),...parsed.sourceConflicts])];
+  if(repairedLegacyConflict)sourceConflicts=sourceConflicts.filter(item=>item!==staleMismatch);
+  if(slotConflict&&!hasDailyTotal)sourceConflicts.push(`Видео-слот ${slotId}: источники расходятся по числу заказов.`);
+  sourceConflicts=[...new Set(sourceConflicts)];
+  const fieldSources={...parsed.fieldSources,...(old?.fieldSources??{})};
+  if(hasDailyTotal) {
+    if(repairedLegacyConflict&&!sourceConflicts.some(item=>item.startsWith('Заказы:'))
+        &&old.fieldSources?.orders?.source&&!old.fieldSources.orders.source.startsWith('video:'))
+      fieldSources.orders={...old.fieldSources.orders,status:'CONFIRMED'};
+  } else {
+    fieldSources.orders={source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',
+      note:'Сумма отдельных подтверждённых видео-слотов за дату.'};
+  }
+  const dailyOrders=hasDailyTotal?old.orders:slots.reduce((sum,item)=>sum+item.orderCount,0);
+  // Preserve the first RAW evidence when no shared order ID proves cross-source identity.
+  const oldEvidence=old?.orderEvidence??[],incomingEvidence=parsed.orderEvidence;
+  const videoOnlyOrEmpty=oldEvidence.every(row=>row.source?.startsWith('video:'));
+  const mergedEvidence=videoOnlyOrEmpty?mergeVideoEvidence(oldEvidence,incomingEvidence):oldEvidence;
+  const evidenceAdded=mergedEvidence.length>oldEvidence.length
+    ||videoOnlyOrEmpty&&mergedEvidence.some((row,i)=>row!==oldEvidence[i]);
+  const orderEvidence=hasDailyTotal
+    ?mergedEvidence
+    :mergeVideoEvidence(old?.ordersScope==='video_slots'?oldEvidence:[],slotAdded||evidenceAdded?incomingEvidence:[]);
+  const merged={...(old??parsed),...parsed,
+    source:hasDailyTotal?old.source:'video_slots',sourceHash:hasDailyTotal?old.sourceHash:fingerprint(slots.map(item=>[item.slotId,item.orderCount,item.sourceHash])),
+    zone:old?.zone||parsed.zone,timezone:old?.timezone||parsed.timezone,
+    orders:dailyOrders,ordersConfirmed:hasDailyTotal?old.ordersConfirmed:slots.length>0,
+    ordersScope:hasDailyTotal?'daily':'video_slots',videoSlots:slots,fieldSources,orderEvidence,
+    completed:old?.completed??parsed.completed,workingMin:old?.workingMin??parsed.workingMin,
+    workConfirmed:old?.workConfirmed??parsed.workConfirmed,precision:old?.precision??parsed.precision,
+    intervals:old?.intervals??parsed.intervals,estimatedIntervals:old?.estimatedIntervals??parsed.estimatedIntervals,
+    estimatedExposureJustified:old?.estimatedExposureJustified||parsed.estimatedExposureJustified,
+    exposureBlocks:old?.exposureBlocks?.length?old.exposureBlocks:parsed.exposureBlocks,
+    appAccountedMin:old?.appAccountedMin??parsed.appAccountedMin,
+    accountedConfirmed:old?.accountedConfirmed??parsed.accountedConfirmed,
+    evidenceComplete:hasDailyTotal?Boolean((old.evidenceComplete||parsed.evidenceComplete)
+      &&orderEvidence.length===dailyOrders):Boolean(orderEvidence.length===dailyOrders&&parsed.evidenceComplete),
+    rawComplete:hasDailyTotal?old.rawComplete:orderEvidence.length===dailyOrders,
+    sourceNotes:[...new Set([...(old?.sourceNotes??[]),...parsed.sourceNotes])].slice(0,20),
+    manualTime:old?.manualTime??parsed.manualTime,confirmedAt:old?.confirmedAt??parsed.confirmedAt,
+    importedAt:now,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
+  if(!slotAdded&&!slotConflictAdded&&!repairedLegacyConflict&&!evidenceAdded)return null;
+  return normalizeDay(merged);
+}
+function mergeHistoryDay(data,old,parsed,input,incomingHash) {
+  const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
+  let sourceConflicts=[...parsed.sourceConflicts,...(reconcilesVideoSlots
+    ?(old.sourceConflicts??[]).filter(item=>!item.startsWith('Видео-слот '))
+    :(old?.sourceConflicts??[]))];
+  const oldOrderSource=String(old?.fieldSources?.orders?.source??'');
+  const oldVideoDayConflict=Boolean(old?.source?.startsWith('video:')&&old.ordersConfirmed
+    &&old.fieldSources?.orders?.status==='CONFLICT'&&oldOrderSource&&!oldOrderSource.startsWith('video:')
+    &&parsed.ordersConfirmed&&parsed.orders===old.orders);
+  if(oldVideoDayConflict) {
+    const mismatch=new RegExp(`^Заказы: сохранено ${old.orders}, новый источник \\d+\\. Подтвердите итог дня\\.$`);
+    sourceConflicts=sourceConflicts.filter(item=>!mismatch.test(item));
+  }
+  const geographyConflict=old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
+  if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
+  if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders&&!reconcilesVideoSlots) sourceConflicts.push(`Заказы: сохранено ${old.orders}, новый источник ${parsed.orders}. Подтвердите итог дня.`);
+  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin) sourceConflicts.push(`Часы Яндекса: сохранено ${old.appAccountedMin} мин, новый источник ${parsed.appAccountedMin} мин. Подтвердите итог дня.`);
+  let merged={...parsed,zone:geographyConflict?old.zone:input.zone?parsed.zone:old?.zone??parsed.zone,timezone:geographyConflict?old.timezone:input.timezone?parsed.timezone:old?.timezone??profileFor(data,parsed.date)?.timezone??parsed.timezone,sourceHash:incomingHash,ordersScope:parsed.ordersConfirmed?'daily':old?.ordersScope??parsed.ordersScope,videoSlots:old?.videoSlots?.length?old.videoSlots:parsed.videoSlots,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
+  if(old?.manualTime) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions,confirmedAt:old.confirmedAt,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
+  else if(old?.workConfirmed&&!parsed.workConfirmed&&!(old.source===parsed.source&&old.source.startsWith('sheets_import:'))) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:true,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
+  if(reconcilesVideoSlots)merged={...merged,ordersScope:'daily',sourceConflicts:[...new Set(sourceConflicts)],orderEvidence:parsed.orderEvidence};
+  else if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) merged={...merged,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,fieldSources:{...merged.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
+  // A partial capture cannot erase a confirmed total or a fuller order list.
+  if(old?.ordersConfirmed&&!parsed.ordersConfirmed) {merged.orders=old.orders;merged.ordersConfirmed=true;merged.ordersScope=old.ordersScope;merged.fieldSources.orders=old.fieldSources.orders;}
+  if(old?.accountedConfirmed&&!parsed.accountedConfirmed) {merged.appAccountedMin=old.appAccountedMin;merged.accountedConfirmed=true;merged.fieldSources.appAccountedMin=old.fieldSources.appAccountedMin;}
+  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin){merged.appAccountedMin=old.appAccountedMin;merged.fieldSources.appAccountedMin={...old.fieldSources.appAccountedMin,status:'CONFLICT'};}
+  if(!reconcilesVideoSlots){const orders=new Map((old?.orderEvidence??[]).map(o=>[o.id,o])); for(const o of parsed.orderEvidence) orders.set(o.id,o);merged.orderEvidence=[...orders.values()];}
+  merged.evidenceComplete=(old?.evidenceComplete||parsed.evidenceComplete) && merged.orderEvidence.length===merged.orders;
+  return normalizeDay(merged);
+}
 export function importDays(data,rows,source='history',now=new Date().toISOString()) {
   if(!Array.isArray(rows)||rows.length>5000) fail('Проверьте список дней.');
   const days={...data.days}; let changed=0,conflicts=0;
@@ -372,101 +466,13 @@ export function importDays(data,rows,source='history',now=new Date().toISOString
     const incomingHash=fingerprint({...input,source:inputSource});
     if(!isVideoSlot&&old?.sourceHash===incomingHash) continue;
     if(isVideoSlot) {
-      const orderCount=integer(input.slotOrderCount??input.orders,1000000);
-      if(orderCount==null)fail('Видео-слот не содержит подтверждённого количества заказов.');
-      const slotId=suppliedSlotId||`legacy:${String(input.sourceHash??inputSource).slice(-120)}`;
-      const slot={slotId,orderCount,sourceHash:String(input.sourceHash??'').slice(0,64),source:String(inputSource).slice(0,200),
-        startedAt:String(input.startedAt??'').slice(0,40),completedAt:String(input.completedAt??'').slice(0,40),conflicts:[]};
-      const slots=(old?.videoSlots??[]).slice(),slotIndex=slots.findIndex(item=>item.slotId===slotId);
-      let slotAdded=false,slotConflictAdded=false,slotConflict=false;
-      if(slotIndex<0){slots.push(slot);slotAdded=true;}
-      else if(slots[slotIndex].orderCount!==orderCount) {
-        slotConflict=true;
-        const existing=slots[slotIndex],rows=[...(existing.conflicts??[])];
-        if(!rows.some(row=>row.orderCount===orderCount&&row.sourceHash===slot.sourceHash)) {
-          rows.push({orderCount,sourceHash:slot.sourceHash,source:slot.source});
-          slots[slotIndex]={...existing,conflicts:rows.slice(-10)};slotConflictAdded=true;
-        }
-      }
-      const hasDailyTotal=Boolean(old?.ordersConfirmed&&old.ordersScope!=='video_slots');
-      const staleMismatch=`Заказы: сохранено ${old?.orders}, новый источник ${orderCount}. Подтвердите итог дня.`;
-      const repairedLegacyConflict=Boolean(hasDailyTotal&&old?.source?.startsWith('video:')&&old.sourceConflicts?.includes(staleMismatch));
-      let sourceConflicts=[...new Set([...(old?.sourceConflicts??[]),...parsed.sourceConflicts])];
-      if(repairedLegacyConflict)sourceConflicts=sourceConflicts.filter(item=>item!==staleMismatch);
-      if(slotConflict&&!hasDailyTotal)sourceConflicts.push(`Видео-слот ${slotId}: источники расходятся по числу заказов.`);
-      sourceConflicts=[...new Set(sourceConflicts)];
-      const fieldSources={...parsed.fieldSources,...(old?.fieldSources??{})};
-      if(hasDailyTotal) {
-        if(repairedLegacyConflict&&!sourceConflicts.some(item=>item.startsWith('Заказы:'))
-            &&old.fieldSources?.orders?.source&&!old.fieldSources.orders.source.startsWith('video:'))
-          fieldSources.orders={...old.fieldSources.orders,status:'CONFIRMED'};
-      } else {
-        fieldSources.orders={source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',
-          note:'Сумма отдельных подтверждённых видео-слотов за дату.'};
-      }
-      const dailyOrders=hasDailyTotal?old.orders:slots.reduce((sum,item)=>sum+item.orderCount,0);
-      // A confirmed day total owns the count, but must not discard the first
-      // observed RAW rows for that date. Keep existing XLSX RAW when present:
-      // without a common order number we cannot prove cross-source identity.
-      const oldEvidence=old?.orderEvidence??[];
-      const incomingEvidence=parsed.orderEvidence;
-      const videoOnlyOrEmpty=oldEvidence.every(row=>row.source?.startsWith('video:'));
-      const mergedEvidence=videoOnlyOrEmpty?mergeVideoEvidence(oldEvidence,incomingEvidence):oldEvidence;
-      const evidenceAdded=mergedEvidence.length>oldEvidence.length
-        ||videoOnlyOrEmpty&&mergedEvidence.some((row,i)=>row!==oldEvidence[i]);
-      const orderEvidence=hasDailyTotal
-        ?mergedEvidence
-        :mergeVideoEvidence(old?.ordersScope==='video_slots'?oldEvidence:[],slotAdded||evidenceAdded?incomingEvidence:[]);
-      const merged={...(old??parsed),...parsed,
-        source:hasDailyTotal?old.source:'video_slots',sourceHash:hasDailyTotal?old.sourceHash:fingerprint(slots.map(item=>[item.slotId,item.orderCount,item.sourceHash])),
-        zone:old?.zone||parsed.zone,timezone:old?.timezone||parsed.timezone,
-        orders:dailyOrders,ordersConfirmed:hasDailyTotal?old.ordersConfirmed:slots.length>0,
-        ordersScope:hasDailyTotal?'daily':'video_slots',videoSlots:slots,fieldSources,orderEvidence,
-        completed:old?.completed??parsed.completed,workingMin:old?.workingMin??parsed.workingMin,
-        workConfirmed:old?.workConfirmed??parsed.workConfirmed,precision:old?.precision??parsed.precision,
-        intervals:old?.intervals??parsed.intervals,estimatedIntervals:old?.estimatedIntervals??parsed.estimatedIntervals,
-        estimatedExposureJustified:old?.estimatedExposureJustified||parsed.estimatedExposureJustified,
-        exposureBlocks:old?.exposureBlocks?.length?old.exposureBlocks:parsed.exposureBlocks,
-        appAccountedMin:old?.appAccountedMin??parsed.appAccountedMin,
-        accountedConfirmed:old?.accountedConfirmed??parsed.accountedConfirmed,
-        evidenceComplete:hasDailyTotal?Boolean((old.evidenceComplete||parsed.evidenceComplete)
-          &&orderEvidence.length===dailyOrders):Boolean(orderEvidence.length===dailyOrders&&parsed.evidenceComplete),
-        rawComplete:hasDailyTotal?old.rawComplete:orderEvidence.length===dailyOrders,
-        sourceNotes:[...new Set([...(old?.sourceNotes??[]),...parsed.sourceNotes])].slice(0,20),
-        manualTime:old?.manualTime??parsed.manualTime,confirmedAt:old?.confirmedAt??parsed.confirmedAt,
-        importedAt:now,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
-      if(!slotAdded&&!slotConflictAdded&&!repairedLegacyConflict&&!evidenceAdded)continue;
-      days[parsed.date]=normalizeDay(merged);changed++;conflicts+=days[parsed.date].conflicts.length;
+      const merged=mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now);
+      if(!merged)continue;
+      days[parsed.date]=merged;changed++;conflicts+=merged.conflicts.length;
       continue;
     }
-    const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
-    let sourceConflicts=[...parsed.sourceConflicts,...(reconcilesVideoSlots
-      ?(old.sourceConflicts??[]).filter(item=>!item.startsWith('Видео-слот '))
-      :(old?.sourceConflicts??[]))];
-    const oldOrderSource=String(old?.fieldSources?.orders?.source??'');
-    const oldVideoDayConflict=Boolean(old?.source?.startsWith('video:')&&old.ordersConfirmed
-      &&old.fieldSources?.orders?.status==='CONFLICT'&&oldOrderSource&&!oldOrderSource.startsWith('video:')
-      &&parsed.ordersConfirmed&&parsed.orders===old.orders);
-    if(oldVideoDayConflict) {
-      const mismatch=new RegExp(`^Заказы: сохранено ${old.orders}, новый источник \\d+\\. Подтвердите итог дня\\.$`);
-      sourceConflicts=sourceConflicts.filter(item=>!mismatch.test(item));
-    }
-    const geographyConflict=old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
-    if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
-    if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders&&!reconcilesVideoSlots) sourceConflicts.push(`Заказы: сохранено ${old.orders}, новый источник ${parsed.orders}. Подтвердите итог дня.`);
-    if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin) sourceConflicts.push(`Часы Яндекса: сохранено ${old.appAccountedMin} мин, новый источник ${parsed.appAccountedMin} мин. Подтвердите итог дня.`);
-    let merged={...parsed,zone:geographyConflict?old.zone:input.zone?parsed.zone:old?.zone??parsed.zone,timezone:geographyConflict?old.timezone:input.timezone?parsed.timezone:old?.timezone??profileFor(data,parsed.date)?.timezone??parsed.timezone,sourceHash:incomingHash,ordersScope:parsed.ordersConfirmed?'daily':old?.ordersScope??parsed.ordersScope,videoSlots:old?.videoSlots?.length?old.videoSlots:parsed.videoSlots,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
-    if(old?.manualTime) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions,confirmedAt:old.confirmedAt,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
-    else if(old?.workConfirmed&&!parsed.workConfirmed&&!(old.source===parsed.source&&old.source.startsWith('sheets_import:'))) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:true,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
-    if(reconcilesVideoSlots)merged={...merged,ordersScope:'daily',sourceConflicts:[...new Set(sourceConflicts)],orderEvidence:parsed.orderEvidence};
-    else if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) merged={...merged,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,fieldSources:{...merged.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
-    // A partial capture cannot erase a confirmed total or a fuller order list.
-    if(old?.ordersConfirmed&&!parsed.ordersConfirmed) {merged.orders=old.orders;merged.ordersConfirmed=true;merged.ordersScope=old.ordersScope;merged.fieldSources.orders=old.fieldSources.orders;}
-    if(old?.accountedConfirmed&&!parsed.accountedConfirmed) {merged.appAccountedMin=old.appAccountedMin;merged.accountedConfirmed=true;merged.fieldSources.appAccountedMin=old.fieldSources.appAccountedMin;}
-    if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin){merged.appAccountedMin=old.appAccountedMin;merged.fieldSources.appAccountedMin={...old.fieldSources.appAccountedMin,status:'CONFLICT'};}
-    if(!reconcilesVideoSlots){const orders=new Map((old?.orderEvidence??[]).map(o=>[o.id,o])); for(const o of parsed.orderEvidence) orders.set(o.id,o);merged.orderEvidence=[...orders.values()];}
-    merged.evidenceComplete=(old?.evidenceComplete||parsed.evidenceComplete) && merged.orderEvidence.length===merged.orders;
-    days[parsed.date]=normalizeDay(merged); changed++; conflicts+=days[parsed.date].conflicts.length;
+    const merged=mergeHistoryDay(data,old,parsed,input,incomingHash);
+    days[parsed.date]=merged; changed++; conflicts+=merged.conflicts.length;
   }
   const id=`import-${fingerprint({rows,source})}`;
   if(!changed && data.imports.some(i=>i.id===id)) return data;
@@ -621,4 +627,3 @@ export function forecastReport(data) {
     'Оценки ревизий:',...data.evaluations.slice(-60).map(e=>`- ${e.id}; факт v${e.factRevision}=${e.fact}; ошибка=${e.signedError}; в диапазоне=${e.covered}; до начала работы=${e.prospective}.`),
     'Персональные профили, полные снимки и журнал импорта находятся в JSON-копии. Сценарии не входят в обучение.',''].join('\n');
 }
-

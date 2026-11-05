@@ -943,4 +943,3 @@ public final class YandexScreenParserTest {
         return null;
     }
 }
-

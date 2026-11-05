@@ -113,4 +113,3 @@ test('on Nov 1 a tariff dated Oct 23 recalculates both periods and supersedes th
  assert.equal(november.terms.basePace,2.1);
  assert.equal(JSON.stringify(s.entries),before);
 });
-

@@ -30,5 +30,6 @@ python3 build.py --variant transferRelease --output ../artifacts/Courier-Finance
 - [Правила разработки](AGENTS.md)
 - [Архитектура и решения](docs/ARCHITECTURE.md)
 - [Текущий статус и следующий шаг](docs/PROJECT_CONTEXT.md)
+- [Инструменты анализа кода](tools/quality/README.md)
 - [Приёмочные сценарии](docs/acceptance/)
 - [Исторические заметки по прогнозу 1.7.4](docs/FORECAST_CONTEXT.md) (текущий статус — в `docs/PROJECT_CONTEXT.md` и исходном коде)

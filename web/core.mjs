@@ -259,6 +259,35 @@ export function calculateScenario({ hours: rawHours, orders: rawOrders }, terms 
     pacePremium: pace == null ? null : reachesPace(hundredths,orders,terms.premiumPace) ? percentage(hourlyBase,terms.paceBonusPercent) : 0,
     reserve: pace == null ? null : reserveMinutes(hours, orders,0,terms.basePace) };
 }
+function cyclePremiumBreakdown(state, entries) {
+  const grouped = new Map();
+  for (const entry of entries) {
+    const periodId = periodFor(entry.date).id;
+    const rows = grouped.get(periodId) ?? [];
+    rows.push(entry);
+    grouped.set(periodId, rows);
+  }
+  return [...grouped].sort(([a], [b]) => a.localeCompare(b)).flatMap(([periodId, rows]) =>
+    ratedHours(state, rows).map(part => ({
+      periodId,
+      hours: part.hundredths / 100,
+      hourlyRate: part.hourlyRate,
+      cycleBonusPercent: part.cycleBonusPercent,
+      hourlyBase: part.base,
+      totalIncome: part.base,
+      premium: percentage(part.base, part.cycleBonusPercent)
+    }))
+  );
+}
+function cycleBoundaryEntries(state, opening, start, end) {
+  return state.entries.filter(e => !opening || e.date > opening.through).filter(e => {
+    const legacy = e.legacyReading;
+    if (legacy?.interpretation !== 'cumulative' || legacy.hoursEdited || !(e.dailyHours > 0)) return false;
+    const from = legacy.fromDate ? isoDate(dateMillis(legacy.fromDate) + DAY) : periodFor(legacy.date).start;
+    const overlaps = from <= end && legacy.date >= start;
+    return (overlaps && (from < start || legacy.date > end)) || (legacy.date !== e.date && (overlaps || (e.date >= start && e.date <= end)));
+  });
+}
 // One financial path for week/fortnight scenarios. Facts and forecasts are never added twice.
 export function forecastFinances(state, start, overrides = {}, clockDate = today()) {
   const week = weekPlan(state.forecast, start, overrides);
@@ -336,18 +365,8 @@ export function calculatePremiumCycle(state, date = today()) {
   const excludedCount = entries.length - eligible.length;
   const known = eligible.filter(e => e.dailyHours != null);
   const hours = known.length ? known.reduce((acc, e) => acc + Math.round(e.dailyHours * 100), 0) / 100 : null;
-  const grouped = new Map();
-  for (const entry of known) { const key = periodFor(entry.date).id; const rows=grouped.get(key)??[];rows.push(entry);grouped.set(key,rows); }
-  const breakdown = [...grouped].sort(([a],[b])=>a.localeCompare(b)).flatMap(([periodId,rows])=>{
-    // User's 12-week 5% program is based on eligible Yandex hourly pay only.
-    // Tips and independent park/separate bonuses remain in Home money totals,
-    // but do not enter the premium base. Final guarantee cannot be added twice.
-    return ratedHours(state,rows).map(part=>({
-      periodId,hours:part.hundredths/100,hourlyRate:part.hourlyRate,
-      cycleBonusPercent:part.cycleBonusPercent,hourlyBase:part.base,
-      totalIncome:part.base,premium:percentage(part.base,part.cycleBonusPercent)
-    }));
-  });
+  // Only eligible hourly pay contributes; tips and separate bonuses stay outside this premium.
+  const breakdown = cyclePremiumBreakdown(state, known);
   const hourlyBase = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.hourlyBase*100),0)/100;
   const totalIncome = !opening && hours == null ? null : (
     (opening ? Math.round(opening.grossIncome*100) : 0) + breakdown.reduce((sum,b)=>sum+Math.round(b.totalIncome*100),0)
@@ -356,13 +375,7 @@ export function calculatePremiumCycle(state, date = today()) {
     (opening ? Math.round(percentage(opening.grossIncome,openingPercent)*100) : 0) +
     breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)
   )/100;
-  const boundaryEntries = state.entries.filter(e => !opening || e.date > opening.through).filter(e => {
-    const legacy = e.legacyReading;
-    if (legacy?.interpretation !== 'cumulative' || legacy.hoursEdited || !(e.dailyHours > 0)) return false;
-    const from = legacy.fromDate ? isoDate(dateMillis(legacy.fromDate) + DAY) : periodFor(legacy.date).start;
-    const overlaps = from <= end && legacy.date >= start;
-    return (overlaps && (from < start || legacy.date > end)) || (legacy.date !== e.date && (overlaps || (e.date >= start && e.date <= end)));
-  });
+  const boundaryEntries = cycleBoundaryEntries(state, opening, start, end);
   const boundaryNote = boundaryEntries.length ? 'Старые накопительные интервалы пересекают границу цикла или перенесены на другую дату. Часы отнесены по датам записей; точно разделить их по границе невозможно. Премия за 12 недель — оценка.' : '';
   return {
     status: beforeStart ? 'not-started' : 'estimate', start, end, entries, hours, hourlyBase, opening, openingPercent, excludedCount, totalIncome:beforeStart?null:totalIncome,
@@ -733,4 +746,3 @@ export function markdownReport(state, id, exportDate = today()) {
     '- Если часы ещё не записаны, почасовая база, общий доход и остаток не определяются.', ''
   ].join('\n') + forecastReport(state.forecast ?? emptyForecast());
 }
-

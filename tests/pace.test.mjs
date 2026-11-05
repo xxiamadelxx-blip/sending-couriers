@@ -82,4 +82,3 @@ test('Markdown exports the computed partial pace and explains missing counters w
   assert.doesNotMatch(md, /Если набор дней.*темп и запас не определяются/);
   assert.doesNotMatch(md, /NaN|Infinity/);
 });
-
