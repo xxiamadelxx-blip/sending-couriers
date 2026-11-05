@@ -105,6 +105,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/courier-transfer-prior"
           git fetch --no-tags --depth=1 origin dba5c94e9cca55509b0cffda476398d68fd420f4
           git archive dba5c94e9cca55509b0cffda476398d68fd420f4 | tar -x -C "$RUNNER_TEMP/courier-transfer-prior"
+          cp "$RUNNER_TEMP/courier-transfer-source/build.py" "$RUNNER_TEMP/courier-transfer-prior/build.py"
           mkdir -p "$RUNNER_TEMP/courier-transfer-prior/m4-models/tessdata"
           cp m4-models/tessdata/rus.traineddata "$RUNNER_TEMP/courier-transfer-prior/m4-models/tessdata/"
           cp m4-models/tessdata/eng.traineddata "$RUNNER_TEMP/courier-transfer-prior/m4-models/tessdata/"

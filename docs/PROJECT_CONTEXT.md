@@ -11,7 +11,7 @@
 
 ## Verification
 - `npm test`: 237/237 PASS, including direct `bindIntervals` DOM input/error/bubbling and add/remove/rest/unknown action tests. `python3 -m unittest discover -s tests -v`: 87/87 PASS. Signing-policy tests confirm fail-closed release behavior; Python compilation and workflow YAML parsing PASS. A temporary floor-rounding mutation of `requiredOrderCount` was caught by the regression suite and removed. `apksigner` is not installed here; the unchanged product APK signature and production certificate were verified earlier.
-- [UI audit #241](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42061930895) and [Android QA #87](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42061931069) PASS on the predecessor product source tree. UI audit #245 exposed a wildcard copy of generated `signing/qa/`; workflow now copies only the temporary QA key/password. Rerun is required; use the live PR checks for current status.
+- [UI audit #241](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42061930895) and [Android QA #87](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42061931069) PASS on the predecessor product source tree. UI audit #245 found a wildcard copy of generated `signing/qa/`; #246 then found that the 1.7.35 builder lacks `--test-signing`. The workflow now copies only the QA key/password and uses the current builder for the old-source baseline. A local archive check confirmed the test-signing CLI and historical worker generator are present. Rerun is required; use live PR checks for current status.
 - Android 35 synthetic-signer update 1.7.35→1.7.36 retained 4 hours, 8 orders and 1,200 RUB. It does not exercise the production key.
 - Candidate package/version, all 31 WebView assets, APK ZIP, v2/v3 signatures and production certificate: PASS. Build/test scripts and signing files are excluded from the distributable APK/source package.
 - Cleanup removed two confirmed partial downloads and `.idsig` sidecars; no keystore/password is tracked. No other files were removed without proof they were disposable.
@@ -23,4 +23,4 @@
 - The refactor is not ready to merge until remaining code review/quality checks are resolved and final acceptance is updated.
 
 ## Context size
-Before cleanup: README + AGENTS + PROJECT_CONTEXT, 239 lines / 5,696 whitespace-delimited words. Current active docs: README + AGENTS + ARCHITECTURE + PROJECT_CONTEXT, 119 lines / 1,643 words: 50.2% fewer lines and 71.2% fewer words. Tokenizer is unavailable, so words are the reproducible proxy.
+Before cleanup: README + AGENTS + PROJECT_CONTEXT, 239 lines / 5,696 whitespace-delimited words. Current active docs: README + AGENTS + ARCHITECTURE + PROJECT_CONTEXT, 119 lines / 1,674 words: 50.2% fewer lines and 70.6% fewer words. Tokenizer is unavailable, so words are the reproducible proxy.
