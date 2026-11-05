@@ -29,7 +29,7 @@ def gate_commands(apk, prior, transfer):
         'ui_matrix': [['python3', 'qa/ui_audit_matrix.py', '--apk', apk,
                        '--phase', 'after', '--focus', 'full']],
         'action_layout': [['python3', 'qa/a11y_layout_matrix.py']],
-        'native_edit_labels': [['python3', 'qa/a11y_xml_smoke.py']],
+        'field_labels': [['python3', 'qa/a11y_xml_smoke.py']],
         'xlsx_import': [
             ['adb', 'shell', 'wm', 'size', '1080x2400'],
             ['adb', 'shell', 'wm', 'density', '480'],

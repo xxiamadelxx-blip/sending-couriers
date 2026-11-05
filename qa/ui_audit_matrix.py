@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 import emulator_smoke as device
 from empty_state_contract import assert_empty_home, assert_empty_history, assert_empty_backup
 from xlsx_import_smoke import exported_state
+from a11y_layout_matrix import action_above_navigation
 
 FORECAST_STEP_MINUTES = 30
 
@@ -354,6 +355,34 @@ def main():
             device.adb('shell', 'input', 'swipe', '540', '1800', '540', '750', '450')
             root = capture(f'home-finance-{suffix}')
             assert any(device.find_node(root, name) is not None for name in ('Общий доход', 'ОБЩИЙ ДОХОД')), 'Income is missing from the main scroll'
+            if args.phase == 'after' and args.focus == 'full' and suffix == '360-dark':
+                action = 'Настроить условия выплаты'
+                for attempt in range(8):
+                    if action_above_navigation(root, action):
+                        break
+                    webview = next((n for n in root.iter('node')
+                                   if n.get('class') == 'android.webkit.WebView'), None)
+                    navigation = device.find_node(root, 'Главная')
+                    web_bounds = list(map(int, re.findall(r'\d+', webview.get('bounds', '')))) if webview is not None else []
+                    nav_bounds = list(map(int, re.findall(r'\d+', navigation.get('bounds', '')))) if navigation is not None else []
+                    assert len(web_bounds) == len(nav_bounds) == 4, 'Home scroll or navigation bounds missing'
+                    bottom = min(web_bounds[3], nav_bounds[1])
+                    x = (web_bounds[0] + web_bounds[2]) // 2
+                    device.adb('shell', 'input', 'swipe', str(x),
+                               str(web_bounds[1] + (bottom-web_bounds[1]) * 3 // 4),
+                               str(x), str(web_bounds[1] + (bottom-web_bounds[1]) // 4), '350')
+                    root = device.dump(f'home-payment-action-scroll-{attempt}')
+                else:
+                    raise AssertionError('Payment-settings action is not reachable above fixed navigation')
+                capture('home-payment-action-visible')
+                device.tap_node(action)
+                device.wait_node('Ставка за час', 20)
+                settings_root = capture('payment-settings-action-opened')
+                assert device.find_node(settings_root, 'Действует с даты') is not None, (
+                    'Payment-settings action did not open the dated tariff settings'
+                )
+                device.tap_node('Главная')
+                device.wait_home(20)
             if args.focus == 'content':
                 visible_text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')))
                 if '3 240' not in visible_text:

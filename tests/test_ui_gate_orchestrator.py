@@ -12,16 +12,16 @@ class IndependentAndroidGateTests(unittest.TestCase):
 
         def fake_runner(name, commands):
             seen.append(name)
-            return (1, 'deliberate native failure') if name in ('native_edit_labels', 'large_font_form') else (0, 'ok')
+            return (1, 'deliberate field-label failure') if name in ('field_labels', 'large_font_form') else (0, 'ok')
 
         with tempfile.TemporaryDirectory() as directory:
             code = execute_pipeline(Path(directory), 'full', 'current.apk', 'prior.apk', 'new.apk', fake_runner)
             data = json.loads((Path(directory) / 'ui-independent-gates.json').read_text())
         self.assertEqual(code, 1)
-        self.assertEqual(seen, ['ui_matrix', 'action_layout', 'native_edit_labels', 'xlsx_import', 'large_font_form', 'transfer_upgrade'])
+        self.assertEqual(seen, ['ui_matrix', 'action_layout', 'field_labels', 'xlsx_import', 'large_font_form', 'transfer_upgrade'])
         self.assertEqual(data['gates']['xlsx_import']['status'], 'PASS')
         self.assertEqual(data['gates']['transfer_upgrade']['status'], 'PASS')
-        self.assertEqual(data['gates']['native_edit_labels']['status'], 'FAIL')
+        self.assertEqual(data['gates']['field_labels']['status'], 'FAIL')
         self.assertEqual(data['gates']['large_font_form']['status'], 'FAIL')
         self.assertEqual(data['result'], 'FAIL')
 
@@ -50,7 +50,7 @@ class IndependentAndroidGateTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(data['result'], 'PASS')
         self.assertEqual(seen, ['ui_matrix', 'transfer_upgrade'])
-        self.assertEqual(data['gates']['native_edit_labels']['status'], 'NOT RUN')
+        self.assertEqual(data['gates']['field_labels']['status'], 'NOT RUN')
 
     def test_failed_upgrade_is_never_hidden_by_other_passes(self):
         def fake_runner(name, commands):

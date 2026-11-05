@@ -4,7 +4,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 from qa.a11y_layout_matrix import (
     SCREENS, inspect, ensure_labelled_target, visible_period_day_card,
-    required_surface_actions,
+    action_above_navigation,
     inspect_all_layouts,
 )
 
@@ -28,11 +28,22 @@ class NativeLayoutMatrixTests(unittest.TestCase):
         self.assertTrue(ensure_labelled_target(root, 'Главная'))
         self.assertFalse(ensure_labelled_target(root, 'Главная', min_px=145))
 
-    def test_payment_settings_action_has_native_48dp_gate_on_both_surfaces(self):
-        target = [('Настроить условия выплаты', 'Button')]
-        self.assertEqual(required_surface_actions('home'), target)
-        self.assertEqual(required_surface_actions('period'), target)
-        self.assertEqual(required_surface_actions('forecast'), [])
+    def test_payment_settings_action_must_be_above_navigation_after_scroll(self):
+        visible = nodes('<node class="android.widget.Button" clickable="true" '
+                        'text="Настроить условия выплаты" bounds="[48,1800][500,1944]"/>'
+                        '<node class="android.widget.Button" clickable="true" '
+                        'text="Главная" bounds="[30,2000][249,2160]"/>')
+        covered = nodes('<node class="android.widget.Button" clickable="true" '
+                        'text="Настроить условия выплаты" bounds="[48,1950][500,2070]"/>'
+                        '<node class="android.widget.Button" clickable="true" '
+                        'text="Главная" bounds="[30,2000][249,2160]"/>')
+        too_small = nodes('<node class="android.widget.Button" clickable="true" '
+                          'text="Настроить условия выплаты" bounds="[48,1800][500,1943]"/>'
+                          '<node class="android.widget.Button" clickable="true" '
+                          'text="Главная" bounds="[30,2000][249,2160]"/>')
+        self.assertTrue(action_above_navigation(visible, 'Настроить условия выплаты'))
+        self.assertFalse(action_above_navigation(covered, 'Настроить условия выплаты'))
+        self.assertFalse(action_above_navigation(too_small, 'Настроить условия выплаты'))
 
     def test_offscreen_inverted_bounds_never_count_as_accessible(self):
         root = nodes('<node class="android.widget.Button" clickable="true" '

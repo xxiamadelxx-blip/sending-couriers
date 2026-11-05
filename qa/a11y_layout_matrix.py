@@ -64,6 +64,26 @@ def ensure_labelled_target(root, label, *, role_name='Button', min_px=MIN_PX):
     return False
 
 
+def action_above_navigation(root, label, *, min_px=MIN_PX, navigation_label='Главная'):
+    """Check a scrolled action target is fully tappable above fixed navigation."""
+    navigation = next((node for node in root.iter('node')
+                       if role(node) == 'Button' and node.get('clickable') == 'true'
+                       and name(node) == navigation_label and visible(node)), None)
+    if navigation is None:
+        return False
+    nav_bounds = bounds(navigation)
+    for node in root.iter('node'):
+        if (role(node) != 'Button' or node.get('clickable') != 'true'
+                or name(node) != label or not visible(node)):
+            continue
+        action_bounds = bounds(node)
+        if (action_bounds[2] - action_bounds[0] >= min_px
+                and action_bounds[3] - action_bounds[1] >= min_px
+                and action_bounds[3] <= nav_bounds[1]):
+            return True
+    return False
+
+
 def visible_period_day_card(root):
     """Require a real daily-ledger row in the initial viewport, not below-fold links."""
     for node in root.iter('node'):
@@ -74,13 +94,6 @@ def visible_period_day_card(root):
             if b[3] - b[1] >= MIN_PX:
                 return True
     return False
-
-
-def required_surface_actions(surface):
-    """Named touch actions present in the shared synthetic risk fixture."""
-    if surface in ('home', 'period'):
-        return [('Настроить условия выплаты', 'Button')]
-    return []
 
 
 def inspect_all_layouts(directory):
@@ -109,6 +122,8 @@ def inspect_all_layouts(directory):
             if surface == 'home':
                 required.extend((s, 'Button') for s in (
                     'Экспорт для ChatGPT', 'Выбрать расчётный период'))
+                # The below-fold payment action is checked after scrolling in
+                # qa/ui_audit_matrix.py, where it is also activated.
             if surface == 'forecast':
                 required.extend((s, 'SeekBar') for s in ('Полный слот', 'Из них буду работать'))
                 required.extend((s, 'Button') for s in (
@@ -119,7 +134,6 @@ def inspect_all_layouts(directory):
             if surface == 'history':
                 required.extend((s, 'Button') for s in (
                     'Редактировать Слот 1', 'Редактировать Слот 2'))
-            required.extend(required_surface_actions(surface))
             if surface == 'form':
                 required.append(('Сохранить слот', 'Button'))
                 required.append(('', 'Spinner'))  # current dated spinner, named by value

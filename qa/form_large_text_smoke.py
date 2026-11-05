@@ -176,7 +176,7 @@ def open_visible_period_history():
         if point is not None:
             snap('200-period-history-visible')
             device.adb('shell', 'input', 'tap', str(point[0]), str(point[1]))
-            device.wait_node('ИСТОРИЯ', 25)
+            device.wait_node('История', 25)
             return
         web = next((n for n in root.iter('node')
                     if n.get('class') == 'android.webkit.WebView'), None)

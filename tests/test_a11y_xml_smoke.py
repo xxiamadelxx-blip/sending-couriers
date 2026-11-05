@@ -1,6 +1,8 @@
 import unittest
 import xml.etree.ElementTree as ET
-from qa.a11y_xml_smoke import visible_accessible_actions, specific_named_control, require_native_edit_labels
+from qa.a11y_xml_smoke import (
+    visible_accessible_actions, specific_named_control, require_visible_field_labels,
+)
 
 
 def nodes(xml):
@@ -26,14 +28,16 @@ class AccessibilityNativeXmlTest(unittest.TestCase):
         self.assertTrue(specific_named_control(root, 'Полный слот', role='SeekBar', min_pixels=144))
         self.assertFalse(specific_named_control(root, 'Из них буду работать', role='SeekBar', min_pixels=144))
 
-    def test_unnamed_native_text_input_fails_accessible_name_gate(self):
-        root = nodes('<node class="android.widget.EditText" clickable="true" text="360" content-desc="" bounds="[40,80][220,230]"/>')
-        with self.assertRaisesRegex(AssertionError, 'lacks native accessible description'):
-            require_native_edit_labels(root, ('Ставка за час',), 'settings')
+    def test_visible_field_label_is_checked_without_claiming_talkback_mapping(self):
+        root = nodes('<node class="android.view.View" text="Ставка за час" bounds="[40,80][220,140]"/>'
+                     '<node class="android.widget.EditText" clickable="true" text="360" content-desc="" bounds="[40,145][220,230]"/>')
+        self.assertEqual(require_visible_field_labels(root, ('Ставка за час',), 'settings'),
+                         ['Ставка за час'])
 
-    def test_native_text_input_has_human_label_not_only_numeric_value(self):
-        root = nodes('<node class="android.widget.EditText" clickable="true" text="360" content-desc="Ставка за час" bounds="[40,80][220,230]"/>')
-        self.assertEqual(require_native_edit_labels(root, ('Ставка за час',), 'settings'), ['Ставка за час'])
+    def test_missing_visible_field_label_fails(self):
+        root = nodes('<node class="android.widget.EditText" clickable="true" text="360" content-desc="" bounds="[40,80][220,230]"/>')
+        with self.assertRaisesRegex(AssertionError, 'visible field labels missing'):
+            require_visible_field_labels(root, ('Ставка за час',), 'settings')
 
     def test_a_nonvisible_target_never_counts_as_accessible(self):
         root = nodes('<node class="android.widget.Button" clickable="true" text="Сохранить слот" bounds="[48,2427][1122,2388]"/>')

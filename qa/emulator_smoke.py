@@ -286,7 +286,7 @@ def main():
         root = dump(picture.removesuffix(".png"))
         text = " ".join((n.get("text", "") + " " + n.get("content-desc", "")) for n in root.iter("node"))
         if tab == "Добавить слот":
-            assert "Сохранить слот" in text or "Вознаграждение" in text, "Slot form did not open"
+            assert "Сохранить слот" in text or "Выплачено" in text, "Slot form did not open"
         else:
             assert tab in text, f"{tab} screen did not open"
         if tab == "Прогноз":

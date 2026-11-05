@@ -169,10 +169,19 @@ test('UI M2: large-text form keeps the focused label visible without relying on 
 test('Android smoke returns from XLSX picker and verifies saved facts and current payout label',async()=>{
  const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
  const form=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
+ const a11y=await readFile(new URL('../qa/a11y_xml_smoke.py',import.meta.url),'utf8');
+ const uiAudit=await readFile(new URL('../qa/ui_audit_matrix.py',import.meta.url),'utf8');
  assert.match(xlsx,/wait_node\("Прогноз", 20\)/);
  assert.match(xlsx,/assert_imported\(exported_forecast\(\)\)/);
  assert.doesNotMatch(xlsx,/История загружена: 1 день/);
  assert.ok(form.includes("LABELS = ('Часы за слот', 'Заказы за слот', 'Выплачено'"), 'Large-text smoke must use the current payout field label');
+ assert.match(form,/wait_node\('История', 25\)/);
+ assert.doesNotMatch(form,/wait_node\('ИСТОРИЯ'/);
+ assert.match(a11y,/form_labels = \('Часы за слот', 'Заказы за слот', 'Выплачено'\)/);
+ assert.match(a11y,/talkBackTested':False/);
+ assert.doesNotMatch(a11y,/Вознаграждение/);
+ assert.match(uiAudit,/action_above_navigation\(root, action\)/);
+ assert.match(uiAudit,/device\.tap_node\(action\)/);
  assert.doesNotMatch(form,/Вознаграждение/);
 });
 
