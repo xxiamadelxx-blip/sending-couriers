@@ -108,8 +108,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/courier-transfer-prior/m4-models/tessdata"
           cp m4-models/tessdata/rus.traineddata "$RUNNER_TEMP/courier-transfer-prior/m4-models/tessdata/"
           cp m4-models/tessdata/eng.traineddata "$RUNNER_TEMP/courier-transfer-prior/m4-models/tessdata/"
-          mkdir -p "$RUNNER_TEMP/courier-transfer-prior/signing"
-          cp "$RUNNER_TEMP/courier-transfer-source/signing/"* "$RUNNER_TEMP/courier-transfer-prior/signing/"
+          mkdir -p "$RUNNER_TEMP/courier-transfer-prior/signing/qa"
+          cp "$RUNNER_TEMP/courier-transfer-source/signing/qa/transfer-test.jks" "$RUNNER_TEMP/courier-transfer-prior/signing/qa/"
+          cp "$RUNNER_TEMP/courier-transfer-source/signing/qa/password.txt" "$RUNNER_TEMP/courier-transfer-prior/signing/qa/"
           python3 "$RUNNER_TEMP/courier-transfer-prior/build.py" --sdk "$ANDROID_HOME" --variant transferRelease --test-signing --output "$RUNNER_TEMP/courier-transfer-prior-test-only.apk"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/courier-transfer-prior-test-only.apk" | grep "package: name='ru.courier.finance.transfer' versionCode='49' versionName='1.7.35'"
       - name: Enable KVM
