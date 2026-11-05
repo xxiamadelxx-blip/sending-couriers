@@ -1,5 +1,6 @@
 /build/
-/signing/
+/signing/**
+!/signing/README.md
 /verification/
 /qa-results/
 /app/build/

@@ -54,7 +54,7 @@ jobs:
           (root/'M2DeviceProbeActivity.java').write_text(probe)
 
           PY
-          python3 "$RUNNER_TEMP/m2-probe/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m2-limrun-debug.apk"
+          python3 "$RUNNER_TEMP/m2-probe/build.py" --sdk "$ANDROID_HOME" --test-signing --output "$RUNNER_TEMP/m2-limrun-debug.apk"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/m2-limrun-debug.apk" | grep "package: name='ru.courier.finance.m2probe'"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$RUNNER_TEMP/m2-limrun-debug.apk" AndroidManifest.xml | grep -i debuggable
           sha256sum "$RUNNER_TEMP/m2-limrun-debug.apk"

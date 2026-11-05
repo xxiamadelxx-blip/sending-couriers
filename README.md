@@ -17,7 +17,13 @@ npm test
 python3 -m unittest discover -s tests -v
 ```
 
-`npm run dev` запускает `preview.mjs`; он обслуживает те же файлы из `web/`, которые упаковываются в Android APK. Android-сборка и emulator QA выполняются существующим workflow [`.github/workflows/ui-audit.yml`](.github/workflows/ui-audit.yml). Локальная сборка требует Android SDK/build-tools 35.0.0 и Gradle 8.9+. `build.py` сначала очищает `build/` и создаёт новый ключ, если ожидаемый keystore отсутствует; сохраняйте нужные артефакты и проверяйте прежний ключ до запуска.
+`npm run dev` запускает `preview.mjs`; он обслуживает те же файлы из `web/`, которые упаковываются в Android APK. Android-сборка и emulator QA выполняются существующим workflow [`.github/workflows/ui-audit.yml`](.github/workflows/ui-audit.yml). Локальная сборка требует Android SDK/build-tools 35.0.0 и Gradle 8.9+:
+
+```sh
+python3 build.py --variant transferRelease --output ../artifacts/Courier-Finance-1.7.36.apk
+```
+
+Для обновления transfer-приложения используется существующий сертификат из локальных, исключённых из Git файлов `signing/courier-transfer.jks` и `signing/password.txt`; инструкции и SHA-256 сертификата находятся в [`signing/README.md`](signing/README.md). Если этих файлов нет, сборка останавливается и не создаёт новый ключ. Временные тестовые APK собираются только с явным `--test-signing` и не подходят для обновления установленного приложения.
 
 ## Документация
 

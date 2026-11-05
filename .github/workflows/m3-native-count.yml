@@ -74,7 +74,7 @@ jobs:
               if body.startswith("package "+original+";"):
                   java.write_text(body.replace("package "+original+";","package "+target+";",1))
           PY
-          python3 "$RUNNER_TEMP/m3-probe/build.py" --sdk "$ANDROID_HOME" --output "$RUNNER_TEMP/m3-limrun-debug.apk"
+          python3 "$RUNNER_TEMP/m3-probe/build.py" --sdk "$ANDROID_HOME" --test-signing --output "$RUNNER_TEMP/m3-limrun-debug.apk"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/m3-limrun-debug.apk" | grep "package: name='ru.courier.finance.m3probe'"
           sha256sum "$RUNNER_TEMP/m3-limrun-debug.apk"
       - name: Publish exact-SHA test APK to isolated QA branch

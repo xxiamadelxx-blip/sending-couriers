@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import secrets
@@ -13,7 +14,27 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--sdk', default=os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME') or str(ROOT.parent / 'tools/android-sdk'))
 parser.add_argument('--output', default=str(ROOT.parent / 'artifacts/Courier-Finance-1.7.36.apk'))
 parser.add_argument('--variant', choices=('release', 'transferRelease'), default='release')
+parser.add_argument('--test-signing', action='store_true', help='Use an isolated QA key; never suitable for app updates.')
 args = parser.parse_args()
+signing = ROOT / 'signing'
+if args.test_signing:
+    qa_signing = signing / 'qa'
+    key = qa_signing / 'transfer-test.jks'
+    password = qa_signing / 'password.txt'
+    key_alias = 'courier-test'
+else:
+    key = signing / 'courier-transfer.jks'
+    password = signing / 'password.txt'
+    key_alias = 'courier-transfer'
+    if not key.is_file() or not password.is_file():
+        raise SystemExit('Production signing files are missing. Refusing to generate a replacement key; see signing/README.md.')
+    listing = subprocess.run(
+        ['keytool', '-list', '-v', '-keystore', str(key), '-storepass:file', str(password), '-alias', key_alias],
+        check=True, capture_output=True, text=True,
+    )
+    fingerprints = re.findall(r'^\s*SHA256:\s*([0-9A-Fa-f:]+)\s*$', listing.stdout, re.MULTILINE)
+    if len(fingerprints) != 1 or fingerprints[0].replace(':', '').upper() != 'EED086D5BDB63DD425494F3A585E90243224C0305EDA4FF40845D7744F7A5EF1':
+        raise SystemExit('Production signing certificate does not match the established transfer identity.')
 sdk = Path(args.sdk).resolve()
 platforms = [sdk / 'platforms/android-35/android.jar', sdk / 'android-35/android.jar']
 platforms += sorted(sdk.glob('android-35-ext*/android.jar'))
@@ -63,19 +84,19 @@ else:
         apk.write(build / 'dex/classes.dex', 'classes.dex')
 run(tools / 'zipalign', '-f', '4', build / 'unsigned.apk', build / 'aligned.apk')
 
-signing = ROOT / 'signing'
-signing.mkdir(mode=0o700, exist_ok=True)
-key = signing / 'courier-release.jks'
-password = signing / 'password.txt'
-if not key.exists():
-    password.write_text(secrets.token_urlsafe(32))
-    password.chmod(0o600)
-    run('keytool', '-genkeypair', '-keystore', key, '-storepass:file', password, '-keypass:file', password, '-alias', 'courier', '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000', '-dname', 'CN=Courier Finance, OU=Personal Android App, O=Courier Finance', '-noprompt')
-    key.chmod(0o600)
+if args.test_signing:
+    qa_signing.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if key.is_file() != password.is_file():
+        raise SystemExit('Incomplete QA signing files. Remove only the test signer under signing/qa/ and retry.')
+    if not key.is_file():
+        password.write_text(secrets.token_urlsafe(32))
+        password.chmod(0o600)
+        run('keytool', '-genkeypair', '-keystore', key, '-storepass:file', password, '-keypass:file', password, '-alias', key_alias, '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000', '-dname', 'CN=Courier Finance QA, OU=Test Only, O=Courier Finance', '-noprompt')
+        key.chmod(0o600)
 output = Path(args.output).resolve()
 output.parent.mkdir(parents=True, exist_ok=True)
 signed = build / 'signed.apk'
-run('java', '-jar', tools / 'lib/apksigner.jar', 'sign', '--ks', key, '--ks-key-alias', 'courier', '--ks-pass', 'file:' + str(password), '--out', signed, build / 'aligned.apk')
+run('java', '-jar', tools / 'lib/apksigner.jar', 'sign', '--ks', key, '--ks-key-alias', key_alias, '--ks-pass', 'file:' + str(password), '--out', signed, build / 'aligned.apk')
 run('java', '-jar', tools / 'lib/apksigner.jar', 'verify', '--verbose', signed)
 run(tools / 'zipalign', '-c', '4', signed)
 # Only expose a complete, verified file at the download path.

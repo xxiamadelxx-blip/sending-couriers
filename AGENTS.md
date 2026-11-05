@@ -18,6 +18,8 @@
 
 - Keep financial calculations local; do not add an AI dependency, paid API or server to the calculation path. Preserve unknown values as unknown and keep money, hours, active work and slot duration semantically distinct.
 - Do not alter application IDs, signing identity or existing data migrations without explicit product need and regression evidence. Never generate a replacement release key, commit a keystore/password, or publish signing material.
+- For updates to `ru.courier.finance.transfer`, first check the existing local files `signing/courier-transfer.jks` and `signing/password.txt` (ignored by Git). Alias: `courier-transfer`; certificate SHA-256: `eed086d5bdb63dd425494f3a585e90243224c0305eda4ff40845d7744f7a5ef1`. Do not report the key missing before checking those exact paths. Build transfer releases without `--test-signing`; that flag creates a QA-only signer and cannot update the installed app.
+- Never delete or replace those production signing files. Before any cleanup command, preserve `signing/`; ignored signing files are private credentials, not disposable build output.
 - Do not make visual redesign changes without the owner's approval. Technical layout checks do not constitute visual approval; visual PASS requires owner review of real Android captures.
 - Keep private user data out of logs and artifacts. Make project changes in this repository; keep local build outputs in ignored `build/`.
 
