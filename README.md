@@ -25,4 +25,4 @@ python3 -m unittest discover -s tests -v
 - [Архитектура и решения](docs/ARCHITECTURE.md)
 - [Текущий статус и следующий шаг](docs/PROJECT_CONTEXT.md)
 - [Приёмочные сценарии](docs/acceptance/)
-- [Forecast и импорт](docs/FORECAST_CONTEXT.md)
+- [Исторические заметки по прогнозу 1.7.4](docs/FORECAST_CONTEXT.md) (текущий статус — в `docs/PROJECT_CONTEXT.md` и исходном коде)
