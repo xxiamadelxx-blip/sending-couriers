@@ -4,7 +4,7 @@ Updated 2026-11-05. Continue from this checkpoint; do not repeat completed check
 
 ## Checkpoint
 
-- Branch `refactor/deep-cleanup-20261104-recovered`; product/refactor base `5dfc43c319d07d4d89c1b931610f2795aa9d01d2`; earlier code/test checkpoint `0ce3a6637a1c9b38e0f84922dc7c0b73d820412d`; latest focused UI/test fix `a2fad5f91ddb9ca8086535f2f5945c4b05264da0`. The recovered branch was based on remote tree `842fe1add457d7a082e6555b91ac05eb16c4263a` (remote head before this follow-up: `2528a0b5cd42a24834b29d84dbfac65ff08714e6`). The tested follow-up commits are kept as separate checkpoints on this feature branch; remote mirror commit IDs may differ. `main` is unchanged.
+- Branch `refactor/deep-cleanup-20261104-recovered`; product/refactor base `5dfc43c319d07d4d89c1b931610f2795aa9d01d2`; earlier code/test checkpoint `0ce3a6637a1c9b38e0f84922dc7c0b73d820412d`; latest focused UI/test fix `a2fad5f91ddb9ca8086535f2f5945c4b05264da0`. The recovered branch was based on remote tree `842fe1add457d7a082e6555b91ac05eb16c4263a` (remote head before this follow-up: `2528a0b5cd42a24834b29d84dbfac65ff08714e6`). Local follow-up changes were committed in small checkpoints and mirrored as a consolidated tree commit above that remote baseline; no force update was used. `main` is unchanged.
 - Product APK source is transfer package `ru.courier.finance.transfer`, version 1.7.36 / code 50. User's installed release is 1.7.35 / code 49. Product source is unchanged by the QA fix.
 
 ## Stages
