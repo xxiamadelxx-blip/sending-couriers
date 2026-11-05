@@ -225,6 +225,8 @@ test('release: transfer 1.7.36/code50 updates the 1.7.35/code49 package',async()
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='50' versionName='1.7.36'"));
  assert.ok(workflow.includes("name='ru.courier.finance.transfer' versionCode='49' versionName='1.7.35'"));
  assert.ok(workflow.includes('git archive dba5c94e9cca55509b0cffda476398d68fd420f4'));
+ assert.ok(workflow.includes('cp m4-models/tessdata/rus.traineddata'));
+ assert.ok(workflow.includes('cp m4-models/tessdata/eng.traineddata'));
 });
 
 test('UI-013 full 200% label remains visible after opening IME, not just input and Save',async()=>{
