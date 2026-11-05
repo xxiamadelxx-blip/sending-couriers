@@ -17,7 +17,7 @@ Updated 2026-11-05. Continue from this checkpoint; do not repeat completed check
 | 4. Architecture/code review | In progress | Existing refactor retained. This continuation changed QA scripts/tests only; no full source audit repeated. |
 | 5. Regression tests | Partial | JS 227/227 and Python 85/85 pass locally. Added the `ceil(rate × hours)` fractional boundary case. Fresh Android run after QA changes is still needed. |
 | 6. Refactor | In progress | Current code change corrects stale Android QA expectations and adds payment-settings scroll/tap coverage; product behavior unchanged. |
-| 7. Metrics | Partial | A temporary floor-rounding mutation was caught by the new regression assertion. Crapper/Dryer/Mutator and whole-project complexity/duplication metrics were not run. |
+| 7. Metrics | Partial | A temporary floor-rounding mutation was caught. Crapper/Dryer/Mutator were not run; `jscpd` offline preflight returned `ENOTCACHED`, so no duplication scan or whole-project complexity metric is claimed. |
 
 ## Evidence
 
@@ -37,4 +37,4 @@ Updated 2026-11-05. Continue from this checkpoint; do not repeat completed check
 
 ## Context size
 
-Before cleanup: README + AGENTS + this context were 239 lines / 5,696 words. After cleanup: README + AGENTS + ARCHITECTURE + this context are 125 lines / 1,634 words (47.7% fewer lines and 71.3% fewer words). Exact tokenizer counts are unavailable; word count is the reproducible proxy. Detailed acceptance records remain intact.
+Before cleanup: README + AGENTS + this context were 239 lines / 5,696 words. After cleanup: README + AGENTS + ARCHITECTURE + this context are 125 lines / 1,640 words (47.7% fewer lines and 71.2% fewer words). Exact tokenizer counts are unavailable; word count is the reproducible proxy. Detailed acceptance records remain intact.
