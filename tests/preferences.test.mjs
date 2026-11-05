@@ -24,6 +24,9 @@ test('calculator uses exact thresholds, handles blanks, and never saves entries'
  assert.equal(x.pace,2.8);assert.equal(x.hourlyBase,3600);assert.equal(x.pacePremium,180);
  assert.equal(x.normOrders,18);assert.equal(x.premiumOrders,28);assert.equal(x.missingNorm,0);assert.equal(x.reserve,333);
  assert.equal(calculateScenario({hours:10,orders:17}).missingNorm,1);
+ const fractionalTarget=calculateScenario({hours:10.01,orders:18});
+ assert.equal(fractionalTarget.normOrders,19);
+ assert.equal(fractionalTarget.missingNorm,1);
  assert.equal(calculateScenario({hours:10.01,orders:28}).pacePremium,0);
  assert.equal(calculateScenario({hours:'',orders:''}).pace,null);
  assert.equal(calculateScenario({hours:0,orders:4}).pace,null);
