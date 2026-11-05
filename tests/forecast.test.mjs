@@ -9,6 +9,14 @@ test('same displayed minute does not become known zero delivery duration',()=>{
  const d=saveDay(profile(),entry).days[entry.date];
  assert.equal(d.orderEvidence.length,2);assert.equal(d.availableNoOrderMin,null);assert.equal(d.onOrderMin,null);
 });
+test('daily normalization preserves provenance and is stable after reload',()=>{
+ const date='2026-10-01',raw={...confirmed(date,1),source:'manual',orderEvidence:[{id:'order-1',visibleMin:615,acceptedMin:600,deliveredMin:630,source:'manual',confirmed:true,fieldSources:{acceptedMin:{status:'CONFIRMED',source:'receipt'},deliveredMin:{status:'CONFIRMED',source:'receipt'}}}],evidenceComplete:true};
+ const before=JSON.stringify(raw),first=normalizeForecast({...emptyForecast(),days:{[date]:raw}}),saved=JSON.parse(JSON.stringify(first)),reloaded=normalizeForecast(saved),day=reloaded.days[date];
+ assert.deepEqual(reloaded,first);assert.equal(JSON.stringify(raw),before);
+ assert.equal(day.orderEvidence[0].fieldSources.acceptedMin.status,'CONFIRMED');
+ assert.equal(day.orderEvidence[0].fieldSources.deliveredMin.source,'receipt');
+ assert.equal(day.onOrderMin,30);assert.equal(day.availableNoOrderMin,510);
+});
 function history(n=30) { let d=profile();for(let i=0;i<n;i++)d=saveDay(d,confirmed(addDays('2026-09-01',i),27+i%3));return d; }
 test('schema 1–6 migration retains money, slots, unknowns, forecast backup and old merge',()=>{
  let s=emptyState();s=upsertEntry(s,{date:'2026-10-01',dailyHours:14,dailyOrders:27,reward:2400,tips:80});s.forecast=history(5);
