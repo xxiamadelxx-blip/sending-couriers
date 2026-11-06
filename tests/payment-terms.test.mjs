@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, updateSettings, setPaymentTerms, paymentTermsFor, calculate, calculatePremiumCycle, upsertEntry, mergeImport, markdownReport, periodFor } from '../web/core.mjs';
+import { emptyState, normalizeState, updateSettings, setPaymentTerms, paymentTermsFor, paymentSettingsDraft, applyPaymentTermsFromDate, calculate, calculatePremiumCycle, upsertEntry, mergeImport, markdownReport, periodFor } from '../web/core.mjs';
 const oldPeriod='2026-10-02',current='2026-10-16',next='2026-10-30';
 const rule=(from=current,overrides={})=>({effectivePeriodStart:from,hourlyRate:420,basePace:2.1,premiumPace:3.25,paceBonusPercent:7.5,cycleBonusPercent:8,...overrides});
 const add=(s,date,hours=10,orders=33)=>upsertEntry(s,{date,dailyHours:hours,dailyOrders:orders,reward:1000,tips:10,separateBonus:50,tax:77,parkCommission:123});
@@ -14,7 +14,7 @@ test('versioned terms change the chosen fortnight and future, preserving prior p
  let s=add(add(add(emptyState(),oldPeriod),current),next);const original=JSON.stringify(s.entries);
  s=setPaymentTerms(s,rule());
  assert.equal(calculate(s,oldPeriod).hourlyBase,3600);const c=calculate(s,current);
- assert.equal(c.hourlyBase,4200);assert.equal(c.pacePremium,315);assert.equal(c.requiredOrders,21);assert.equal(c.reserve,342);assert.equal(c.grossUserIncome,4260);assert.equal(c.estimatedYandexOwed,3200);assert.equal(c.paidReward,1000);assert.equal(c.tax,77);assert.equal(c.parkCommission,123);
+ assert.equal(c.hourlyBase,4200);assert.equal(c.pacePremium,315);assert.equal(c.requiredOrders,21);assert.equal(c.reserve,342);assert.equal(c.accruedIncome,4010);assert.equal(c.grossUserIncome,4060);assert.equal(c.estimatedYandexOwed,3010);assert.equal(c.paidReward,1000);assert.equal(c.tax,77);assert.equal(c.parkCommission,123);
  assert.equal(calculate(s,next).hourlyBase,4200);assert.equal(JSON.stringify(s.entries),original);
  s=setPaymentTerms(s,rule(next,{hourlyRate:400,cycleBonusPercent:2.5}));s=setPaymentTerms(s,rule(current,{hourlyRate:450}));
  assert.equal(calculate(s,current).hourlyBase,4500);assert.equal(calculate(s,next).hourlyBase,4000);assert.equal(calculate(s,oldPeriod).hourlyBase,3600);
@@ -29,9 +29,9 @@ test('custom pace premium compares exact counters and honours zero-percent disab
 test('12-week premium uses each period rate and percentage, with per-period kopeck rounding',()=>{
  let s=updateSettings(emptyState(),{premiumCycleStart:'2026-08-21'});s=add(add(add(s,oldPeriod),current),next);
  s=setPaymentTerms(setPaymentTerms(s,rule()),rule(next,{hourlyRate:400,cycleBonusPercent:2.5}));
- const c=calculatePremiumCycle(s,'2026-11-12');assert.equal(c.hours,30);assert.equal(c.hourlyBase,11800);assert.equal(c.premium,616);assert.equal(c.breakdown.length,3);
+ const c=calculatePremiumCycle(s,'2026-11-12');assert.equal(c.hours,30);assert.equal(c.hourlyBase,11800);assert.equal(c.totalIncome,11800);assert.equal(c.premium,616);assert.equal(c.breakdown.length,3);
  let cents=updateSettings(emptyState(),{premiumCycleStart:'2026-08-21'});cents=setPaymentTerms(cents,rule(oldPeriod,{hourlyRate:10,cycleBonusPercent:5}));cents=add(add(cents,oldPeriod,0.01,0),current,0.01,0);
- assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,0.02);
+ assert.equal(calculatePremiumCycle(cents,'2026-10-22').premium,0.02); // Two 0.10 RUB bases, each 5% rounds to 0.01.
 });
 test('old imports preserve rules/theme; explicit backups restore them and conflicts reject atomically',()=>{
  const s=updateSettings(setPaymentTerms(add(emptyState(),current),rule()),{theme:'light'});
@@ -41,7 +41,8 @@ test('old imports preserve rules/theme; explicit backups restore them and confli
 });
 test('invalid rules and themes fail before mutation',()=>{
  const s=emptyState(),before=JSON.stringify(s);
- for(const x of [{hourlyRate:0},{hourlyRate:-1},{hourlyRate:Infinity},{hourlyRate:'1e3'},{hourlyRate:'2.001'},{basePace:0},{basePace:'1.2345'},{premiumPace:NaN},{paceBonusPercent:-1},{cycleBonusPercent:101},{effectivePeriodStart:'2026-10-17'}])assert.throws(()=>setPaymentTerms(s,rule(current,x)),JSON.stringify(x));
+ for(const x of [{hourlyRate:0},{hourlyRate:-1},{hourlyRate:Infinity},{hourlyRate:'1e3'},{hourlyRate:'2.001'},{basePace:0},{basePace:'1.2345'},{premiumPace:NaN},{paceBonusPercent:-1},{cycleBonusPercent:101},{effectivePeriodStart:'2026-10-32'}])assert.throws(()=>setPaymentTerms(s,rule(current,x)),JSON.stringify(x));
+ assert.equal(updateSettings(s,{theme:'system'}).settings.theme,'system');
  assert.throws(()=>updateSettings(s,{theme:'blue'}));assert.throws(()=>updateSettings(s,{paymentRules:[rule(),rule()]}));assert.equal(JSON.stringify(s),before);
 });
 test('backdated slots and moves resolve the destination period terms without changing paid amounts',()=>{
@@ -53,4 +54,62 @@ test('ChatGPT report carries actual terms and cycle contributions',()=>{
  let s=updateSettings(setPaymentTerms(add(emptyState(),current),rule()),{premiumCycleStart:'2026-08-21'});
  const text=markdownReport(s,current,'2026-10-22');for(const expected of ['420','2,10','3,25','7,5','8%','Условия оплаты','Вклад периодов'])assert.ok(text.includes(expected),expected);
  assert.doesNotMatch(text,/Ставка: 360/);
+});
+test('midperiod change preserves earlier hours, splits same-day slots, backup, and cycle premium',()=>{
+ let s=updateSettings(emptyState(),{premiumCycleStart:'2026-10-16'});
+ s=add(s,'2026-10-22',5,15);s=add(s,'2026-10-23',3,10);s=add(s,'2026-10-23',2,6);
+ const actual=s.entries.map(e=>[e.id,e.reward,e.tips,e.tax,e.parkCommission]);
+ s=setPaymentTerms(s,rule('2026-10-23',{hourlyRate:500,cycleBonusPercent:10}));
+ assert.equal(paymentTermsFor(s,'2026-10-22').hourlyRate,360);
+ assert.equal(paymentTermsFor(s,'2026-10-23').hourlyRate,500);
+ const result=calculate(s,'2026-10-16','2026-10-24');
+ assert.equal(result.hours,10);assert.equal(result.hourlyBase,4300);assert.equal(result.accruedIncome,3730);assert.equal(result.estimatedYandexOwed,730);
+ assert.equal(result.grossUserIncome,3880);assert.deepEqual(s.entries.map(e=>[e.id,e.reward,e.tips,e.tax,e.parkCommission]),actual);
+ const cycle=calculatePremiumCycle(s,'2026-10-24');
+ assert.equal(cycle.hourlyBase,4300);assert.equal(cycle.totalIncome,4300);assert.equal(cycle.premium,340);assert.equal(cycle.breakdown.length,2);
+ assert.equal(calculateDayFor(s,'2026-10-22'),1800);assert.equal(calculateDayFor(s,'2026-10-23'),2500);
+ assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(s))).settings.paymentRules,s.settings.paymentRules);
+});
+function calculateDayFor(state,date){return calculate({...state,entries:state.entries.filter(e=>e.date===date)},periodFor(date).id,date).hourlyBase;}
+
+test('Nov 1 tariff can be explicitly applied to all 19 recorded hours from period start',()=>{
+ let s=emptyState();
+ s=add(s,'2026-10-31',17,36);
+ s=add(s,'2026-11-01',2,5);
+ s=setPaymentTerms(s,rule('2026-11-01',{hourlyRate:390,basePace:2.1}));
+ const split=calculate(s,next,'2026-11-01');
+ assert.equal(split.hours,19);
+ assert.equal(split.hourlyBase,6900);
+ assert.deepEqual(split.rateBreakdown.map(x=>[x.hours,x.hourlyRate,x.base]),[[17,360,6120],[2,390,780]]);
+ const draft=paymentSettingsDraft(s,next);
+ assert.equal(draft.effectivePeriodStart,'2026-10-30');
+ assert.equal(draft.hourlyRate,390);
+ assert.equal(draft.basePace,2.1);
+ s=setPaymentTerms(s,draft);
+ const all=calculate(s,next,'2026-11-01');
+ assert.equal(all.hourlyBase,7410);
+ assert.deepEqual(all.rateBreakdown.map(x=>[x.hours,x.hourlyRate,x.base]),[[19,390,7410]]);
+ assert.equal(all.terms.basePace,2.1);
+ assert.equal(calculate(s,'2026-10-16').hourlyBase,null);
+});
+
+test('on Nov 1 a tariff dated Oct 23 recalculates both periods and supersedes the later rule',()=>{
+ let s=emptyState();
+ for(const [date,hours] of [['2026-10-22',5],['2026-10-23',3],['2026-10-29',4],['2026-10-30',10],['2026-11-01',9]])
+   s=add(s,date,hours,Math.ceil(hours*2.1));
+ s=setPaymentTerms(s,rule('2026-11-01',{hourlyRate:420}));
+ const before=JSON.stringify(s.entries);
+ s=applyPaymentTermsFromDate(s,rule('2026-10-23',{hourlyRate:390,basePace:2.1}));
+ assert.equal(paymentTermsFor(s,'2026-10-22').hourlyRate,360);
+ assert.equal(paymentTermsFor(s,'2026-10-23').hourlyRate,390);
+ assert.equal(paymentTermsFor(s,'2026-11-01').hourlyRate,390);
+ assert.deepEqual(s.settings.paymentRules.map(r=>r.effectivePeriodStart),['2026-10-23']);
+ const october=calculate(s,'2026-10-16','2026-10-29');
+ const november=calculate(s,'2026-10-30','2026-11-01');
+ assert.equal(october.hours,12);
+ assert.equal(october.hourlyBase,4530);
+ assert.equal(november.hours,19);
+ assert.equal(november.hourlyBase,7410);
+ assert.equal(november.terms.basePace,2.1);
+ assert.equal(JSON.stringify(s.entries),before);
 });

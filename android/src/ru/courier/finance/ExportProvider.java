@@ -16,7 +16,7 @@ public final class ExportProvider extends ContentProvider {
     private File resolve(Uri uri) throws FileNotFoundException {
         try {
             List<String> parts = uri.getPathSegments();
-            if (!"ru.courier.finance.exports".equals(uri.getAuthority()) || parts.size() != 2 || !parts.get(0).matches("[a-f0-9-]{36}") || !parts.get(1).matches("courier-(report|backup)-[0-9-]+\\.(md|json)")) throw new FileNotFoundException();
+            if (!(getContext().getPackageName()+".exports").equals(uri.getAuthority()) || parts.size() != 2 || !parts.get(0).matches("[a-f0-9-]{36}") || !parts.get(1).matches("courier-(report|backup)-[0-9-]+\\.(md|json)")) throw new FileNotFoundException();
             File dir = new File(getContext().getCacheDir(), "exports");
             File file = new File(new File(dir, parts.get(0)), parts.get(1));
             if (!file.getCanonicalPath().startsWith(dir.getCanonicalPath() + File.separator) || !file.isFile()) throw new FileNotFoundException();

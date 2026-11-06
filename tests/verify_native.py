@@ -23,8 +23,10 @@ platforms += sorted(args.sdk.glob('android-35-ext*/android.jar'))
 android_jar = next((p for p in platforms if p.is_file()), None)
 if android_jar is None:
     raise SystemExit('Android platform 35 is required; pass --sdk.')
-classes = ROOT / 'build/classes'
-bridge_class = classes / 'ru/courier/finance/MainActivity$NativeBridge.class'
+gradle_classes = ROOT / 'app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes'
+bridge_relative = Path('ru/courier/finance/MainActivity$NativeBridge.class')
+classes = gradle_classes if (gradle_classes / bridge_relative).is_file() else ROOT / 'build/classes'
+bridge_class = classes / bridge_relative
 source = ROOT / 'android/src/ru/courier/finance/MainActivity.java'
 if not bridge_class.is_file() or bridge_class.stat().st_mtime < source.stat().st_mtime:
     raise SystemExit('Run build.py first to compile the current production code.')
@@ -39,9 +41,22 @@ destination = ROOT / 'build/native-probe'
 destination.mkdir(parents=True, exist_ok=True)
 classpath = os.pathsep.join(str(p.resolve()) for p in [classes, args.json_jar, android_jar])
 compiler = [shutil.which('javac')] if shutil.which('javac') else ['java', 'com.sun.tools.javac.Main']
+# NativeBridge is exercised on the host JVM with Android stubs. WorkManager queueing
+# is an Android runtime side effect and is verified by the emulator workflow, so
+# replace only these two scheduler entry points with no-ops in this host probe.
+scheduler_stub = destination / 'ForecastAutomation.java'
+scheduler_stub.write_text("""package ru.courier.finance;
+import android.content.Context;
+public final class ForecastAutomation {
+    public static void scheduleDaily(Context context, String serializedState) {}
+    public static void enqueueEvaluation(Context context) {}
+}
+""", encoding='utf-8')
+subprocess.run([*compiler, '-encoding', 'UTF-8', '-cp', classpath, '-d', str(destination), str(scheduler_stub)], check=True)
 subprocess.run([*compiler, '-encoding', 'UTF-8', '-cp', classpath, '-d', str(destination), str(ROOT / 'tests/NativeStateProbe.java')], check=True)
-verification = ROOT / 'verification/1.7.9'
-fixture = verification / 'native-state-fixture.json'
+verification = ROOT / 'verification/1.7.11'
+verification.mkdir(parents=True, exist_ok=True)
+fixture = ROOT / 'tests/fixtures/native-state-fixture.json'
 output = subprocess.check_output(['java', '-cp', str(destination) + os.pathsep + classpath,
     'ru.courier.finance.NativeStateProbe', str(fixture)], text=True)
 assert output.startswith('PASS: actual compiled NativeBridge')
@@ -54,6 +69,7 @@ report = {
     'scenarios': ['schema1-still-writable', 'schema2-still-writable', 'schema3-still-writable', 'schema4-still-writable', 'schema5-still-writable', 'schema6-forecast-same-date-slots-pay-rules-theme-cycle-exact-readback', 'native-black-and-day-palette',
         'malformed-and-future-reject-before-commit', 'entry-and-utf8-byte-limits', 'commit-failure-returned'],
     'storageIO': 'SharedPreferences test double', 'androidRuntimeTested': False,
+    'hostTestDoubles': ['ForecastAutomation.scheduleDaily and enqueueEvaluation no-op; WorkManager is exercised in Android emulator checks'],
     'output': output.strip()
 }
 (verification / 'native-results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
