@@ -88,7 +88,7 @@ function fixture(t) {
   let state=emptyState(),attempts=0,commits=0,failure=null;
   const date=forecastClock(state.forecast).date;
   state={...state,forecast:saveForecastHours(state.forecast,date,840,480)};
-  const mount=()=>mountForecast({
+  const mount=(initial='today')=>mountForecast({
     root,getState:()=>state,
     commit:next=>{
       attempts++;
@@ -97,10 +97,19 @@ function fixture(t) {
       commits++;
     },
     heading:()=>'<button id="goBack" type="button"></button>',
-    nav(){},leave(){},notify(){}
+    nav(){},leave(){},notify(){},initial
   });
   return {root,timers,date,mount,get state(){return state;},get attempts(){return attempts;},get commits(){return commits;},set failure(error){failure=error;}};
 }
+
+test('history screen opens the day editor from its add-fact action',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  assert.ok(f.root.querySelector('#newWorkFact'));
+  f.root.querySelector('#newWorkFact').onclick();
+  assert.ok(f.root.querySelector('#workDayForm'));
+  assert.equal(f.commits,0);
+});
 
 test('flush persists changed hours before immediate forecast re-entry and cancels the old save',t=>{
   const f=fixture(t),screen=f.mount();

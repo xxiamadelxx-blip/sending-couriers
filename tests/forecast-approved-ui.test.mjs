@@ -8,7 +8,7 @@ const duration=await readFile(new URL('../web/duration-control.mjs',import.meta.
 const app=await readFile(new URL('../web/app.mjs',import.meta.url),'utf8');
 
 test('approved Forecast visual: two existing persisted time controls and real unknown state',()=>{
-  const simple=forecast.slice(forecast.indexOf('  function simpleView()'),forecast.indexOf('  function readPair('));
+  const simple=forecast.slice(forecast.indexOf('function simpleView(ctx)'),forecast.indexOf('function todayView(ctx)'));
   for(const id of ['todaySlotHours','todayWorkHours'])assert.ok(simple.includes(`durationField('${id}'`),id);
   assert.match(simple,/saveForecastHours\(data\(\),date,pair\.slotMin,pair\.workingMin\)/);
   assert.match(simple,/class="forecast-band forecast-insufficient"/);
@@ -22,7 +22,7 @@ test('approved Forecast visual: two existing persisted time controls and real un
 });
 
 test('Forecast sliders move by 30 minutes while exact numeric entry remains available',()=>{
-  const simple=forecast.slice(forecast.indexOf('  function simpleView()'),forecast.indexOf('  function readPair('));
+  const simple=forecast.slice(forecast.indexOf('function simpleView(ctx)'),forecast.indexOf('function todayView(ctx)'));
   assert.match(duration,/step="\$\{stepMinutes\}"/);
   assert.match(simple,/durationField\('todaySlotHours','Полный слот',slot,'',30\)/);
   assert.match(simple,/durationField\('todayWorkHours','Из них буду работать',work,'',30\)/);
