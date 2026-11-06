@@ -102,6 +102,13 @@ test('partial RAW does not claim full totals and slot boundaries never become av
  const r=parseWorkbook({sheets:{'Заказы RAW':{'2':{A:46300,C:.5,D:1}}}});assert.equal(r.days[0].orders,null);assert.equal(r.days[0].ordersConfirmed,false);assert.equal(r.days[0].workingMin,null);
  assert.throws(()=>parseForecastFile('{"entries":[]}'));
 });
+test('partial history cannot unset a previously confirmed daily total',()=>{
+ const date='2026-10-12',base=importDays(emptyForecast(),[{date,orders:12,ordersConfirmed:true,appAccountedMin:840,accountedConfirmed:true,source:'complete'}],'complete');
+ const partial=importDays(base,[{date,orders:null,ordersConfirmed:false,appAccountedMin:null,accountedConfirmed:false,precision:'unknown',source:'partial'}],'partial');
+ const day=partial.days[date];
+ assert.equal(day.orders,12);assert.equal(day.ordersConfirmed,true);assert.equal(day.ordersScope,'daily');
+ assert.equal(day.appAccountedMin,840);assert.equal(day.accountedConfirmed,true);
+});
 test('acceptance and delivery survive XLSX import while missing work keeps the hourly model untrained',()=>{
  resetCountModels();
  const rows={};for(let i=0;i<4;i++)rows[String(i+2)]={A:i<2?'2026-10-01':'2026-10-02',C:'12:00',D:i%2+1,L:i%2?'12:10':null,M:i%2?'12:40':null,K:'Высокая'};
