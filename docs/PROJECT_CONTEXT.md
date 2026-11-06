@@ -10,12 +10,12 @@ Canonical development line: `refactor/deep-cleanup-20261104-recovered` (PR [#19]
 ## Refactor checkpoint
 - Completed earlier: `calculatePremiumCycle` helper extraction; video-slot and daily-history reconciliation separation; active docs consolidation. Crapper, Dryer and Mutator are pinned under `tools/quality/`; bootstrap with `sh tools/quality/bootstrap.sh`.
 - This change extracts `parseWorkbook` into summary, shift-reconciliation, order-evidence and archive helpers; `mountForecast` now delegates to separate screen renderers through one context. Public import and screen APIs remain unchanged.
-- Active docs (README, AGENTS, ARCHITECTURE and this file) now total 118 lines / 1,480 whitespace-separated words, down from 239 / 5,696 (50.6% fewer lines; 74.0% fewer words).
+- Active docs (README, AGENTS, ARCHITECTURE and this file) total 118 lines / 1474 whitespace-separated words, down from 239 / 5,696 (50.6% fewer lines; 74.1% fewer words).
 
 ## Verification
-- Historical Android emulator QA #95 and UI audit #249 passed at `6e31b9eb03c49dd66e87d2e24af4c5847dbfe6f7`; they do not validate later commits.
-- Current source snapshot: `npm test` 239/239 and Python unittest 87/87 PASS; `parseWorkbook` differential check across 120 deterministic cases PASS; five-screen rendered HTML and targeted save/import/navigation comparisons PASS.
-- This workspace has no git checkout, Android emulator or materialized quality-tool submodules. Re-run the GitHub UI/emulator workflow on the resulting commit; do not claim local Android QA or `git diff --check` from this workspace.
+- Code commit `b699c9e3375d0e68fb76b0078e4325c883c12ff8`: `npm test` 239/239 and Python unittest 87/87 PASS; `parseWorkbook` differential check across 120 deterministic cases PASS; five-screen HTML and targeted save/import/navigation comparisons PASS.
+- [Android emulator QA #97](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42272810470) and [UI audit #251](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42272810475) PASS on Android 35 for that code commit; audit evidence is attached to the runs.
+- This workspace had no git checkout, local emulator or materialized quality-tool submodules. Changed-file whitespace review passed; no local whole-repository CRAP report was produced.
 
 ## Next step
-Inspect the Android UI/emulator checks triggered for this PR commit, then report their actual status. Keep `main` unchanged.
+Initialize the pinned Crapper submodule and produce a fresh complexity report before choosing the next code-cleanup target. Keep `main` unchanged.
