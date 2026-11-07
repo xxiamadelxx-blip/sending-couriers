@@ -47,10 +47,14 @@ jobs:
         run: |
           set -euo pipefail
           tools/quality/mutator/mutator --scan web/core.mjs web/forecast.mjs android/src/ru/courier/finance/NativeCountModel.java | tee "$RUNNER_TEMP/mutator-scan.txt"
-      - name: Mutation-test core finance calculations
+      - name: Mutation-test critical financial projections
+        continue-on-error: true
         run: |
           set -euo pipefail
-          tools/quality/mutator/mutator --test-command "node --test tests/core.test.mjs tests/premiums.test.mjs tests/payment-terms.test.mjs" --max-workers 3 web/core.mjs | tee "$RUNNER_TEMP/core-mutation-report.txt"
+          tools/quality/mutator/mutator --test-command "node --test tests/forecast-finance-mutation.test.mjs" --max-workers 3 web/core.mjs | tee "$RUNNER_TEMP/core-mutation-report.txt"
+      - name: Enforce financial projection mutation threshold
+        run: |
+          python3 tools/quality/check_mutation_targets.py "$RUNNER_TEMP/core-mutation-report.txt"
       - name: Publish quality-tool reports
         if: always()
         uses: actions/upload-artifact@v4
