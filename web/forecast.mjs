@@ -505,51 +505,6 @@ function mergeHistoryDay(data,old,parsed,input,incomingHash) {
   return normalizeDay(merged);
 }
 
-function preserveHistoryWork(old,parsed,inputSource,merged) {
-  if(old?.manualTime)return {...merged,workingMin:old.workingMin,workConfirmed:old.workConfirmed,precision:old.precision,
-    intervals:old.intervals,manualTime:true,estimatedExposureJustified:old.estimatedExposureJustified};
-  if(old?.workConfirmed&&!parsed.workConfirmed&&!(inputSource==='sheet'&&parsed.workingMin!=null))
-    return {...merged,workingMin:old.workingMin,workConfirmed:true,precision:old.precision,intervals:old.intervals,manualTime:old.manualTime};
-  return merged;
-}
-function reconcileHistoryFacts(old,parsed,merged,reconcilesVideoSlots) {
-  let result=merged;
-  if(reconcilesVideoSlots)
-    result={...result,ordersScope:'daily',sourceConflicts:[...new Set(result.sourceConflicts)],orderEvidence:parsed.orderEvidence};
-  else if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders)
-    result={...result,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,
-      fieldSources:{...result.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
-  if(old?.ordersConfirmed&&!parsed.ordersConfirmed)
-    result={...result,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,
-      fieldSources:{...result.fieldSources,orders:{...old.fieldSources.orders,status:'CONFIRMED'}}};
-  if(old?.accountedConfirmed&&!parsed.accountedConfirmed)
-    result={...result,appAccountedMin:old.appAccountedMin,accountedConfirmed:true,
-      fieldSources:{...result.fieldSources,appAccountedMin:{...old.fieldSources.appAccountedMin,status:'CONFIRMED'}}};
-  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin)
-    result={...result,appAccountedMin:old.appAccountedMin,accountedConfirmed:true,
-      fieldSources:{...result.fieldSources,appAccountedMin:{...old.fieldSources.appAccountedMin,status:'CONFLICT'}}};
-  if(!reconcilesVideoSlots) {
-    const orders=new Map();
-    for(const row of [...(old?.orderEvidence??[]),...parsed.orderEvidence])orders.set(row.id,row);
-    result={...result,orderEvidence:[...orders.values()]};
-  }
-  return {...result,evidenceComplete:Boolean((old?.evidenceComplete||parsed.evidenceComplete)
-    &&result.orderEvidence.length===result.orders)};
-}
-function mergeHistoryDay(old,parsed,input,inputSource,now) {
-  const state=resolveHistoryImportState(old,parsed,input);
-  let merged={...parsed,zone:state.geographyConflict?old.zone:parsed.zone,
-    timezone:state.geographyConflict?old.timezone:parsed.timezone,
-    sourceHash:fingerprint({source:inputSource,date:parsed.date,orders:parsed.orders,ordersConfirmed:parsed.ordersConfirmed,
-      accounted:parsed.appAccountedMin,accountedConfirmed:parsed.accountedConfirmed,workingMin:parsed.workingMin,
-      workConfirmed:parsed.workConfirmed,intervals:parsed.intervals}),
-    ordersScope:state.reconcilesVideoSlots?'daily':parsed.ordersScope,
-    videoSlots:state.reconcilesVideoSlots?old.videoSlots:parsed.videoSlots,
-    revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts:state.sourceConflicts};
-  merged=preserveHistoryWork(old,parsed,inputSource,merged);
-  merged=reconcileHistoryFacts(old,parsed,merged,state.reconcilesVideoSlots);
-  return normalizeDay(merged);
-}
 
 export function importDays(data,rows,source='history',now=new Date().toISOString()) {
   if(!Array.isArray(rows)||rows.length>5000) fail('Проверьте список дней.');
