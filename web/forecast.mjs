@@ -360,10 +360,10 @@ function mergeVideoSlots(existing=[],incoming=[]) {
   }
   return rows;
 }
-function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
+function mergeVideoSlotRecord(old,input,inputSource,suppliedSlotId) {
   const orderCount=integer(input.slotOrderCount??input.orders,1000000);
   if(orderCount==null)fail('Видео-слот не содержит подтверждённого количества заказов.');
-  const slotId=suppliedSlotId||`legacy:${String(input.sourceHash??inputSource).slice(-120)}`;
+  const slotId=suppliedSlotId||\`legacy:\${String(input.sourceHash??inputSource).slice(-120)}\`;
   const slot={slotId,orderCount,sourceHash:String(input.sourceHash??'').slice(0,64),source:String(inputSource).slice(0,200),
     startedAt:String(input.startedAt??'').slice(0,40),completedAt:String(input.completedAt??'').slice(0,40),conflicts:[]};
   const slots=(old?.videoSlots??[]).slice(),slotIndex=slots.findIndex(item=>item.slotId===slotId);
@@ -377,12 +377,16 @@ function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
       slots[slotIndex]={...existing,conflicts:rows.slice(-10)};slotConflictAdded=true;
     }
   }
+  return {orderCount,slotId,slots,slotAdded,slotConflictAdded,slotConflict};
+}
+function mergeVideoSlotSources(old,parsed,slotState) {
+  const {orderCount,slotId,slots,slotConflict}=slotState;
   const hasDailyTotal=Boolean(old?.ordersConfirmed&&old.ordersScope!=='video_slots');
-  const staleMismatch=`Заказы: сохранено ${old?.orders}, новый источник ${orderCount}. Подтвердите итог дня.`;
+  const staleMismatch=\`Заказы: сохранено \${old?.orders}, новый источник \${orderCount}. Подтвердите итог дня.\`;
   const repairedLegacyConflict=Boolean(hasDailyTotal&&old?.source?.startsWith('video:')&&old.sourceConflicts?.includes(staleMismatch));
   let sourceConflicts=[...new Set([...(old?.sourceConflicts??[]),...parsed.sourceConflicts])];
   if(repairedLegacyConflict)sourceConflicts=sourceConflicts.filter(item=>item!==staleMismatch);
-  if(slotConflict&&!hasDailyTotal)sourceConflicts.push(`Видео-слот ${slotId}: источники расходятся по числу заказов.`);
+  if(slotConflict&&!hasDailyTotal)sourceConflicts.push(\`Видео-слот \${slotId}: источники расходятся по числу заказов.\`);
   sourceConflicts=[...new Set(sourceConflicts)];
   const fieldSources={...parsed.fieldSources,...(old?.fieldSources??{})};
   if(hasDailyTotal) {
@@ -393,8 +397,10 @@ function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
     fieldSources.orders={source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',
       note:'Сумма отдельных подтверждённых видео-слотов за дату.'};
   }
-  const dailyOrders=hasDailyTotal?old.orders:slots.reduce((sum,item)=>sum+item.orderCount,0);
-  // Preserve the first RAW evidence when no shared order ID proves cross-source identity.
+  return {hasDailyTotal,repairedLegacyConflict,sourceConflicts,fieldSources,
+    dailyOrders:hasDailyTotal?old.orders:slots.reduce((sum,item)=>sum+item.orderCount,0)};
+}
+function mergeVideoSlotEvidence(old,parsed,hasDailyTotal,slotAdded) {
   const oldEvidence=old?.orderEvidence??[],incomingEvidence=parsed.orderEvidence;
   const videoOnlyOrEmpty=oldEvidence.every(row=>row.source?.startsWith('video:'));
   const mergedEvidence=videoOnlyOrEmpty?mergeVideoEvidence(oldEvidence,incomingEvidence):oldEvidence;
@@ -403,6 +409,14 @@ function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
   const orderEvidence=hasDailyTotal
     ?mergedEvidence
     :mergeVideoEvidence(old?.ordersScope==='video_slots'?oldEvidence:[],slotAdded||evidenceAdded?incomingEvidence:[]);
+  return {orderEvidence,evidenceAdded};
+}
+function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
+  const slotState=mergeVideoSlotRecord(old,input,inputSource,suppliedSlotId);
+  const sourceState=mergeVideoSlotSources(old,parsed,slotState);
+  const evidenceState=mergeVideoSlotEvidence(old,parsed,sourceState.hasDailyTotal,slotState.slotAdded);
+  const {hasDailyTotal,repairedLegacyConflict,sourceConflicts,fieldSources,dailyOrders}=sourceState;
+  const {slots}=slotState,{orderEvidence}=evidenceState;
   const merged={...(old??parsed),...parsed,
     source:hasDailyTotal?old.source:'video_slots',sourceHash:hasDailyTotal?old.sourceHash:fingerprint(slots.map(item=>[item.slotId,item.orderCount,item.sourceHash])),
     zone:old?.zone||parsed.zone,timezone:old?.timezone||parsed.timezone,
@@ -421,9 +435,10 @@ function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
     sourceNotes:[...new Set([...(old?.sourceNotes??[]),...parsed.sourceNotes])].slice(0,20),
     manualTime:old?.manualTime??parsed.manualTime,confirmedAt:old?.confirmedAt??parsed.confirmedAt,
     importedAt:now,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
-  if(!slotAdded&&!slotConflictAdded&&!repairedLegacyConflict&&!evidenceAdded)return null;
+  if(!slotState.slotAdded&&!slotState.slotConflictAdded&&!repairedLegacyConflict&&!evidenceState.evidenceAdded)return null;
   return normalizeDay(merged);
 }
+
 function mergeHistoryDay(data,old,parsed,input,incomingHash) {
   const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
   let sourceConflicts=[...parsed.sourceConflicts,...(reconcilesVideoSlots
