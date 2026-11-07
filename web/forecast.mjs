@@ -363,7 +363,7 @@ function mergeVideoSlots(existing=[],incoming=[]) {
 function mergeVideoSlotRecord(old,input,inputSource,suppliedSlotId) {
   const orderCount=integer(input.slotOrderCount??input.orders,1000000);
   if(orderCount==null)fail('Видео-слот не содержит подтверждённого количества заказов.');
-  const slotId=suppliedSlotId||\`legacy:\${String(input.sourceHash??inputSource).slice(-120)}\`;
+  const slotId=suppliedSlotId||`legacy:${String(input.sourceHash??inputSource).slice(-120)}`;
   const slot={slotId,orderCount,sourceHash:String(input.sourceHash??'').slice(0,64),source:String(inputSource).slice(0,200),
     startedAt:String(input.startedAt??'').slice(0,40),completedAt:String(input.completedAt??'').slice(0,40),conflicts:[]};
   const slots=(old?.videoSlots??[]).slice(),slotIndex=slots.findIndex(item=>item.slotId===slotId);
@@ -382,11 +382,11 @@ function mergeVideoSlotRecord(old,input,inputSource,suppliedSlotId) {
 function mergeVideoSlotSources(old,parsed,slotState) {
   const {orderCount,slotId,slots,slotConflict}=slotState;
   const hasDailyTotal=Boolean(old?.ordersConfirmed&&old.ordersScope!=='video_slots');
-  const staleMismatch=\`Заказы: сохранено \${old?.orders}, новый источник \${orderCount}. Подтвердите итог дня.\`;
+  const staleMismatch=`Заказы: сохранено ${old?.orders}, новый источник ${orderCount}. Подтвердите итог дня.`;
   const repairedLegacyConflict=Boolean(hasDailyTotal&&old?.source?.startsWith('video:')&&old.sourceConflicts?.includes(staleMismatch));
   let sourceConflicts=[...new Set([...(old?.sourceConflicts??[]),...parsed.sourceConflicts])];
   if(repairedLegacyConflict)sourceConflicts=sourceConflicts.filter(item=>item!==staleMismatch);
-  if(slotConflict&&!hasDailyTotal)sourceConflicts.push(\`Видео-слот \${slotId}: источники расходятся по числу заказов.\`);
+  if(slotConflict&&!hasDailyTotal)sourceConflicts.push(`Видео-слот ${slotId}: источники расходятся по числу заказов.`);
   sourceConflicts=[...new Set(sourceConflicts)];
   const fieldSources={...parsed.fieldSources,...(old?.fieldSources??{})};
   if(hasDailyTotal) {
