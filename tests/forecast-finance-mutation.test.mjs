@@ -40,11 +40,29 @@ test('scenario uses ceiling targets, exact hourly base and unknowns stay unknown
   const met=calculateScenario({hours:43,orders:78},terms);
   assert.equal(met.missingNorm,0);
   assert.ok(met.pace>=1.8);
+  const premiumMet=calculateScenario({hours:43,orders:121},terms);
+  assert.equal(premiumMet.premiumOrders,121);
+  assert.equal(premiumMet.missingPremium,0);
+  assert.equal(premiumMet.pacePremium,774);
+  assert.equal(premiumMet.reserve,1453);
+  const zero=calculateScenario({hours:0,workingHours:43,orders:0,completedOrders:100},terms);
+  assert.equal(zero.hours,0);
+  assert.equal(zero.orders,0);
+  assert.equal(zero.normOrders,0);
+  assert.equal(zero.missingNorm,0);
+  assert.equal(zero.pace,null);
+  assert.equal(zero.reserve,null);
+  const fractional=calculateScenario({hours:0.5,orders:1},terms);
+  assert.equal(fractional.pace,2);
+  assert.equal(fractional.normOrders,1);
+  assert.equal(fractional.reserve,3);
   const unknown=calculateScenario({hours:'',orders:62},terms);
   assert.equal(unknown.hours,null);
   assert.equal(unknown.normOrders,null);
   assert.equal(unknown.missingNorm,null);
+  assert.equal(unknown.missingPremium,null);
   assert.equal(unknown.pace,null);
+  assert.equal(unknown.reserve,null);
 });
 
 test('seven 14-hour slots keep accounted hours separate from 9 active hours',()=>{

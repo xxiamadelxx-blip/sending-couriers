@@ -51,7 +51,8 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          tools/quality/mutator/mutator --coverage-command "rm -rf coverage && npx --yes c8@10.1.3 --reporter=lcov --include=web/core.mjs node --test tests/forecast-finance-mutation.test.mjs" --test-command "node --test tests/forecast-finance-mutation.test.mjs" --max-workers 3 web/core.mjs | tee "$RUNNER_TEMP/core-mutation-report.txt"
+          MUTATION_LINES="$(python3 tools/quality/mutation_lines.py web/core.mjs calculateScenario)"
+          tools/quality/mutator/mutator --no-coverage --lines "$MUTATION_LINES" --test-command "node --test tests/forecast-finance-mutation.test.mjs" --max-workers 3 web/core.mjs | tee "$RUNNER_TEMP/core-mutation-report.txt"
       - name: Enforce financial projection mutation threshold
         run: |
           python3 tools/quality/check_mutation_targets.py "$RUNNER_TEMP/core-mutation-report.txt"

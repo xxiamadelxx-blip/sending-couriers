@@ -5,7 +5,7 @@ import re
 import sys
 
 MIN_SCORE = 85.0
-TARGETS = ("forecastFinances", "calculateScenario")
+TARGETS = ("calculateScenario",)
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 

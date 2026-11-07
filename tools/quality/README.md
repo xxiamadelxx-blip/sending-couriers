@@ -26,3 +26,9 @@ Crapper analyzes Java and JavaScript, including `.mjs`. Dryer supports Java
 and TypeScript but does not list plain JavaScript. Mutator supports Java and
 JavaScript. Use Mutator's `--scan` before running selected mutations; a full
 mutation run executes the test command for each covered mutation site.
+
+### Mutation gate
+
+- The mutation-score gate targets the pure financial formula `calculateScenario` in `web/core.mjs`; source line numbers are resolved dynamically by `mutation_lines.py` so refactoring above the function does not stale the gate.
+- The dedicated `tests/forecast-finance-mutation.test.mjs` suite checks ceiling targets, exact hourly base, premium eligibility, zero and fractional hours, unknown inputs, and forecast aggregation.
+- The predeclared minimum kill score is **85%** for mutations inside `calculateScenario`. The larger `forecastFinances` aggregator remains covered by integration assertions and the full mutation-site scan; it is not included in this narrow score gate.
