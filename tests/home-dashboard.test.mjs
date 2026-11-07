@@ -67,7 +67,8 @@ test('Add Slot validates its money fields, previews accrual live and returns wit
   assert.match(form,/field\('tips', 'Чаевые'/);
   assert.match(form,/field\('tax', 'Налог'/);
   assert.match(form,/field\('parkCommission', 'Комиссия парка'/);
-  assert.match(form,/bindSlotFormEvents\(ctx\)/);\n  assert.match(form,/refreshSlotInlineValidation\(\); refreshSlotDeductions\(\); refreshSlotPreview\(\)/);
+  assert.match(form,/bindSlotFormEvents\(ctx\)/);
+  assert.match(form,/refreshSlotInlineValidation\(\); refreshSlotDeductions\(\); refreshSlotPreview\(\)/);
   assert.match(form,/accruedIncome\(base,tips,tax,commission\)/);
   assert.match(form,/Часы × ставка \+ чаевые − удержания/);
   assert.match(form,/\.focus\(\);throw new Error\('Исправьте значения/);
