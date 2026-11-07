@@ -15,6 +15,37 @@ concurrency:
   group: courier-ui-audit-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Initialize pinned quality tools
+        run: sh tools/quality/bootstrap.sh
+      - name: Generate whole-source complexity report
+        run: |
+          set -euo pipefail
+          test -x tools/quality/crapper/crapper
+          test -x tools/quality/dryer/dryer
+          test -x tools/quality/mutator/mutator
+          tools/quality/crapper/crapper --no-coverage web android/src/ru/courier/finance qa build.py preview.mjs | tee "$RUNNER_TEMP/crapper-report.txt"
+          test -s .metrics/crap.edn
+      - name: Publish complexity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: courier-complexity-${{ github.sha }}
+          path: |
+            .metrics/crap.edn
+            ${{ runner.temp }}/crapper-report.txt
+          if-no-files-found: warn
   ui-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 55
