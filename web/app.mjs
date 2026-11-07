@@ -694,10 +694,10 @@ function refreshSlotInlineValidation() {
     }
 }
 
-function slotMoneyInput(key) { return{try{return parseMoney($('#'+key).value,key);}catch{return 0;}}; }
+function slotMoneyInput(key) { try { return parseMoney($('#'+key).value,key); } catch { return 0; } }
 
 function refreshSlotPreview() {
-    const tax=moneyInput('tax'),commission=moneyInput('parkCommission'),tips=moneyInput('tips');
+    const tax=slotMoneyInput('tax'),commission=slotMoneyInput('parkCommission'),tips=slotMoneyInput('tips');
     const deductions=Math.round((tax+commission)*100)/100;
     $('#slotDeductionTotal').textContent=money(deductions);
     let base=null,terms=null,hours=null;
