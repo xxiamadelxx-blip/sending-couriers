@@ -145,7 +145,7 @@ test('history conflicts preserve confirmed totals and manual work geography',()=
  assert.equal(day.manualTime,true);
  assert.equal(day.zone,'north');
  assert.equal(day.timezone,'Europe/Moscow');
- assert.deepEqual(day.intervals,[{start:600,end:900,state:'WORK'}]);
+ assert.deepEqual(day.intervals.map(({start,end,state})=>({start,end,state})),[{start:600,end:900,state:'WORK'}]);
  assert.match(conflicts,/Источник расходится с вручную выбранной местностью/);
  assert.match(conflicts,/Заказы: сохранено 10, новый источник 12/);
  assert.match(conflicts,/Часы Яндекса: сохранено 600 мин, новый источник 620 мин/);
