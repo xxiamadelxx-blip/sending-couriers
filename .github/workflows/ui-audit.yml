@@ -29,13 +29,13 @@ jobs:
           python-version: '3.11'
       - name: Initialize pinned quality tools
         run: sh tools/quality/bootstrap.sh
-      - name: Generate whole-source complexity report
+      - name: Generate first-party source complexity report
         run: |
           set -euo pipefail
           test -x tools/quality/crapper/crapper
           test -x tools/quality/dryer/dryer
           test -x tools/quality/mutator/mutator
-          mapfile -d '' sources < <(find web -type f \\( -name '*.mjs' -o -name '*.js' \\) ! -path 'web/forecast-worker-bundle.mjs' -print0 | sort -z)
+          mapfile -d '' sources < <(find web -type f \( -name '*.mjs' -o -name '*.js' \) ! -path 'web/forecast-worker-bundle.mjs' -print0 | sort -z)
           tools/quality/crapper/crapper --no-coverage "${sources[@]}" android/src/ru/courier/finance qa build.py preview.mjs | tee "$RUNNER_TEMP/crapper-report.txt"
           test -s .metrics/crap.edn
       - name: Detect duplicate Java forms
