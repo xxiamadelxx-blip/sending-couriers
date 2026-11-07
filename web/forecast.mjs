@@ -439,36 +439,69 @@ function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
   return normalizeDay(merged);
 }
 
-function mergeHistoryDay(data,old,parsed,input,incomingHash) {
-  const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
-  let sourceConflicts=[...parsed.sourceConflicts,...(reconcilesVideoSlots
-    ?(old.sourceConflicts??[]).filter(item=>!item.startsWith('Видео-слот '))
-    :(old?.sourceConflicts??[]))];
-  const oldOrderSource=String(old?.fieldSources?.orders?.source??'');
-  const oldVideoDayConflict=Boolean(old?.source?.startsWith('video:')&&old.ordersConfirmed
-    &&old.fieldSources?.orders?.status==='CONFLICT'&&oldOrderSource&&!oldOrderSource.startsWith('video:')
-    &&parsed.ordersConfirmed&&parsed.orders===old.orders);
-  if(oldVideoDayConflict) {
-    const mismatch=new RegExp(`^Заказы: сохранено ${old.orders}, новый источник \\d+\\. Подтвердите итог дня\\.$`);
-    sourceConflicts=sourceConflicts.filter(item=>!mismatch.test(item));
-  }
-  const geographyConflict=old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
+function resolveHistoryImportState(old,parsed,input) {
+  const reconcilesVideoSlots=old?.ordersScope==='video_slots'&&parsed.ordersConfirmed;
+  let sourceConflicts=[...new Set([...(old?.sourceConflicts??[]),...parsed.sourceConflicts])];
+  const oldOrderSource=old?.fieldSources?.orders?.source??'';
+  const oldVideoDayConflict=Boolean(old?.ordersScope==='video_slots'&&oldOrderSource.startsWith('video:')
+    &&new RegExp('^Заказы: сохранено '+old.orders+', новый источник \\d+\\. Подтвердите итог дня\\.$')
+      .test(old.sourceConflicts?.find(item=>item.startsWith('Заказы:'))??''));
+  if(reconcilesVideoSlots&&oldVideoDayConflict)sourceConflicts=sourceConflicts.filter(item=>!item.startsWith('Заказы:'));
+  const geographyConflict=Boolean(old?.manualTime
+    &&((input.zone&&old.zone&&input.zone!==old.zone)||(input.timezone&&old.timezone&&input.timezone!==old.timezone)));
   if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
-  if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders&&!reconcilesVideoSlots) sourceConflicts.push(`Заказы: сохранено ${old.orders}, новый источник ${parsed.orders}. Подтвердите итог дня.`);
-  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin) sourceConflicts.push(`Часы Яндекса: сохранено ${old.appAccountedMin} мин, новый источник ${parsed.appAccountedMin} мин. Подтвердите итог дня.`);
-  let merged={...parsed,zone:geographyConflict?old.zone:input.zone?parsed.zone:old?.zone??parsed.zone,timezone:geographyConflict?old.timezone:input.timezone?parsed.timezone:old?.timezone??profileFor(data,parsed.date)?.timezone??parsed.timezone,sourceHash:incomingHash,ordersScope:parsed.ordersConfirmed?'daily':old?.ordersScope??parsed.ordersScope,videoSlots:old?.videoSlots?.length?old.videoSlots:parsed.videoSlots,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
-  if(old?.manualTime) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions,confirmedAt:old.confirmedAt,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
-  else if(old?.workConfirmed&&!parsed.workConfirmed&&!(old.source===parsed.source&&old.source.startsWith('sheets_import:'))) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:true,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
-  if(reconcilesVideoSlots)merged={...merged,ordersScope:'daily',sourceConflicts:[...new Set(sourceConflicts)],orderEvidence:parsed.orderEvidence};
-  else if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) merged={...merged,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,fieldSources:{...merged.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
-  // A partial capture cannot erase a confirmed total or a fuller order list.
-  if(old?.ordersConfirmed&&!parsed.ordersConfirmed) {merged.orders=old.orders;merged.ordersConfirmed=true;merged.ordersScope=old.ordersScope;merged.fieldSources.orders=old.fieldSources.orders;}
-  if(old?.accountedConfirmed&&!parsed.accountedConfirmed) {merged.appAccountedMin=old.appAccountedMin;merged.accountedConfirmed=true;merged.fieldSources.appAccountedMin=old.fieldSources.appAccountedMin;}
-  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin){merged.appAccountedMin=old.appAccountedMin;merged.fieldSources.appAccountedMin={...old.fieldSources.appAccountedMin,status:'CONFLICT'};}
-  if(!reconcilesVideoSlots){const orders=new Map((old?.orderEvidence??[]).map(o=>[o.id,o])); for(const o of parsed.orderEvidence) orders.set(o.id,o);merged.orderEvidence=[...orders.values()];}
-  merged.evidenceComplete=(old?.evidenceComplete||parsed.evidenceComplete) && merged.orderEvidence.length===merged.orders;
+  if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders)
+    sourceConflicts.push('Заказы: сохранено '+old.orders+', новый источник '+parsed.orders+'. Подтвердите итог дня.');
+  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin)
+    sourceConflicts.push('Часы Яндекса: сохранено '+old.appAccountedMin+' мин, новый источник '+parsed.appAccountedMin+' мин. Подтвердите итог дня.');
+  return {reconcilesVideoSlots,geographyConflict,sourceConflicts:[...new Set(sourceConflicts)]};
+}
+function preserveHistoryWork(old,parsed,inputSource,merged) {
+  if(old?.manualTime)return {...merged,workingMin:old.workingMin,workConfirmed:old.workConfirmed,precision:old.precision,
+    intervals:old.intervals,manualTime:true,estimatedExposureJustified:old.estimatedExposureJustified};
+  if(old?.workConfirmed&&!parsed.workConfirmed&&!(inputSource==='sheet'&&parsed.workingMin!=null))
+    return {...merged,workingMin:old.workingMin,workConfirmed:true,precision:old.precision,intervals:old.intervals,manualTime:old.manualTime};
+  return merged;
+}
+function reconcileHistoryFacts(old,parsed,merged,reconcilesVideoSlots) {
+  let result=merged;
+  if(reconcilesVideoSlots)
+    result={...result,ordersScope:'daily',sourceConflicts:[...new Set(result.sourceConflicts)],orderEvidence:parsed.orderEvidence};
+  else if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders)
+    result={...result,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,
+      fieldSources:{...result.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
+  if(old?.ordersConfirmed&&!parsed.ordersConfirmed)
+    result={...result,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,
+      fieldSources:{...result.fieldSources,orders:{...old.fieldSources.orders,status:'CONFIRMED'}}};
+  if(old?.accountedConfirmed&&!parsed.accountedConfirmed)
+    result={...result,appAccountedMin:old.appAccountedMin,accountedConfirmed:true,
+      fieldSources:{...result.fieldSources,appAccountedMin:{...old.fieldSources.appAccountedMin,status:'CONFIRMED'}}};
+  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin)
+    result={...result,appAccountedMin:old.appAccountedMin,accountedConfirmed:true,
+      fieldSources:{...result.fieldSources,appAccountedMin:{...old.fieldSources.appAccountedMin,status:'CONFLICT'}}};
+  if(!reconcilesVideoSlots) {
+    const orders=new Map();
+    for(const row of [...(old?.orderEvidence??[]),...parsed.orderEvidence])orders.set(row.id,row);
+    result={...result,orderEvidence:[...orders.values()]};
+  }
+  return {...result,evidenceComplete:Boolean((old?.evidenceComplete||parsed.evidenceComplete)
+    &&result.orderEvidence.length===result.orders)};
+}
+function mergeHistoryDay(old,parsed,input,inputSource,now) {
+  const state=resolveHistoryImportState(old,parsed,input);
+  let merged={...parsed,zone:state.geographyConflict?old.zone:parsed.zone,
+    timezone:state.geographyConflict?old.timezone:parsed.timezone,
+    sourceHash:fingerprint({source:inputSource,date:parsed.date,orders:parsed.orders,ordersConfirmed:parsed.ordersConfirmed,
+      accounted:parsed.appAccountedMin,accountedConfirmed:parsed.accountedConfirmed,workingMin:parsed.workingMin,
+      workConfirmed:parsed.workConfirmed,intervals:parsed.intervals}),
+    ordersScope:state.reconcilesVideoSlots?'daily':parsed.ordersScope,
+    videoSlots:state.reconcilesVideoSlots?old.videoSlots:parsed.videoSlots,
+    revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts:state.sourceConflicts};
+  merged=preserveHistoryWork(old,parsed,inputSource,merged);
+  merged=reconcileHistoryFacts(old,parsed,merged,state.reconcilesVideoSlots);
   return normalizeDay(merged);
 }
+
 export function importDays(data,rows,source='history',now=new Date().toISOString()) {
   if(!Array.isArray(rows)||rows.length>5000) fail('Проверьте список дней.');
   const days={...data.days}; let changed=0,conflicts=0;
