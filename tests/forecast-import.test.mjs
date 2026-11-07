@@ -120,6 +120,37 @@ test('partial RAW does not claim full totals and slot boundaries never become av
  const r=parseWorkbook({sheets:{'Заказы RAW':{'2':{A:46300,C:.5,D:1}}}});assert.equal(r.days[0].orders,null);assert.equal(r.days[0].ordersConfirmed,false);assert.equal(r.days[0].workingMin,null);
  assert.throws(()=>parseForecastFile('{"entries":[]}'));
 });
+
+test('history conflicts preserve confirmed totals and manual work geography',()=>{
+ const date='2026-10-21';
+ const base=importDays(emptyForecast(),[{
+  date,orders:10,ordersConfirmed:true,appAccountedMin:600,accountedConfirmed:true,
+  zone:'north',timezone:'Europe/Moscow',source:'history:base'
+ }],'history:base','2026-10-31T12:00:00Z');
+ const manual=saveDay(base,{
+  date,workingMin:300,precision:'intervals',intervals:[{start:600,end:900,state:'WORK'}],workConfirmed:true
+ },'2026-10-31T12:01:00Z');
+ const changed=importDays(manual,[{
+  date,orders:12,ordersConfirmed:true,appAccountedMin:620,accountedConfirmed:true,
+  workingMin:420,workConfirmed:true,precision:'total',intervals:[],
+  zone:'south',timezone:'Europe/London',source:'history:changed'
+ }],'history:changed','2026-10-31T12:02:00Z');
+ const day=changed.days[date],conflicts=day.sourceConflicts.join(' ');
+ assert.equal(day.orders,10);
+ assert.equal(day.appAccountedMin,600);
+ assert.equal(day.fieldSources.orders.status,'CONFLICT');
+ assert.equal(day.fieldSources.appAccountedMin.status,'CONFLICT');
+ assert.equal(day.workingMin,300);
+ assert.equal(day.workConfirmed,true);
+ assert.equal(day.manualTime,true);
+ assert.equal(day.zone,'north');
+ assert.equal(day.timezone,'Europe/Moscow');
+ assert.deepEqual(day.intervals,[{start:600,end:900,state:'WORK'}]);
+ assert.match(conflicts,/Источник расходится с вручную выбранной местностью/);
+ assert.match(conflicts,/Заказы: сохранено 10, новый источник 12/);
+ assert.match(conflicts,/Часы Яндекса: сохранено 600 мин, новый источник 620 мин/);
+});
+
 test('partial history cannot unset a previously confirmed daily total',()=>{
  const date='2026-10-12',base=importDays(emptyForecast(),[{date,orders:12,ordersConfirmed:true,appAccountedMin:840,accountedConfirmed:true,source:'complete'}],'complete');
  const partial=importDays(base,[{date,orders:null,ordersConfirmed:false,appAccountedMin:null,accountedConfirmed:false,precision:'unknown',source:'partial'}],'partial');
