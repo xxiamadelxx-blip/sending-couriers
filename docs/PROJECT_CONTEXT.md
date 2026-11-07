@@ -10,12 +10,24 @@ Canonical development line: `refactor/deep-cleanup-20261104-recovered` (PR [#19]
 ## Refactor checkpoint
 - Completed earlier: `calculatePremiumCycle` helper extraction; video-slot and daily-history reconciliation separation; active docs consolidation. Crapper, Dryer and Mutator are pinned under `tools/quality/`; bootstrap with `sh tools/quality/bootstrap.sh`.
 - This change extracts `parseWorkbook` into summary, shift-reconciliation, order-evidence and archive helpers; `mountForecast` now delegates to separate screen renderers through one context. Public import and screen APIs remain unchanged.
-- Active docs (README, AGENTS, ARCHITECTURE and this file) total 118 lines / 1474 whitespace-separated words, down from 239 / 5,696 (50.6% fewer lines; 74.1% fewer words).
+- Active docs (README, AGENTS, ARCHITECTURE and this file) total 119 lines / 1,474 whitespace-separated words, down from 239 / 5,696 (50.2% fewer lines; 74.1% fewer words).
 
 ## Verification
-- Code commit `b699c9e3375d0e68fb76b0078e4325c883c12ff8`: `npm test` 239/239 and Python unittest 87/87 PASS; `parseWorkbook` differential check across 120 deterministic cases PASS; five-screen HTML and targeted save/import/navigation comparisons PASS.
-- [Android emulator QA #97](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42272810470) and [UI audit #251](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42272810475) PASS on Android 35 for that code commit; audit evidence is attached to the runs.
-- This workspace had no git checkout, local emulator or materialized quality-tool submodules. Changed-file whitespace review passed; no local whole-repository CRAP report was produced.
+
+- Earlier refactor checkpoint at code commit `b699c9e3375d0e68fb76b0078e4325c883c12ff8`: `npm test` 239/239 and Python unittest 87/87 PASS; `parseWorkbook` differential check across 120 deterministic cases PASS; five-screen HTML and targeted save/import/navigation comparisons PASS.
+- Latest context/test-gate commit: `37c94919ccefcd761a24bdf97c38fcf5a60c431e`. It changes only CI mutation targeting and dedicated regression tests; no application runtime code or product behavior changed in this continuation.
+- [UI audit #42413446003](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42413446003): **FAIL**. The code-quality job passed. Mutator killed **28/28** mutations in `calculateScenario` (100%, required 85%; 0 survived, 0 uncovered). Android test-APK build failed with Java `OutOfMemoryError: Java heap space` during Gradle `:app:assembleRelease`; no audit evidence artifact was produced. This is an infrastructure/build-memory failure, not a signing-key failure.
+- [Android emulator QA #42413446019](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/42413446019): **PASS** on Android 35; `native-smoke` completed successfully and uploaded its QA artifact. This does not replace the failed UI-audit APK build or prove a production-signed update.
+- [PR #19](https://github.com/xxiamadelxx-blip/sending-couriers/pull/19) remains open on the canonical branch. `main` was not changed. No new production APK was built or released.
+- The prior shared workspace did not expose a local git checkout or local emulator. Do not claim a local full-repository CRAP report; the pinned quality tools are run through CI.
+
+## Current refactor state
+
+- The dedicated mutation gate now measures the critical `calculateScenario` function with dynamically resolved source lines. Its current observed result is 28/28 killed.
+- The new formula regression cases cover zero versus missing hours, fractional hours, premium threshold equality, reserve-minute calculation and unknown inputs. These tests are not a substitute for full app behavior QA.
+- The Android 35 native smoke path is green; the separate UI-audit path is blocked by Gradle daemon heap exhaustion before APK generation.
+- This is a documentation/context checkpoint only. No source-code or workflow edits are authorized by the latest instruction beyond keeping the context accurate.
+
 
 ## Next step
-Initialize the pinned Crapper submodule and produce a fresh complexity report before choosing the next code-cleanup target. Keep `main` unchanged.
+Resolve the CI Gradle heap exhaustion in the existing UI-audit build path, then rerun UI audit and Android QA on the resulting commit. Keep the current single branch and `main` unchanged; do not start another code-cleanup target until the failed APK-build gate is green.
