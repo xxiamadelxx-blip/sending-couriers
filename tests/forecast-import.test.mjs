@@ -4,6 +4,24 @@ import {parseWorkbook,parseForecastFile,importSummary,applyHistory} from '../web
 import {emptyForecast,importDays,normalizeForecast,saveDay,predict,parseWindows} from '../web/forecast.mjs';
 import {prepareCountModel,resetCountModels} from '../web/forecast-count.mjs';
 import {forecastModelLabel} from '../web/forecast-ui.mjs';
+
+test('reimporting a conflicting video slot is idempotent and keeps one conflict fact',()=>{
+ const date='2026-10-19',slot=(slotId,orderCount,digest)=>({date,orders:orderCount,ordersConfirmed:true,completed:true,
+  workConfirmed:false,workingMin:null,precision:'unknown',intervals:[],slotId,source:`video:${digest}`,sourceHash:digest});
+ let data=importDays(emptyForecast(),[slot('341234567',9,'a'.repeat(64))],'video_import','2026-10-31T12:00:00Z');
+ const conflicting=slot('341234567',10,'d'.repeat(64));
+ data=importDays(data,[conflicting],'video_import','2026-10-31T12:03:00Z');
+ const day=data.days[date];
+ assert.equal(day.orders,9);
+ assert.equal(day.videoSlots[0].conflicts.length,1);
+ assert.equal(day.videoSlots[0].conflicts[0].orderCount,10);
+ assert.equal(day.fieldSources.orders.status,'CONFLICT');
+ const repeated=importDays(data,[conflicting],'video_import','2026-10-31T12:04:00Z');
+ assert.equal(repeated,data);
+ assert.equal(repeated.days[date].revision,day.revision);
+ assert.equal(repeated.days[date].videoSlots[0].conflicts.length,1);
+});
+
 test('video facts retain Yandex order ids and same-minute rows after forecast reload',()=>{
  const source=`video:${'a'.repeat(64)}`,date='2026-10-18';
  const orderEvidence=Array.from({length:33},(_,i)=>({

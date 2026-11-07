@@ -35,16 +35,29 @@ jobs:
           test -x tools/quality/crapper/crapper
           test -x tools/quality/dryer/dryer
           test -x tools/quality/mutator/mutator
-          tools/quality/crapper/crapper --no-coverage web android/src/ru/courier/finance qa build.py preview.mjs | tee "$RUNNER_TEMP/crapper-report.txt"
+          mapfile -d '' sources < <(find web -type f \\( -name '*.mjs' -o -name '*.js' \\) ! -path 'web/forecast-worker-bundle.mjs' -print0 | sort -z)
+          tools/quality/crapper/crapper --no-coverage "${sources[@]}" android/src/ru/courier/finance qa build.py preview.mjs | tee "$RUNNER_TEMP/crapper-report.txt"
           test -s .metrics/crap.edn
-      - name: Publish complexity report
+      - name: Detect duplicate Java forms
+        run: |
+          set -euo pipefail
+          tools/quality/dryer/dryer android/src/ru/courier/finance | tee "$RUNNER_TEMP/dryer-report.txt"
+          test -s .metrics/dry.edn
+      - name: Scan mutation sites in financial and import code
+        run: |
+          set -euo pipefail
+          tools/quality/mutator/mutator --scan web/core.mjs web/forecast.mjs android/src/ru/courier/finance/NativeCountModel.java | tee "$RUNNER_TEMP/mutator-scan.txt"
+      - name: Publish quality-tool reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: courier-complexity-${{ github.sha }}
           path: |
             .metrics/crap.edn
+            .metrics/dry.edn
             ${{ runner.temp }}/crapper-report.txt
+            ${{ runner.temp }}/dryer-report.txt
+            ${{ runner.temp }}/mutator-scan.txt
           if-no-files-found: warn
   ui-audit:
     runs-on: ubuntu-latest
