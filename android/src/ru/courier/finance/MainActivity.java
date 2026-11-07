@@ -323,27 +323,22 @@ public final class MainActivity extends Activity {
                 } catch (Exception e) { error("Импорт видео появится после обновления приложения."); }
             });
         }
-        @JavascriptInterface public void importData() {
+        private void openImportPicker(String[] mimeTypes, int requestCode) {
             runOnUiThread(() -> {
                 try {
                     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     intent.setType("*/*");
-                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
-                    startActivityForResult(intent, IMPORT_FILE);
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+                    startActivityForResult(intent, requestCode);
                 } catch (Exception e) { error("Не удалось открыть выбор файла."); }
             });
         }
+        @JavascriptInterface public void importData() {
+            openImportPicker(new String[]{"application/json", "text/plain", "application/octet-stream"}, IMPORT_FILE);
+        }
         @JavascriptInterface public void importForecast() {
-            runOnUiThread(() -> {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("*/*");
-                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/json", "application/octet-stream"});
-                    startActivityForResult(intent, IMPORT_FORECAST);
-                } catch (Exception e) { error("Не удалось открыть выбор файла."); }
-            });
+            openImportPicker(new String[]{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/json", "application/octet-stream"}, IMPORT_FORECAST);
         }
         @JavascriptInterface public void fetchWeather(String city, String timezone) {
             synchronized (MainActivity.this) { if (weatherLoading) return; weatherLoading=true; }
