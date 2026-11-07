@@ -583,7 +583,7 @@ function form(id = null, returnTo = 'history') {
   const original = state.entries.find(e => e.id === id);
   if (id != null && !original) { notify('Запись не найдена. Откройте историю.'); return; }
   const entryId = original?.id ?? newEntryId();
-  let saving = false;
+  const ctx = {original,entryId,returnTo,editingId:original?.id??null,saving:false,workingDirty:false};
   app.className = 'form-page';
   view = 'form'; editingId = original?.id ?? null;
   $('#bottomNav').hidden = true;
@@ -611,9 +611,13 @@ function form(id = null, returnTo = 'history') {
   app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = input.id === 'dailyHours' ? '00:00' : input.id === 'dailyOrders' ? '0' : '0.0'; });
   installLargeTextFormLabelFocusGuard();
   $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });
-  let workingDirty=false;
-  function renderWorking(date) {
-    workingDirty=false;
+  renderSlotWorkingEditor(e.date,ctx);
+  bindSlotFormEvents(ctx);
+  resetScroll();
+}
+
+function renderSlotWorkingEditor(date,ctx) {
+    ctx.workingDirty=false;
     const actual=state.forecast.days[date];
     const mode=!actual?.workConfirmed?'unknown':actual.precision==='intervals'?'intervals':actual.workingMin===0?'rest':'total';
     const host=$('#slotWorkingEditor');
@@ -662,17 +666,18 @@ function form(id = null, returnTo = 'history') {
       modeButton.focus();
     });
     host.addEventListener('keydown',event=>{if(event.key==='Escape'&&!options.hidden){event.preventDefault();closeOptions();modeButton.focus();}});
-    modeInput.addEventListener('change',()=>{workingDirty=true;show();});
-    $('#slotWorkHours').addEventListener('input',()=>{workingDirty=true;});
-    $('#slotWorkTotal').addEventListener('input',()=>{workingDirty=true;});
-  }
-  renderWorking(e.date);
-  function setInlineError(key,message='') {
+    modeInput.addEventListener('change',()=>{ctx.workingDirty=true;show();});
+    $('#slotWorkHours').addEventListener('input',()=>{ctx.workingDirty=true;});
+    $('#slotWorkTotal').addEventListener('input',()=>{ctx.workingDirty=true;});
+}
+
+function setSlotInlineError(key,message='') {
     const input=$('#'+key),status=$('#'+key+'-error');
     input.setAttribute('aria-invalid',String(Boolean(message)));
     if(status){status.textContent=message;status.hidden=!message;}
-  }
-  function refreshInlineValidation() {
+}
+
+function refreshSlotInlineValidation() {
     const checks={
       dailyHours:()=>parseHours($('#dailyHours').value),
       dailyOrders:()=>parseInteger($('#dailyOrders').value,'Заказы за слот'),
@@ -684,12 +689,14 @@ function form(id = null, returnTo = 'history') {
     };
     for(const [key,parse] of Object.entries(checks)){
       const input=$('#'+key);
-      if(!input.value.trim()){setInlineError(key);continue;}
-      try{parse();setInlineError(key);}catch(error){setInlineError(key,error.message);}
+      if(!input.value.trim()){setSlotInlineError(key);continue;}
+      try{parse();setSlotInlineError(key);}catch(error){setSlotInlineError(key,error.message);}
     }
-  }
-  const moneyInput=key=>{try{return parseMoney($('#'+key).value,key);}catch{return 0;}};
-  function refreshSlotPreview() {
+}
+
+function slotMoneyInput(key) { return{try{return parseMoney($('#'+key).value,key);}catch{return 0;}}; }
+
+function refreshSlotPreview() {
     const tax=moneyInput('tax'),commission=moneyInput('parkCommission'),tips=moneyInput('tips');
     const deductions=Math.round((tax+commission)*100)/100;
     $('#slotDeductionTotal').textContent=money(deductions);
@@ -702,8 +709,9 @@ function form(id = null, returnTo = 'history') {
     const accrued=accruedIncome(base,tips,tax,commission);
     $('#slotAccrued').textContent=money(accrued);
     $('#slotAccrualFormula').textContent=base==null?'Введите часы, чтобы увидеть начисление':hoursText(hours)+' ч × '+money(terms.hourlyRate)+'/ч + '+money(tips)+' − '+money(deductions)+' = '+money(accrued);
-  }
-  function refreshDeductions() {
+}
+
+function refreshSlotDeductions() {
     let check = null;
     try {
       const raw=$('#dailyHours').value.trim();
@@ -722,44 +730,53 @@ function form(id = null, returnTo = 'history') {
       $('#'+key).classList.toggle('has-warning', Boolean(warning) && !error);
       $('#'+key).setAttribute('aria-invalid', String(Boolean(error)));
     }
-  }
-  const draftKeys=['date','dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus'];
-  const saveFormDraft=()=>{
+}
+
+const slotDraftKeys=['date','dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus'];
+function saveSlotFormDraft(ctx) {
     if (!Native?.saveSlotDraft) return;
-    const fields=Object.fromEntries(draftKeys.map(key=>[key,$('#'+key).value]));
-    Native.saveSlotDraft(JSON.stringify({version:1,id:original?.id??null,returnTo,fields}));
-  };
-  for (const key of ['dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus']) {
-    $('#'+key).addEventListener('input', () => { refreshInlineValidation(); refreshDeductions(); refreshSlotPreview(); $('#formError').hidden = true; saveFormDraft(); });
-  }
-  refreshInlineValidation();
-  refreshDeductions();
-  refreshSlotPreview();
-  function refreshSlotHint() {
-    const count = state.entries.filter(row => row.date === $('#date').value && row.id !== editingId).length;
+    const fields=Object.fromEntries(slotDraftKeys.map(key=>[key,$('#'+key).value]));
+    Native.saveSlotDraft(JSON.stringify({version:1,id:ctx.original?.id??null,returnTo:ctx.returnTo,fields}));
+}
+
+function refreshSlotHint(ctx) {
+    const count = state.entries.filter(row => row.date === $('#date').value && row.id !== ctx.editingId).length;
     $('#slotHint').hidden = count === 0;
     $('#slotHint').textContent = `Уже добавлено слотов за эту дату: ${count}`;
+}
+
+function bindSlotFormEvents(ctx) {
+  for (const key of ['dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus']) {
+    $('#'+key).addEventListener('input', () => { refreshSlotInlineValidation(); refreshSlotDeductions(); refreshSlotPreview(); $('#formError').hidden = true; saveSlotFormDraft(ctx); });
   }
-  refreshSlotHint();
+  refreshSlotInlineValidation();
+  refreshSlotDeductions();
+  refreshSlotPreview();
+  refreshSlotHint(ctx);
   $('#date').addEventListener('change', event => {
     try { $('#formPeriod').textContent = `Период: ${periodLabel(periodFor(event.target.value))}`; $('#dateVisible').textContent = formatDate(event.target.value, true); }
     catch { $('#formPeriod').textContent = ''; }
-    refreshSlotHint();
-    renderWorking(event.target.value);
-    refreshInlineValidation(); refreshDeductions(); refreshSlotPreview(); saveFormDraft();
+    refreshSlotHint(ctx);
+    renderSlotWorkingEditor(event.target.value,ctx);
+    refreshSlotInlineValidation(); refreshSlotDeductions(); refreshSlotPreview(); saveSlotFormDraft(ctx);
   });
-  $('#dayForm').addEventListener('submit', event => {
-    event.preventDefault();
-    if (saving) return;
+  $('#dayForm').addEventListener('submit', event => submitSlotForm(event,ctx));
+  $('#deleteDay')?.addEventListener('click', () => deleteSlotForm(ctx));
+
+}
+
+function submitSlotForm(event,ctx) {
+event.preventDefault();
+    if (ctx.saving) return;
     const fields = Object.fromEntries(new FormData(event.target));
     try {
-      saving = true; $('#saveDay').disabled = true;
-      refreshInlineValidation(); refreshDeductions(); refreshSlotPreview();
+      ctx.saving = true; $('#saveDay').disabled = true;
+      refreshSlotInlineValidation(); refreshSlotDeductions(); refreshSlotPreview();
       const invalid=app.querySelector('.form-grid input[aria-invalid="true"]');
       if(invalid){invalid.focus();throw new Error('Исправьте значения в отмеченных полях.');}
       // The retired supplementary fields remain in legacy entries and exports.
-      let next = upsertEntry(state, { ...fields, displayedNet:original?.displayedNet ?? null, note:original?.note ?? '', id: entryId }, editingId);
-      if (workingDirty) {
+      let next = upsertEntry(state, { ...fields, displayedNet:ctx.original?.displayedNet ?? null, note:ctx.original?.note ?? '', id: ctx.entryId }, ctx.editingId);
+      if (ctx.workingDirty) {
         const mode=$('#slotWorkMode').value;
         const actual=mode==='intervals'?intervalValue(app,'slotWorkHours'):{workingMin:mode==='total'?$('#slotWorkTotal').value:null};
         next=withSlotWorkingTime(next,fields.date,{mode,...actual});
@@ -768,20 +785,19 @@ function form(id = null, returnTo = 'history') {
       Native?.clearSlotDraft?.();
       selectedPeriod = periodFor(fields.date).id;
       document.activeElement?.blur();
-      (returnTo === 'period' ? periodDetails : summary)(); notify('Запись сохранена');
+      (ctx.returnTo === 'period' ? periodDetails : summary)(); notify('Запись сохранена');
     } catch (error) {
-      saving = false; $('#saveDay').disabled = false;
+      ctx.saving = false; $('#saveDay').disabled = false;
       feedback('error');
       const node = $('#formError'); node.textContent = error.message; node.hidden = false;
       node.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-  });
-  $('#deleteDay')?.addEventListener('click', () => {
-    if (!confirm('Удалить только эту запись?')) return;
-    try { persist({ ...state, entries: state.entries.filter(row => row.id !== editingId) }); Native?.clearSlotDraft?.(); (returnTo === 'period' ? periodDetails : history)(); notify('Запись удалена'); }
+}
+
+function deleteSlotForm(ctx) {
+if (!confirm('Удалить только эту запись?')) return;
+    try { persist({ ...state, entries: state.entries.filter(row => row.id !== ctx.editingId) }); Native?.clearSlotDraft?.(); (ctx.returnTo === 'period' ? periodDetails : history)(); notify('Запись удалена'); }
     catch (error) { notify(error.message); }
-  });
-  resetScroll();
 }
 
 function dayCaption(e) {
