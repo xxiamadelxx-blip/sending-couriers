@@ -288,66 +288,190 @@ function cycleBoundaryEntries(state, opening, start, end) {
     return (overlaps && (from < start || legacy.date > end)) || (legacy.date !== e.date && (overlaps || (e.date >= start && e.date <= end)));
   });
 }
-// One financial path for week/fortnight scenarios. Facts and forecasts are never added twice.
+// Resolve one day's confirmed counts and accounted time before range aggregation.
+function resolveFinancialDay(state, date, clockDate, plannedDay) {
+  const fact = state.forecast.days[date];
+  const planned = date < clockDate ? null : plannedDay(date);
+  const slots = state.entries.filter(e => e.date === date && !e.legacyReading?.fromDate);
+  let orders = null, accountedMin = null, source = 'unknown', lower = null, upper = null;
+  let hasPrediction = false;
+
+  if (date < clockDate) {
+    orders = fact?.completed && fact.ordersConfirmed && !fact.conflicts.length
+      ? fact.orders
+      : slots.length && slots.every(e => e.dailyOrders != null)
+        ? slots.reduce((sum, e) => sum + e.dailyOrders, 0)
+        : null;
+    accountedMin = fact?.accountedConfirmed
+      ? fact.appAccountedMin
+      : slots.length && slots.every(e => e.dailyHours != null)
+        ? slots.reduce((sum, e) => sum + e.dailyHours * 60, 0)
+        : null;
+    source = 'fact';
+    lower = upper = orders;
+  } else if (date === clockDate && fact?.ordersConfirmed && !fact.conflicts.length) {
+    if (fact.completed) {
+      orders = fact.orders;
+      accountedMin = fact.accountedConfirmed ? fact.appAccountedMin : null;
+      source = 'fact';
+      lower = upper = orders;
+    } else {
+      const asOf = fact.asOfMinute;
+      const remaining = asOf == null ? null : planned.intervals
+        .filter(interval => interval.state === 'WORK' && interval.end > asOf)
+        .reduce((sum, interval) => sum + interval.end - Math.max(interval.start, asOf), 0);
+      const remainingWindows = asOf == null ? [] : planned.intervals
+        .filter(interval => interval.state === 'WORK' && interval.end > asOf)
+        .map(interval => ({ ...interval, start: Math.max(interval.start, asOf) }));
+      const estimate = remaining == null ? null : weekPlan(state.forecast, date, {
+        [date]: {
+          workingMin: remaining,
+          accountedMin: planned.accountedMin,
+          precision: 'intervals',
+          intervals: remainingWindows
+        }
+      }).days[0].forecast;
+      orders = estimate?.central == null ? null : fact.orders + estimate.central;
+      accountedMin = planned.accountedMin;
+      source = 'fact+remaining';
+      hasPrediction = true;
+      lower = estimate?.lower == null ? null : fact.orders + estimate.lower;
+      upper = estimate?.upper == null ? null : fact.orders + estimate.upper;
+    }
+  } else if (planned) {
+    orders = planned.forecast.central;
+    accountedMin = planned.accountedMin;
+    source = 'scenario';
+    hasPrediction = true;
+    lower = planned.forecast.lower;
+    upper = planned.forecast.upper;
+  }
+
+  const workingMin = date < clockDate || date === clockDate && fact?.completed
+    ? fact?.workConfirmed ? fact.workingMin : null
+    : planned.workingMin;
+  if (accountedMin > 1440) accountedMin = null;
+
+  return {
+    row: { date, orders, accountedMin, workingMin, source, lower, upper },
+    hasPrediction
+  };
+}
+
+function calculateFinancialRange(state, from, count, clockDate, plannedDay) {
+  let orders = 0, hours = 0, complete = true, hasPrediction = false;
+  const rows = [];
+
+  for (let i = 0; i < count; i++) {
+    const date = addDays(from, i);
+    const resolved = resolveFinancialDay(state, date, clockDate, plannedDay);
+    if (resolved.row.orders == null || resolved.row.accountedMin == null) complete = false;
+    if (resolved.hasPrediction) hasPrediction = true;
+    orders += resolved.row.orders ?? 0;
+    hours += (resolved.row.accountedMin ?? 0) / 60;
+    rows.push(resolved.row);
+  }
+
+  const to = addDays(from, count - 1);
+  const asOf = to < clockDate ? to : clockDate < from ? from : clockDate;
+  const terms = paymentTermsFor(state, asOf);
+  const minimumHours = terms.minimumHours ?? MIN_PAYMENT_HOURS;
+  const scenario = calculateScenario({
+    hours: complete ? hours.toFixed(2) : '',
+    orders: complete ? orders : ''
+  }, terms);
+  const byRate = new Map();
+  for (const row of rows) {
+    if (row.accountedMin == null) continue;
+    const rate = paymentTermsFor(state, row.date).hourlyRate;
+    byRate.set(rate, (byRate.get(rate) ?? 0) + row.accountedMin);
+  }
+  const base = complete
+    ? [...byRate].reduce((sum, [rate, minutes]) =>
+      sum + Math.round(baseForHours(Math.round(minutes / 60 * 100), rate) * 100), 0) / 100
+    : null;
+  const result = {
+    ...scenario,
+    hourlyBase: base,
+    pacePremium: scenario.pacePremium == null
+      ? null
+      : scenario.pacePremium === 0 ? 0 : percentage(base, terms.paceBonusPercent)
+  };
+  const critical = calculateScenario({
+    hours: complete ? hours.toFixed(2) : '',
+    orders: complete ? orders : ''
+  }, { ...terms, basePace: terms.criticalPace ?? terms.basePace });
+  const lowerOrders = rows.every(row => row.lower != null)
+    ? rows.reduce((sum, row) => sum + row.lower, 0)
+    : null;
+  const upperOrders = rows.every(row => row.upper != null)
+    ? rows.reduce((sum, row) => sum + row.upper, 0)
+    : null;
+
+  return {
+    ...result,
+    from,
+    to,
+    rows,
+    complete,
+    hasPrediction,
+    terms,
+    minimumHours,
+    lowerOrders,
+    upperOrders,
+    belowCritical: complete ? critical.missingNorm > 0 : null,
+    missingHours: complete ? Math.max(0, minimumHours - hours) : null,
+    risk: !complete
+      ? 'unknown'
+      : hours < minimumHours || result.missingNorm > 0
+        ? 'high'
+        : hasPrediction && lowerOrders < result.normOrders
+          ? 'medium'
+          : hasPrediction ? 'conditional' : 'met',
+    conditionalIncome: complete ? result.hourlyBase : null
+  };
+}
+
 export function forecastFinances(state, start, overrides = {}, clockDate = today()) {
   const week = weekPlan(state.forecast, start, overrides);
   // A day is predicted once per evaluation, shared by the week and fortnight.
-  const projected = new Map(week.days.map(d=>[d.date,d]));
-  const plannedDay = date => {if(!projected.has(date))projected.set(date,forecastDay(state.forecast,date,overrides));return projected.get(date);};
-  const calculateRange = (from, count) => {
-    let orders=0, hours=0, complete=true, hasPrediction=false;
-    const rows=[];
-    for(let i=0;i<count;i++) {
-      const date=addDays(from,i),fact=state.forecast.days[date];
-      const planned=date<clockDate?null:plannedDay(date);
-      const slots=state.entries.filter(e=>e.date===date&&!e.legacyReading?.fromDate);
-      let n=null,m=null,source='unknown',lower=null,upper=null;
-      if(date<clockDate) {
-        // The user's confirmed day total wins; existing slots are an alternative source.
-        n=fact?.completed&&fact.ordersConfirmed&&!fact.conflicts.length?fact.orders:slots.length&&slots.every(e=>e.dailyOrders!=null)?slots.reduce((s,e)=>s+e.dailyOrders,0):null;
-        m=fact?.accountedConfirmed?fact.appAccountedMin:slots.length&&slots.every(e=>e.dailyHours!=null)?slots.reduce((s,e)=>s+e.dailyHours*60,0):null;
-        source='fact';
-        lower=upper=n;
-      } else if(date===clockDate && fact?.ordersConfirmed && !fact.conflicts.length) {
-        if(fact.completed) {n=fact.orders;m=fact.accountedConfirmed?fact.appAccountedMin:null;source='fact';lower=upper=n;}
-        else {
-          const asOf=fact.asOfMinute;
-          const remaining=asOf==null?null:planned.intervals.filter(i=>i.state==='WORK'&&i.end>asOf).reduce((n,i)=>n+i.end-Math.max(i.start,asOf),0);
-          const remainingWindows=asOf==null?[]:planned.intervals.filter(i=>i.state==='WORK'&&i.end>asOf).map(i=>({...i,start:Math.max(i.start,asOf)}));
-          const estimate=remaining==null?null:weekPlan(state.forecast,date,{[date]:{workingMin:remaining,accountedMin:planned.accountedMin,precision:'intervals',intervals:remainingWindows}}).days[0].forecast;
-          n=estimate?.central==null?null:fact.orders+estimate.central;m=planned.accountedMin;source='fact+remaining';hasPrediction=true;
-          lower=estimate?.lower==null?null:fact.orders+estimate.lower;upper=estimate?.upper==null?null:fact.orders+estimate.upper;
-        }
-      } else if(planned) { n=planned.forecast.central; m=planned.accountedMin;source='scenario';hasPrediction=true;lower=planned.forecast.lower;upper=planned.forecast.upper; }
-      if(n==null||m==null) complete=false;
-      const workingMin=date<clockDate||date===clockDate&&fact?.completed?fact?.workConfirmed?fact.workingMin:null:planned.workingMin;
-      if(m>1440) {m=null;complete=false;}
-      orders+=n??0;hours+=(m??0)/60;rows.push({date,orders:n,accountedMin:m,workingMin,source,lower,upper});
-    }
-    const to=addDays(from,count-1),asOf=to < clockDate ? to : clockDate < from ? from : clockDate;
-    const terms=paymentTermsFor(state,asOf),minimumHours=terms.minimumHours??MIN_PAYMENT_HOURS;
-    const scenario=calculateScenario({hours:complete?hours.toFixed(2):'',orders:complete?orders:''},terms);
-    const byRate=new Map();
-    for(const row of rows)if(row.accountedMin!=null){const rate=paymentTermsFor(state,row.date).hourlyRate;byRate.set(rate,(byRate.get(rate)??0)+row.accountedMin);}
-    const base=complete?[...byRate].reduce((n,[rate,minutes])=>n+Math.round(baseForHours(Math.round(minutes/60*100),rate)*100),0)/100:null;
-    const result={...scenario,hourlyBase:base,pacePremium:scenario.pacePremium==null?null:scenario.pacePremium===0?0:percentage(base,terms.paceBonusPercent)};
-    const critical=calculateScenario({hours:complete?hours.toFixed(2):'',orders:complete?orders:''},{...terms,basePace:terms.criticalPace??terms.basePace});
-    const lowerOrders=rows.every(r=>r.lower!=null)?rows.reduce((n,r)=>n+r.lower,0):null;
-    const upperOrders=rows.every(r=>r.upper!=null)?rows.reduce((n,r)=>n+r.upper,0):null;
-    return {...result,from,to,rows,complete,hasPrediction,terms,minimumHours,
-      lowerOrders,upperOrders,belowCritical:complete?critical.missingNorm>0:null,
-      missingHours:complete?Math.max(0,minimumHours-hours):null,
-      risk:!complete?'unknown':hours<minimumHours||result.missingNorm>0?'high':hasPrediction&&lowerOrders<result.normOrders?'medium':hasPrediction?'conditional':'met',
-      conditionalIncome:complete?result.hourlyBase:null};
+  const projected = new Map(week.days.map(day => [day.date, day]));
+  const plannedDay = date => {
+    if (!projected.has(date)) projected.set(date, forecastDay(state.forecast, date, overrides));
+    return projected.get(date);
   };
-  const weekFinancial=calculateRange(start,7),fortnight=calculateRange(periodFor(start).start,14);
-  const projectedDays=week.days.map((d,i)=>{
-    const r=weekFinancial.rows[i];return {...d,workingMin:r.workingMin,accountedMin:r.accountedMin,status:r.source,
-      forecast:{...d.forecast,central:r.orders,lower:r.lower,upper:r.upper}};
+
+  const weekFinancial = calculateFinancialRange(state, start, 7, clockDate, plannedDay);
+  const fortnight = calculateFinancialRange(state, periodFor(start).start, 14, clockDate, plannedDay);
+  const projectedDays = week.days.map((day, index) => {
+    const row = weekFinancial.rows[index];
+    return {
+      ...day,
+      workingMin: row.workingMin,
+      accountedMin: row.accountedMin,
+      status: row.source,
+      forecast: { ...day.forecast, central: row.orders, lower: row.lower, upper: row.upper }
+    };
   });
-  const sum=key=>weekFinancial.rows.every(r=>r[key]!=null)?weekFinancial.rows.reduce((n,r)=>n+r[key],0):null;
-  return {week:{...week,days:projectedDays,central:sum('orders'),lower:sum('lower'),upper:sum('upper'),workingMin:sum('workingMin'),accountedMin:sum('accountedMin')},weekFinancial,fortnight};
+  const sum = key => weekFinancial.rows.every(row => row[key] != null)
+    ? weekFinancial.rows.reduce((total, row) => total + row[key], 0)
+    : null;
+
+  return {
+    week: {
+      ...week,
+      days: projectedDays,
+      central: sum('orders'),
+      lower: sum('lower'),
+      upper: sum('upper'),
+      workingMin: sum('workingMin'),
+      accountedMin: sum('accountedMin')
+    },
+    weekFinancial,
+    fortnight
+  };
 }
+
 export function calculatePremiumCycle(state, date = today()) {
   const anchor = state.settings?.premiumCycleStart;
   if (!anchor) return { status: 'unconfigured', start: null, end: null, premium: null, totalIncome: null, hourlyBase: null, hours: null, entries: [], missingHours: 0, elapsedDays: 0, cycleNumber: null, boundaryEntries: [], boundaryNote: '', breakdown:[], opening:null, openingPercent:null, excludedCount:0 };

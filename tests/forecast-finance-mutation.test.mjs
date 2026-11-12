@@ -106,3 +106,33 @@ test('incomplete past fact remains unknown instead of becoming zero',()=>{
   assert.equal(result.rows[0].orders,null);
   assert.equal(result.rows[0].accountedMin,null);
 });
+
+test('financial week follows the selected start while payout totals use the anchored fortnight',()=>{
+  const state=stateWithTerms(),periodStart=start;
+  for(let i=0;i<14;i++) state.forecast=saveDay(state.forecast,{
+    date:addDays(periodStart,i),orders:40+i,ordersConfirmed:true,completed:true,
+    workConfirmed:true,workingMin:540,precision:'total',
+    appAccountedMin:(10+i)*60,accountedConfirmed:true
+  });
+  const result=forecastFinances(state,addDays(periodStart,1),{},'2026-11-01');
+  assert.equal(result.weekFinancial.from,'2026-10-17');
+  assert.equal(result.weekFinancial.to,'2026-10-23');
+  assert.equal(result.weekFinancial.rows.length,7);
+  assert.equal(result.weekFinancial.orders,308);
+  assert.equal(result.weekFinancial.hours,98);
+  assert.equal(result.weekFinancial.hourlyBase,35280);
+  assert.equal(result.weekFinancial.complete,true);
+  assert.equal(result.weekFinancial.risk,'met');
+  assert.equal(result.week.central,308);
+  assert.equal(result.week.workingMin,3780);
+  assert.equal(result.week.accountedMin,5880);
+  assert.equal(result.fortnight.from,periodStart);
+  assert.equal(result.fortnight.to,'2026-10-29');
+  assert.equal(result.fortnight.rows.length,14);
+  assert.equal(result.fortnight.orders,651);
+  assert.equal(result.fortnight.hours,231);
+  assert.equal(result.fortnight.hourlyBase,83160);
+  assert.equal(result.fortnight.complete,true);
+  assert.equal(result.fortnight.risk,'met');
+});
+
