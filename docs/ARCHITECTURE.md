@@ -1,31 +1,22 @@
 # Architecture
 
-This describes the source at the current refactor checkpoint. See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the verified commit and open gates.
+This reflects the source at the current checkpoint; exact verification is in [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md).
 
-## Components
-
-- **Web UI (`web/`)**: `index.html` loads `app.mjs`, which renders screens, handles navigation and coordinates state. `core.mjs` contains date, validation, ledger, income, payout and premium calculations. Forecast logic is split across `forecast*.mjs`, count-model/runtime modules and a Web Worker. Import/reconciliation, period views, slot working-time handling, feedback and weather have separate modules.
-- **Android host (`android/src/ru/courier/finance/`)**: `MainActivity` configures the WebView, serves bundled assets from `web/`, exposes `CourierNative`, and handles Android file selection, export, theme, feedback and weather requests. `CourierDatabase` owns the native SQLite schema and fact import/mirror operations. `ForecastAutomation` and `ForecastAutomationWorker` run local scheduled maintenance through WorkManager.
-- **Build and QA**: `build.py` packages the WebView assets and Android classes; `.github/workflows/ui-audit.yml` is the existing Android 35 emulator and release-transfer QA path. `preview.mjs` serves the same `web/` directory for browser checks. JavaScript and Python tests live under `tests/`.
+## Runtime
+- **Web (`web/`)**: `index.html` loads `app.mjs`; UI/navigation and storage coordination live in the app layer. `core.mjs` owns financial calculations. Forecasting, count-model preparation, import/reconciliation, period screens, weather and other UI areas are split into focused modules.
+- **Android (`android/src/ru/courier/finance/`)**: `MainActivity` hosts the WebView and `CourierNative` bridge, and handles platform file, export, theme, feedback and weather operations. `CourierDatabase` owns SQLite and fact mirroring. Forecast maintenance uses local WorkManager jobs.
+- **Build and checks**: `build.py` packages the app; `.github/workflows/ui-audit.yml` provides Android 35 gates. `preview.mjs` serves the same web files. Tests are under `tests/`.
 
 ## Data flow
+1. WebView or browser preview loads the same web assets.
+2. Android reads serialized state through `CourierNative`; preview uses `localStorage`. JavaScript owns calculations; model fitting can run in a Web Worker.
+3. Edits and accepted imports normalize facts, update state and recalculate. Android persists through the bridge; preview saves locally.
+4. XLSX, JSON and video imports pass through their parsers and reconciliation before updating facts. Export uses the native file/share bridge.
+5. Weather is optional external input. Failures leave saved financial data intact.
 
-1. Android loads the packaged WebView assets; browser preview loads the same HTML and modules directly.
-2. The UI obtains the serialized state through `CourierNative.readState()` on Android or `localStorage` in preview. Calculations run in JavaScript; forecast model preparation can run in a Web Worker.
-3. User edits and accepted imports update the state, then call `CourierNative.writeState()` on Android or save to browser storage. Java validates size/schema limits and coordinates native persistence.
-4. XLSX/JSON/video entry points pass data into JavaScript callbacks; JavaScript normalizes and merges observed facts before recalculating totals. Export uses the native file/share bridge.
-5. Weather is optional external data. Android fetches a public forecast and returns it through the WebView bridge; failures leave the local financial state intact.
-
-## Persistence and compatibility
-
-- Browser preview uses `localStorage` key `courier-finance-v1`.
-- Android retains the legacy JSON state in SharedPreferences file `courier_finance`, key `state`, and stores form drafts and preferences there.
-- SQLite is `courier_facts_v1.db`, schema version 5. The `m2_sqlite_primary` preference controls whether verified SQLite state is read/written as primary. Otherwise JSON remains authoritative while facts are mirrored. On primary writes, the JSON value is retained as a backup/fallback. Do not force migration or delete either store without a separately verified migration plan.
-- Forecast background work consumes local facts. It does not send financial records to a server.
-
-## Stable contracts and decisions
-
-- The WebView bridge name is `CourierNative`; its state, file, feedback, theme, font-scale, forecast and weather methods are implemented in `MainActivity.NativeBridge`. Callback entry points include `window.receiveImport`, `window.receiveForecastImport` and `window.receiveWeather`.
-- Keep financial rules in JavaScript so preview and Android use the same implementation. Java owns Android lifecycle, platform APIs, local database access and WorkManager integration.
-- Keep SQLite migration reversible while the older JSON store remains in use. Release updates must preserve the transfer package ID and established signing identity; private signing material is not stored in Git or public CI.
-- No separate decisions log is needed yet: these decisions are few and belong with the architecture they constrain.
+## Persistence and contracts
+- Preview storage: `courier-finance-v1`. Android legacy JSON: SharedPreferences `courier_finance/state`; form drafts and preferences are stored locally.
+- SQLite: `courier_facts_v1.db`, schema 5. Unless `m2_sqlite_primary` is explicitly verified and enabled, JSON remains authoritative and SQLite is a mirror. Preserve both stores and migrations.
+- `WorkbookReader` reads XLSX offline with size/part/cell bounds; it does not execute formulas, macros or links. `SheetFactNormalizer` maps grounded fields from seven known sheets and rejects ambiguous rows; imports preserve unknowns instead of fabricating facts.
+- Bridge name and callbacks are public contracts: `CourierNative`, `window.receiveImport`, `window.receiveForecastImport` and `window.receiveWeather`. Keep calculations in shared JavaScript and Android lifecycle/platform work in Java.
+- Financial data stays local. Release updates preserve package `ru.courier.finance.transfer` and the owner signing identity. Private signing files do not belong in Git or public CI.

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,importDays,normalizeForecast,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,localClock,addDays,syncSlots,forecastClock,mergeForecast,videoImportReceipt,restoreVideoOrderEvidence} from '../web/forecast.mjs';
 import {emptyState,normalizeState,mergeImport,upsertEntry,calculate,forecastFinances,setPaymentTerms} from '../web/core.mjs';
+import {COUNT_CONFIG,validCountModel,resetCountModels,installCountModels,exportCountModels} from '../web/forecast-count.mjs';
 const profile=(data=emptyForecast(),patch={})=>saveProfile(data,{effectiveFrom:'2026-01-01',timezone:'Europe/Moscow',zone:'Test',outsidePayment:'UNKNOWN',week:Array.from({length:7},()=>({intervals:parseWindows('09:00–14:00;17:00–21:00'),accountedMin:840})),...patch},'2026-01-01T00:00:00Z');
 const confirmed=(date,orders=27)=>({date,orders,ordersConfirmed:true,precision:'intervals',intervals:[...parseWindows('09:00–14:00;17:00–21:00'),...parseWindows('07:00–09:00;14:00–17:00','UNAVAILABLE')],workConfirmed:true,appAccountedMin:840,accountedConfirmed:true});
 test('same displayed minute does not become known zero delivery duration',()=>{
@@ -208,4 +209,73 @@ test('imported interval forecasts reject malformed lists, booleans and reversed 
    assert.throws(()=>normalizeForecast({...d,snapshots:[{...d.snapshots[0],intervalForecasts:intervals}]}));
  }
  assert.deepEqual(normalizeForecast(d).snapshots[0].intervalForecasts,d.snapshots[0].intervalForecasts);
+});
+
+
+const makeModel=()=>({
+ config:COUNT_CONFIG,key:'test-key',
+ fits:{
+  bins:[{date:'2026-10-01',weekday:3,hour:9,start:540,exposure:.5,count:1,confirmed:true}],
+  hourly:[{date:'2026-10-01',weekday:3,hour:9,start:540,exposure:.5,count:1,confirmed:true}],
+  step:30,timeKind:'deliveredMin',
+  poisson:{beta:Array(32).fill(0),alpha:.2,dispersion:.3,estimatedAlpha:.4},
+  nb:{beta:Array(32).fill(0),alpha:.2,dispersion:.3,estimatedAlpha:.4}
+ },
+ choice:{selected:'poisson',results:[{date:'2026-10-01',fact:1,baseline:1,poisson:1,nb:1}]},
+ validation:{n:1,results:[{date:'2026-10-01',fact:1,predicted:1,baseline:1,error:0,covered:true}],
+  mae:0,wape:0,bias:0,smape:0,baselineMAE:0,coverage:1}
+});
+const corruptions=[
+ ['config',a=>{a.config='other'}],
+ ['key',a=>{a.key=1}],
+ ['selected model',a=>{a.choice.selected='other'}],
+ ['bins type',a=>{a.fits.bins={}}],
+ ['bins cap',a=>{a.fits.bins=Array(5001).fill(null)}],
+ ['hourly type',a=>{a.fits.hourly=null}],
+ ['hourly cap',a=>{a.fits.hourly=Array(5001).fill(null)}],
+ ['choice result cap',a=>{a.choice.results=Array(91).fill(null)}],
+ ['step',a=>{a.fits.step=15}],
+ ['time kind',a=>{a.fits.timeKind='visible'}],
+ ['bin date',a=>{a.fits.bins[0].date='bad'}],
+ ['bin weekday',a=>{a.fits.bins[0].weekday=7}],
+ ['bin hour',a=>{a.fits.bins[0].hour=24}],
+ ['bin start',a=>{a.fits.bins[0].start=1440}],
+ ['bin exposure',a=>{a.fits.bins[0].exposure=0}],
+ ['bin count',a=>{a.fits.bins[0].count=1.5}],
+ ['bin confirmation',a=>{a.fits.bins[0].confirmed=false}],
+ ['hourly count',a=>{a.fits.hourly[0].count=-1}],
+ ['choice date',a=>{a.choice.results[0].date='bad'}],
+ ['choice fact',a=>{a.choice.results[0].fact=-1}],
+ ['choice baseline',a=>{a.choice.results[0].baseline=Infinity}],
+ ['choice model value',a=>{a.choice.results[0].poisson=-1}],
+ ['fit beta length',a=>{a.fits.poisson.beta=Array(31).fill(0)}],
+ ['fit beta bound',a=>{a.fits.poisson.beta[0]=12.1}],
+ ['fit alpha',a=>{a.fits.poisson.alpha=-1}],
+ ['fit dispersion',a=>{a.fits.nb.dispersion=-1}],
+ ['fit estimated alpha',a=>{a.fits.nb.estimatedAlpha=NaN}],
+ ['validation sample',a=>{a.validation.n=91}],
+ ['validation results type',a=>{a.validation.results={}}],
+ ['validation row error',a=>{a.validation.results[0].error=NaN}],
+ ['validation coverage flag',a=>{a.validation.results[0].covered=1}],
+ ['validation metric',a=>{a.validation.coverage=NaN}]
+];
+test('stored count model validation accepts canonical data and rejects malformed nested records',()=>{
+ assert.equal(validCountModel(makeModel()),true,'canonical model');
+ for(const [name,mutate] of corruptions){
+  const model=structuredClone(makeModel());mutate(model);
+  assert.equal(validCountModel(model),false,name);
+ }
+});
+test('baseline artifacts remain valid and installation skips corrupted persisted models',()=>{
+ const baseline={config:COUNT_CONFIG,key:'baseline-key',
+  fits:{bins:[],hourly:[],step:60,timeKind:null},
+  choice:{selected:'baseline',results:[]}};
+ const corrupt=structuredClone(makeModel());corrupt.choice.selected='unknown';
+ assert.equal(validCountModel(baseline),true);
+ assert.equal(validCountModel(corrupt),false);
+ resetCountModels();
+ try {
+  const complete=makeModel();installCountModels([complete,corrupt,baseline]);
+  assert.deepEqual(exportCountModels(),[complete,baseline]);
+ } finally { resetCountModels(); }
 });
