@@ -93,6 +93,8 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_a11y_layout_matrix.py' -v
       - name: Independent-gate orchestration unit tests
         run: python3 -m unittest discover -s tests -p 'test_ui_gate_orchestrator.py' -v
+      - name: Full Python regression suite
+        run: python3 -m unittest discover -s tests -v
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -133,6 +135,16 @@ jobs:
                   if source.is_file():
                       assert apk.read('assets/www/'+source.name) == source.read_bytes(), source
           PY
+      - name: Run production sheet fact normalization regression
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/courier-ui-source"
+          probe="$source/build/sheet-probe"
+          json_jar="$RUNNER_TEMP/tools/test-deps/json-20250517.jar"
+          mkdir -p "$probe"
+          javac -encoding UTF-8 -cp "$source/build/classes:$json_jar" \
+            -d "$probe" "$source/tests/SheetFactsProbe.java"
+          java -cp "$probe:$source/build/classes:$json_jar" ru.courier.finance.SheetFactsProbe
       - name: Publish current-source test APK for review
         if: always() && steps.build-ui-apk.outcome == 'success'
         uses: actions/upload-artifact@v4

@@ -96,14 +96,16 @@ def wait_home(seconds=20):
             continue
         if dismiss_launcher_anr(root):
             continue
-        if find_node(root, "Главная") is not None and find_node(root, "Сохранить слот") is None:
+        if (find_node(root, "Главная") is not None
+                and find_node(root, "Рабочий ритм") is not None
+                and find_node(root, "Сохранить слот") is None):
             return root
         time.sleep(1)
     if last_snapshot_error is not None:
         raise AssertionError(
             f"Home was not observed within {seconds}s; latest Android XML dump failed: {last_snapshot_error}"
         ) from last_snapshot_error
-    raise AssertionError("Slot form did not return to home")
+    raise AssertionError("Home screen was not observed within the wait timeout")
 
 
 def tap_node(name):

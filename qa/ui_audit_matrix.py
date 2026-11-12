@@ -288,6 +288,7 @@ def main():
         device.wait_node('Импортировать отчёт')
         capture('01-empty-forecast-360-dark')
     device.tap_node('Главная')
+    device.wait_home(20)
     device.add_slot(hours=4, orders=8, reward=1200)
     device.add_slot(hours=5, orders=10, reward=2000)
     if args.phase == 'after' and args.focus == 'full':
