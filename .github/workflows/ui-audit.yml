@@ -141,10 +141,15 @@ jobs:
           source="$RUNNER_TEMP/courier-ui-source"
           probe="$source/build/sheet-probe"
           json_jar="$RUNNER_TEMP/tools/test-deps/json-20250517.jar"
+          classes="$source/app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"
+          if [ ! -f "$classes/ru/courier/finance/SheetFactNormalizer.class" ]; then
+            classes="$source/build/classes"
+          fi
+          test -f "$classes/ru/courier/finance/SheetFactNormalizer.class"
           mkdir -p "$probe"
-          javac -encoding UTF-8 -cp "$source/build/classes:$json_jar" \
+          javac -encoding UTF-8 -cp "$classes:$json_jar" \
             -d "$probe" "$source/tests/SheetFactsProbe.java"
-          java -cp "$probe:$source/build/classes:$json_jar" ru.courier.finance.SheetFactsProbe
+          java -cp "$probe:$classes:$json_jar" ru.courier.finance.SheetFactsProbe
       - name: Publish current-source test APK for review
         if: always() && steps.build-ui-apk.outcome == 'success'
         uses: actions/upload-artifact@v4

@@ -13,8 +13,10 @@ spec.loader.exec_module(device)
 
 class WaitHomeRecoveryTests(TestCase):
     @staticmethod
-    def home():
-        return ET.fromstring('<hierarchy><node text="Главная" /><node text="Рабочий ритм" /><node text="Прогноз" /></hierarchy>')
+    def home(title="Рабочий ритм"):
+        return ET.fromstring(
+            f'<hierarchy><node text="Главная" /><node text="{title}" /><node text="Прогноз" /></hierarchy>'
+        )
 
     def test_retry_after_transient_uiautomator_nonzero_exit(self):
         root = self.home()
@@ -31,6 +33,11 @@ class WaitHomeRecoveryTests(TestCase):
         with patch.object(device, "dump", side_effect=[ET.ParseError("no element found"), root]):
             with patch.object(device.time, "sleep", return_value=None):
                 self.assertIs(device.wait_home(seconds=5), root)
+
+    def test_accepts_pinned_legacy_release_home_heading(self):
+        legacy_home = self.home("Доход курьера")
+        with patch.object(device, "dump", return_value=legacy_home):
+            self.assertIs(device.wait_home(seconds=5), legacy_home)
 
     def test_navigation_tab_alone_does_not_count_as_home(self):
         history = ET.fromstring(
