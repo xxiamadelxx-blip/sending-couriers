@@ -88,8 +88,8 @@ public final class SheetFactNormalizer {
         if("Дневные итоги".equals(sheet)) return normalizeDailyTotals(row);
         if("Финансовые факты".equals(sheet)) return normalizeFinancialFact(row);
         if("Прогнозы".equals(sheet)) return normalizeHistoricalForecast(row);
-        if("Финансовые правила".equals(sheet)) return normalizeHistoricalRule(row);
-        if("Модели".equals(sheet)) return normalizeHistoricalModel(row);
+        if("Финансовые правила".equals(sheet)||"Модели".equals(sheet))
+            return normalizeHistoricalArchive(sheet,row);
         if("Снимки периода".equals(sheet)) return normalizePeriodSnapshot(row);
         return null;
     }
@@ -188,23 +188,23 @@ public final class SheetFactNormalizer {
         return result;
     }
 
-    private static JSONObject normalizeHistoricalRule(JSONObject row) throws Exception {
-        String name=cell(row,"A");
-        if(name==null)return null;
-        JSONObject result=new JSONObject().put("table","historical_rule_specs")
-            .put("rule_label",name).put("source_status","declared_archive");
-        String rule=cell(row,"B");if(rule!=null)result.put("rule_text",rule);
-        return result;
-    }
-
-    private static JSONObject normalizeHistoricalModel(JSONObject row) throws Exception {
-        String model=cell(row,"A");
-        if(model==null)return null;
-        JSONObject result=new JSONObject().put("table","historical_model_specs")
-            .put("model_label",model).put("source_status","declared_archive");
-        String state=cell(row,"B"),version=cell(row,"M");
-        if(state!=null)result.put("model_state",state);
-        if(version!=null)result.put("declared_version",version);
+    private static JSONObject normalizeHistoricalArchive(String sheet, JSONObject row) throws Exception {
+        boolean model="Модели".equals(sheet);
+        if(!model&&!"Финансовые правила".equals(sheet))return null;
+        String label=cell(row,"A");
+        if(label==null)return null;
+        JSONObject result=new JSONObject()
+            .put("table",model?"historical_model_specs":"historical_rule_specs")
+            .put(model?"model_label":"rule_label",label)
+            .put("source_status","declared_archive");
+        if(model) {
+            String state=cell(row,"B"),version=cell(row,"M");
+            if(state!=null)result.put("model_state",state);
+            if(version!=null)result.put("declared_version",version);
+        } else {
+            String rule=cell(row,"B");
+            if(rule!=null)result.put("rule_text",rule);
+        }
         return result;
     }
 
