@@ -96,8 +96,9 @@ def wait_home(seconds=20):
             continue
         if dismiss_launcher_anr(root):
             continue
-        home_heading = (find_node(root, "Рабочий ритм")
-                        or find_node(root, "Доход курьера"))
+        home_heading = find_node(root, "Рабочий ритм")
+        if home_heading is None:
+            home_heading = find_node(root, "Доход курьера")
         if (find_node(root, "Главная") is not None
                 and home_heading is not None
                 and find_node(root, "Сохранить слот") is None):
