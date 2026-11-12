@@ -188,7 +188,6 @@ function validateCounts(input,cutoff,modelVersion,zone=''){
  const n=results.length,total=results.reduce((s,r)=>s+r.fact,0);return {n,mae:n?results.reduce((s,r)=>s+Math.abs(r.error),0)/n:null,wape:total?results.reduce((s,r)=>s+Math.abs(r.error),0)/total:null,bias:n?results.reduce((s,r)=>s+r.error,0)/n:null,smape:n?results.reduce((s,r)=>s+(r.fact+r.predicted?2*Math.abs(r.error)/(r.fact+r.predicted):0),0)/n:null,baselineMAE:n?results.reduce((s,r)=>s+Math.abs(r.baseline-r.fact),0)/n:null,coverage:n?results.filter(r=>r.covered).length/n:null,results,method:'walk-forward; confirmed held-out days; nested selection only earlier dates; scenarios excluded'};
 }
 
-
 self.onmessage=event=>{const {id,data,date,zone,version}=event.data;try{
  installCountModels(data.trainedModel?[data.trainedModel]:[]);
  const artifact=prepareCountModel(data.days,date,zone);
@@ -196,4 +195,3 @@ self.onmessage=event=>{const {id,data,date,zone,version}=event.data;try{
  if(!artifact.validation)artifact.validation=validateCounts(data.days,date,version,zone);
  self.postMessage({id,artifact});
 }catch(error){self.postMessage({id,error:error.message});}};
-
