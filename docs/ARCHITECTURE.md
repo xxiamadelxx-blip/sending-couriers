@@ -5,7 +5,7 @@ This reflects the source at the current checkpoint; exact verification is in [PR
 ## Runtime
 - **Web (`web/`)**: `index.html` loads `app.mjs`; UI/navigation and storage coordination live in the app layer. `core.mjs` owns financial calculations. Forecasting, count-model preparation, import/reconciliation, period screens, weather and other UI areas are split into focused modules.
 - **Android (`android/src/ru/courier/finance/`)**: `MainActivity` hosts the WebView and `CourierNative` bridge, and handles platform file, export, theme, feedback and weather operations. `CourierDatabase` owns SQLite and fact mirroring. Forecast maintenance uses local WorkManager jobs.
-- **Build and checks**: `build.py` packages the app; `.github/workflows/ui-audit.yml` provides Android 35 gates. `preview.mjs` serves the same web files. Tests are under `tests/`.
+- **Build and checks**: `build.py` packages the app; `.github/workflows/ui-audit.yml` provides Android 35 gates. `preview.mjs` serves the same web files. `forecast-count.mjs` generates `forecast-worker-bundle.js` via `tools/generate_forecast_worker.py`; `npm test` rejects stale bundles.
 
 ## Data flow
 1. WebView or browser preview loads the same web assets.

@@ -105,15 +105,36 @@ function prepareCountModel(input,date,zone=''){
  return remember(models,h.key,{config:COUNT_CONFIG,key:h.key,zone,cutoff:h.rows.at(-1)?.date??null,fits,choice});
 }
 function exportCountModels(){return [...models.values()];}
+const validCountDate=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(stamp(d));
+const nonnegativeCount=n=>Number.isFinite(n)&&n>=0;
+function validCountBin(b) {
+ return Boolean(b&&validCountDate(b.date)&&Number.isInteger(b.weekday)&&b.weekday>=0&&b.weekday<=6
+  &&Number.isInteger(b.hour)&&b.hour>=0&&b.hour<=23&&Number.isInteger(b.start)&&b.start>=0&&b.start<1440
+  &&Number.isFinite(b.exposure)&&b.exposure>0&&b.exposure<=1&&Number.isInteger(b.count)&&b.count>=0&&b.confirmed===true);
+}
+function validChoiceResult(r) {
+ return Boolean(r&&validCountDate(r.date)&&nonnegativeCount(r.fact)&&nonnegativeCount(r.baseline)
+  &&['poisson','nb'].every(k=>r[k]==null||nonnegativeCount(r[k])));
+}
+function validModelFit(f) {
+ return !f||(Array.isArray(f.beta)&&f.beta.length===32
+  &&!f.beta.some(b=>!Number.isFinite(b)||Math.abs(b)>12)
+  &&nonnegativeCount(f.alpha)&&nonnegativeCount(f.dispersion)&&nonnegativeCount(f.estimatedAlpha));
+}
+function validCountValidation(q) {
+ if(!Number.isInteger(q.n)||q.n<0||q.n>90||!Array.isArray(q.results)||q.results.length>90)return false;
+ if(q.results.some(r=>!r||!validCountDate(r.date)||!nonnegativeCount(r.fact)||!nonnegativeCount(r.predicted)
+  ||!nonnegativeCount(r.baseline)||!Number.isFinite(r.error)||typeof r.covered!=='boolean'))return false;
+ return ['mae','wape','bias','smape','baselineMAE','coverage'].every(k=>q[k]==null||Number.isFinite(q[k]));
+}
 function validCountModel(a){
  if(a?.config!==COUNT_CONFIG||typeof a.key!=='string'||!a.fits||!a.choice||!['baseline','poisson','nb'].includes(a.choice.selected))return false;
  if(!Array.isArray(a.fits.bins)||a.fits.bins.length>5000||!Array.isArray(a.fits.hourly)||a.fits.hourly.length>5000||!Array.isArray(a.choice.results)||a.choice.results.length>90)return false;
- const date=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(stamp(d)),nonnegative=n=>Number.isFinite(n)&&n>=0;
  if(![30,60].includes(a.fits.step)||![null,'deliveredMin','acceptedMin','visibleMin'].includes(a.fits.timeKind))return false;
- if([...a.fits.bins,...a.fits.hourly].some(b=>!b||!date(b.date)||!Number.isInteger(b.weekday)||b.weekday<0||b.weekday>6||!Number.isInteger(b.hour)||b.hour<0||b.hour>23||!Number.isInteger(b.start)||b.start<0||b.start>=1440||!Number.isFinite(b.exposure)||b.exposure<=0||b.exposure>1||!Number.isInteger(b.count)||b.count<0||b.confirmed!==true))return false;
- if(a.choice.results.some(r=>!r||!date(r.date)||!nonnegative(r.fact)||!nonnegative(r.baseline)||['poisson','nb'].some(k=>r[k]!=null&&!nonnegative(r[k]))))return false;
- if([a.fits.poisson,a.fits.nb].some(f=>f&&(!Array.isArray(f.beta)||f.beta.length!==32||f.beta.some(b=>!Number.isFinite(b)||Math.abs(b)>12)||!nonnegative(f.alpha)||!nonnegative(f.dispersion)||!nonnegative(f.estimatedAlpha))))return false;
- if(a.validation){const q=a.validation;if(!Number.isInteger(q.n)||q.n<0||q.n>90||!Array.isArray(q.results)||q.results.length>90||q.results.some(r=>!r||!date(r.date)||!nonnegative(r.fact)||!nonnegative(r.predicted)||!nonnegative(r.baseline)||!Number.isFinite(r.error)||typeof r.covered!=='boolean'))return false;for(const k of ['mae','wape','bias','smape','baselineMAE','coverage'])if(q[k]!=null&&!Number.isFinite(q[k]))return false;}
+ if([...a.fits.bins,...a.fits.hourly].some(b=>!validCountBin(b)))return false;
+ if(a.choice.results.some(r=>!validChoiceResult(r)))return false;
+ if(!validModelFit(a.fits.poisson)||!validModelFit(a.fits.nb))return false;
+ if(a.validation&&!validCountValidation(a.validation))return false;
  return true;
 }
 function installCountModels(artifacts){for(const a of artifacts??[]){
@@ -167,6 +188,7 @@ function validateCounts(input,cutoff,modelVersion,zone=''){
  const n=results.length,total=results.reduce((s,r)=>s+r.fact,0);return {n,mae:n?results.reduce((s,r)=>s+Math.abs(r.error),0)/n:null,wape:total?results.reduce((s,r)=>s+Math.abs(r.error),0)/total:null,bias:n?results.reduce((s,r)=>s+r.error,0)/n:null,smape:n?results.reduce((s,r)=>s+(r.fact+r.predicted?2*Math.abs(r.error)/(r.fact+r.predicted):0),0)/n:null,baselineMAE:n?results.reduce((s,r)=>s+Math.abs(r.baseline-r.fact),0)/n:null,coverage:n?results.filter(r=>r.covered).length/n:null,results,method:'walk-forward; confirmed held-out days; nested selection only earlier dates; scenarios excluded'};
 }
 
+
 self.onmessage=event=>{const {id,data,date,zone,version}=event.data;try{
  installCountModels(data.trainedModel?[data.trainedModel]:[]);
  const artifact=prepareCountModel(data.days,date,zone);
@@ -174,3 +196,4 @@ self.onmessage=event=>{const {id,data,date,zone,version}=event.data;try{
  if(!artifact.validation)artifact.validation=validateCounts(data.days,date,version,zone);
  self.postMessage({id,artifact});
 }catch(error){self.postMessage({id,error:error.message});}};
+
