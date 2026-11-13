@@ -75,20 +75,20 @@ function renderForecast(ctx,next=ctx.screen) {
 }
 
 
+function videoRecoveryNote(receipt,recovery) {
+ if(recovery?.status==='ERROR')return `Ошибка проверки сохранённых данных: ${esc(recovery.error)}`;
+ if(!receipt||recovery?.hash!==receipt.sourceHash)return '';
+ if(recovery.status==='NO_SAVED_VIDEO')return 'Исходные OCR-кадры этого видео не найдены в приложении.';
+ return `Перепроверка сохранённых кадров: ${Number(recovery.frames)||0}; карточек ${Number(recovery.savedDetails)||0}; пар времени ${Number(recovery.timePairs)||0}. В истории уже заполнены обе отметки у ${Number(recovery.alreadyComplete)||0} из ${receipt.orders} заказов; добавлено ${Number(recovery.newRows)||0}. Совпало по номеру ${Number(recovery.matchedByOrderId)||0}, по единственному времени завершения ${Number(recovery.matchedByUniqueCompletion)||0}; неоднозначных совпадений ${Number(recovery.ambiguousMatches)||0}.`;
+}
+
 function simpleView(ctx) {
  const {root,getState,Native,notify,data,current,write,showError,run,shell,readPair}=ctx,{$}=ctx;
     const f=data(),date=current().date,own=f.plans[date],receipt=videoImportReceipt(f);
     const videoRows=receipt?(f.days[receipt.date]?.orderEvidence??[])
       .filter(row=>row.source===`video:${receipt.sourceHash}`)
       .sort((a,b)=>(a.visibleMin??1440)-(b.visibleMin??1440)||a.id.localeCompare(b.id)):[];
-    const recovery=globalThis.videoRecoveryStatus;
-    const recoveryNote=recovery?.status==='ERROR'
-      ?`Ошибка проверки сохранённых данных: ${esc(recovery.error)}`
-      :receipt&&recovery?.hash===receipt.sourceHash
-        ?recovery.status==='NO_SAVED_VIDEO'
-          ?'Исходные OCR-кадры этого видео не найдены в приложении.'
-          :`Перепроверка сохранённых кадров: ${Number(recovery.frames)||0}; карточек ${Number(recovery.savedDetails)||0}; пар времени ${Number(recovery.timePairs)||0}. В истории уже заполнены обе отметки у ${Number(recovery.alreadyComplete)||0} из ${receipt.orders} заказов; добавлено ${Number(recovery.newRows)||0}. Совпало по номеру ${Number(recovery.matchedByOrderId)||0}, по единственному времени завершения ${Number(recovery.matchedByUniqueCompletion)||0}; неоднозначных совпадений ${Number(recovery.ambiguousMatches)||0}.`
-        :'';
+    const recoveryNote=videoRecoveryNote(receipt,globalThis.videoRecoveryStatus);
     const shownTime=value=>value==null?'не распознано':minuteLabel(value);
     const periodProgress=calculate(getState(),periodFor(date).id,date);
     const missingNorm=periodProgress.paymentConditions.missingOrders;
