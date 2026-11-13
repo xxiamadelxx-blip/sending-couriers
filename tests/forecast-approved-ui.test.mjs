@@ -11,7 +11,7 @@ test('approved Forecast visual: two existing persisted time controls and real un
   const simple=forecast.slice(forecast.indexOf('function simpleView(ctx)'),forecast.indexOf('function todayView(ctx)'));
   const preview=forecast.slice(forecast.indexOf('function refreshSimpleForecastPreview(ctx,date,read)'),forecast.indexOf('function simpleView(ctx)'));
   for(const id of ['todaySlotHours','todayWorkHours'])assert.ok(simple.includes(`durationField('${id}'`),id);
-  assert.match(simple,/refreshSimpleForecastPreview\\(ctx,date,read\\)/);
+  assert.match(simple,/refreshSimpleForecastPreview\(ctx,date,read\)/);
   assert.match(simple,/saveForecastHours\(data\(\),date,pair\.slotMin,pair\.workingMin\)/);
   assert.match(simple,/class="forecast-band forecast-insufficient"/);
   assert.match(simple,/id="simpleCount"/);
