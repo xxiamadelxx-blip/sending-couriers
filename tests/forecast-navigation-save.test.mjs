@@ -111,6 +111,51 @@ test('history screen opens the day editor from its add-fact action',t=>{
   assert.equal(f.commits,0);
 });
 
+test('saving a day fact keeps orders, active hours, and reported slot as separate facts',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  const value=(id,next)=>{const field=f.root.querySelector('#'+id);assert.ok(field,`Missing field ${id}`);field.value=String(next);return field;};
+  value('workPrecision','total');
+  value('factOrders',23);
+  value('factTotal','6.5');
+  value('factAccounted','14');
+  value('factAsOf','21:30');
+  f.root.querySelector('#dayCompleted').checked=true;
+  let prevented=false;
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){prevented=true;}});
+  const day=f.state.forecast.days[f.date];
+  assert.equal(prevented,true);
+  assert.equal(f.commits,1);
+  assert.equal(day.orders,23);
+  assert.equal(day.ordersConfirmed,true);
+  assert.equal(day.workingMin,390);
+  assert.equal(day.workConfirmed,true);
+  assert.equal(day.appAccountedMin,840);
+  assert.equal(day.accountedConfirmed,true);
+  assert.equal(day.precision,'total');
+  assert.equal(day.completed,true);
+  assert.deepEqual(day.intervals,[]);
+  assert.equal(f.state.entries.length,0,'Entering a forecast fact must not create a finance slot');
+});
+
+test('day fact validation rejects fractional orders without mutating saved facts',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  f.root.querySelector('#workPrecision').value='total';
+  f.root.querySelector('#factOrders').value='1.5';
+  f.root.querySelector('#factTotal').value='6';
+  f.root.querySelector('#factAccounted').value='14';
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  assert.equal(f.commits,0);
+  assert.equal(f.attempts,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+  const error=f.root.querySelector('#forecastError');
+  assert.equal(error.hidden,false);
+  assert.match(error.textContent,/Количество заказов должно быть целым/);
+});
+
 test('flush persists changed hours before immediate forecast re-entry and cancels the old save',t=>{
   const f=fixture(t),screen=f.mount();
   assert.equal(f.root.querySelector('#todayWorkHours').value,'8');
