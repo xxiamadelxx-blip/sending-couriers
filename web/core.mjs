@@ -522,6 +522,20 @@ export function entriesFor(state, id) {
 export function pendingLegacy(state, id) {
   return entriesFor(state, id).filter(e => e.legacyReading?.interpretation === 'pending');
 }
+function calculatePaymentConditions({entries,hoursRecorded,ordersRecorded,pendingCount,hiddenMinutes,hoursHundredths,hours,orders,pace,terms}) {
+  const minimumHours = terms.minimumHours ?? MIN_PAYMENT_HOURS;
+  const hoursMet = hours == null ? null : hoursHundredths >= minimumHours * 100;
+  const paceMet = pace == null ? null : reachesPace(hoursHundredths,orders,terms.basePace);
+  const complete = entries.length > 0 && hoursRecorded === entries.length && ordersRecorded === entries.length && !pendingCount && !hiddenMinutes;
+  const paymentConditions = {
+    status: hoursMet === false || paceMet === false ? 'risk' : hoursMet && paceMet && complete ? 'met' : 'unknown',
+    minimumHours, hoursMet, paceMet,
+    missingHours: hours == null ? null : Math.max(0,Math.round(minimumHours * 100)-hoursHundredths)/100,
+    missingOrders: hours == null || orders == null ? null : Math.max(0,requiredOrderCount(hoursHundredths,terms.basePace)-orders), complete
+  };
+  return paymentConditions;
+}
+
 export function calculate(state, id, asOf = null) {
   const entries = entriesFor(state, id);
   const period = periodFor(id);
@@ -547,16 +561,10 @@ export function calculate(state, id, asOf = null) {
   // Compare integer counters, not the rounded pace displayed in the interface.
   const pacePremium = pace == null ? null : reachesPace(hoursHundredths,orders,terms.premiumPace) ? percentage(base,terms.paceBonusPercent) : 0;
   const hiddenMinutes = entries.some(e => e.legacyReading?.interpretation === 'cumulative' && !e.legacyReading.hoursEdited) ? 59 : 0;
-  const minimumHours = terms.minimumHours ?? MIN_PAYMENT_HOURS;
-  const hoursMet = hours == null ? null : hoursHundredths >= minimumHours * 100;
-  const paceMet = pace == null ? null : reachesPace(hoursHundredths,orders,terms.basePace);
-  const complete = entries.length > 0 && hoursRecorded === entries.length && ordersRecorded === entries.length && !pendingCount && !hiddenMinutes;
-  const paymentConditions = {
-    status: hoursMet === false || paceMet === false ? 'risk' : hoursMet && paceMet && complete ? 'met' : 'unknown',
-    minimumHours, hoursMet, paceMet,
-    missingHours: hours == null ? null : Math.max(0,Math.round(minimumHours * 100)-hoursHundredths)/100,
-    missingOrders: hours == null || orders == null ? null : Math.max(0,requiredOrderCount(hoursHundredths,terms.basePace)-orders), complete
-  };
+  const paymentConditions = calculatePaymentConditions({
+    entries, hoursRecorded, ordersRecorded, pendingCount, hiddenMinutes,
+    hoursHundredths, hours, orders, pace, terms
+  });
   const tax = latest ? sum('tax') : null;
   const parkCommission = latest ? sum('parkCommission') : null;
   const deductions = tax == null && parkCommission == null ? null : Math.round(((tax ?? 0) + (parkCommission ?? 0)) * 100) / 100;
