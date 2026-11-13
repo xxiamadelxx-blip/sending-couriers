@@ -620,6 +620,17 @@ export function predict(data,date,plan=planDay(data,date)) {
   const p=profileFor(data,date);return countForecast(data.days,date,{...plan,zone:plan.zone??p?.zone??'',modelVersion:FORECAST_VERSION});
 }
 export function backtest(data,cutoff){return validateCounts(data.days,cutoff,FORECAST_VERSION,planDay(data,cutoff).zone??profileFor(data,cutoff)?.zone??'');}
+function forecastSnapshotRecord({estimate,id,date,kind,createdAt,signature,profile,fact,plan,clock,asOf,remainingMin}) {
+  return {...estimate,id,date,kind,createdAt,signature,profileVersion:profile?.version??null,timezone:profile?.timezone??plan.timezone??'Europe/Moscow',zone:profile?.zone??plan.zone??'',exposureDefinitionVersion:EXPOSURE_VERSION,
+    plannedIntervals:plan.intervals,atMinute:clock.minute,factAsOfMinute:asOf,remainingMin:kind==='NOWCAST'?remainingMin:null,factAtIssue:kind==='NOWCAST'&&fact?.ordersConfirmed?fact.orders:null,
+    partialDayIssue:kind==='MORNING'&&(clock.minute>(plan.intervals.filter(i=>i.state==='WORK')[0]?.start??0)||!!(fact?.ordersConfirmed||fact?.workConfirmed||fact?.accountedConfirmed))};
+}
+function forecastModelList(models,{modelId,estimate,profile,plan,createdAt,forecastData,date}) {
+  if(models.some(m=>m.id===modelId)) return models;
+  const {results,...validation}=backtest(forecastData,date);
+  return [...models.slice(-199),{id:modelId,modelVersion:FORECAST_VERSION,profileVersion:profile?.version??null,zone:profile?.zone??plan.zone??'',trainedAt:createdAt,trainingDataCutoff:estimate.trainingCutoff,
+    exposureDefinitionVersion:EXPOSURE_VERSION,features:estimate.features??['working exposure','weekday','recency 35 days'],type:estimate.selectedModel??'weighted-count-baseline',fit:estimate.fit??null,selection:estimate.selection??null,trainingN:estimate.comparableN,validation,sourceHash:estimate.sourceHash}];
+}
 export function ensureForecast(data,now=new Date(),kind='MORNING') {
   const p=currentProfile(data,now),clock=forecastClock(data,now);
   const existing=data.snapshots.filter(s=>s.date===clock.date&&s.kind===kind);
@@ -633,16 +644,9 @@ export function ensureForecast(data,now=new Date(),kind='MORNING') {
   const signature=fingerprint({estimate,profile:p?.version??null,fact:fact?.revision,asOf:kind==='NOWCAST'?asOf:null});
   if(kind==='NOWCAST'&&existing.at(-1)?.signature===signature) return data;
   const createdAt=now.toISOString(),id=`${kind}-${clock.date}-${fingerprint({createdAt,signature})}`;
-  const result={...estimate,id,date:clock.date,kind,createdAt,signature,profileVersion:p?.version??null,timezone:p?.timezone??plan.timezone??'Europe/Moscow',zone:p?.zone??plan.zone??'',exposureDefinitionVersion:EXPOSURE_VERSION,
-    plannedIntervals:plan.intervals,atMinute:clock.minute,factAsOfMinute:asOf,remainingMin:kind==='NOWCAST'?remainingMin:null,factAtIssue:kind==='NOWCAST'&&fact?.ordersConfirmed?fact.orders:null,
-    partialDayIssue:kind==='MORNING'&&(clock.minute>(plan.intervals.filter(i=>i.state==='WORK')[0]?.start??0)||!!(fact?.ordersConfirmed||fact?.workConfirmed||fact?.accountedConfirmed))};
+  const result=forecastSnapshotRecord({estimate,id,date:clock.date,kind,createdAt,signature,profile:p,fact,plan,clock,asOf,remainingMin});
   const modelId=`${FORECAST_VERSION}-${estimate.sourceHash}-${p?.zone??plan.zone??''}`;
-  let models=data.models;
-  if(!models.some(m=>m.id===modelId)) {
-    const {results,...validation}=backtest(data,clock.date);
-    models=[...models.slice(-199),{id:modelId,modelVersion:FORECAST_VERSION,profileVersion:p?.version??null,zone:p?.zone??plan.zone??'',trainedAt:createdAt,trainingDataCutoff:estimate.trainingCutoff,
-      exposureDefinitionVersion:EXPOSURE_VERSION,features:estimate.features??['working exposure','weekday','recency 35 days'],type:estimate.selectedModel??'weighted-count-baseline',fit:estimate.fit??null,selection:estimate.selection??null,trainingN:estimate.comparableN,validation,sourceHash:estimate.sourceHash}];
-  }
+  const models=forecastModelList(data.models,{modelId,estimate,profile:p,plan,createdAt,forecastData:data,date:clock.date});
   return {...data,snapshots:[...data.snapshots,result],models};
 }
 export function evaluateForecasts(data,now=new Date()) {

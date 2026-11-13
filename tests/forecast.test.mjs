@@ -63,10 +63,10 @@ test('profile changes are versioned, future-only, with zero mandatory lunch and 
  const fresh=emptyForecast();assert.equal(planDay(fresh,'2026-10-01').workingMin,null);
 });
 test('immutable daily snapshot, no future leakage, separate nowcast and evaluation revisions',()=>{
- let data=history();const now=new Date('2026-10-01T03:00:00Z');data=ensureForecast(data,now);const morning=JSON.stringify(data.snapshots[0]);
+ let data=history();const now=new Date('2026-10-01T03:00:00Z');data=ensureForecast(data,now);const morning=JSON.stringify(data.snapshots[0]);assert.equal(data.models.length,1);const model=JSON.stringify(data.models[0]);
  assert.equal(data.snapshots[0].trainingCutoff,'2026-09-30');
  data=saveDay(data,{...confirmed('2026-10-01',300),completed:false,asOfMinute:1020});data=ensureForecast(data,new Date('2026-10-01T14:00:00Z'));assert.equal(data.snapshots.length,1);assert.equal(JSON.stringify(data.snapshots[0]),morning);
- data=ensureForecast(data,new Date('2026-10-01T14:00:00Z'),'NOWCAST');assert.equal(data.snapshots.length,2);assert.equal(data.snapshots[1].remainingMin,240);assert.equal(data.snapshots[1].factAtIssue,300);
+ data=ensureForecast(data,new Date('2026-10-01T14:00:00Z'),'NOWCAST');assert.equal(data.snapshots.length,2);assert.equal(data.snapshots[1].remainingMin,240);assert.equal(data.snapshots[1].factAtIssue,300);assert.equal(data.models.length,1);assert.equal(JSON.stringify(data.models[0]),model);
  data=evaluateForecasts(data,new Date('2026-10-02T04:00:00Z'));assert.equal(data.evaluations.length,0,'unfinished day cannot evaluate a whole-day forecast');
  data=saveDay(data,{date:'2026-10-01',completed:true});data=evaluateForecasts(data,new Date('2026-10-02T04:00:00Z'));assert.equal(data.evaluations.length,1);data=saveDay(data,confirmed('2026-10-01',0));data=evaluateForecasts(data,new Date('2026-10-02T04:00:00Z'));assert.equal(data.evaluations.length,2);assert.equal(data.evaluations.at(-1).percentageError,null);assert.equal(JSON.stringify(data.snapshots[0]),morning);
  const withoutFuture=predict(data,'2026-10-01');data=saveDay(data,confirmed('2026-10-10',10000));assert.deepEqual(predict(data,'2026-10-01'),withoutFuture);
