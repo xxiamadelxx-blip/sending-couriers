@@ -289,6 +289,32 @@ function cycleBoundaryEntries(state, opening, start, end) {
   });
 }
 // Resolve one day's confirmed counts and accounted time before range aggregation.
+function forecastRemainingToday(state, date, fact, planned) {
+  const asOf = fact.asOfMinute;
+  const remaining = asOf == null ? null : planned.intervals
+    .filter(interval => interval.state === 'WORK' && interval.end > asOf)
+    .reduce((sum, interval) => sum + interval.end - Math.max(interval.start, asOf), 0);
+  const remainingWindows = asOf == null ? [] : planned.intervals
+    .filter(interval => interval.state === 'WORK' && interval.end > asOf)
+    .map(interval => ({ ...interval, start: Math.max(interval.start, asOf) }));
+  const estimate = remaining == null ? null : weekPlan(state.forecast, date, {
+    [date]: {
+      workingMin: remaining,
+      accountedMin: planned.accountedMin,
+      precision: 'intervals',
+      intervals: remainingWindows
+    }
+  }).days[0].forecast;
+  return {
+    orders: estimate?.central == null ? null : fact.orders + estimate.central,
+    accountedMin: planned.accountedMin,
+    source: 'fact+remaining',
+    hasPrediction: true,
+    lower: estimate?.lower == null ? null : fact.orders + estimate.lower,
+    upper: estimate?.upper == null ? null : fact.orders + estimate.upper
+  };
+}
+
 function resolveFinancialDay(state, date, clockDate, plannedDay) {
   const fact = state.forecast.days[date];
   const planned = date < clockDate ? null : plannedDay(date);
@@ -316,27 +342,13 @@ function resolveFinancialDay(state, date, clockDate, plannedDay) {
       source = 'fact';
       lower = upper = orders;
     } else {
-      const asOf = fact.asOfMinute;
-      const remaining = asOf == null ? null : planned.intervals
-        .filter(interval => interval.state === 'WORK' && interval.end > asOf)
-        .reduce((sum, interval) => sum + interval.end - Math.max(interval.start, asOf), 0);
-      const remainingWindows = asOf == null ? [] : planned.intervals
-        .filter(interval => interval.state === 'WORK' && interval.end > asOf)
-        .map(interval => ({ ...interval, start: Math.max(interval.start, asOf) }));
-      const estimate = remaining == null ? null : weekPlan(state.forecast, date, {
-        [date]: {
-          workingMin: remaining,
-          accountedMin: planned.accountedMin,
-          precision: 'intervals',
-          intervals: remainingWindows
-        }
-      }).days[0].forecast;
-      orders = estimate?.central == null ? null : fact.orders + estimate.central;
-      accountedMin = planned.accountedMin;
-      source = 'fact+remaining';
-      hasPrediction = true;
-      lower = estimate?.lower == null ? null : fact.orders + estimate.lower;
-      upper = estimate?.upper == null ? null : fact.orders + estimate.upper;
+      const remainingDay = forecastRemainingToday(state, date, fact, planned);
+      orders = remainingDay.orders;
+      accountedMin = remainingDay.accountedMin;
+      source = remainingDay.source;
+      hasPrediction = remainingDay.hasPrediction;
+      lower = remainingDay.lower;
+      upper = remainingDay.upper;
     }
   } else if (planned) {
     orders = planned.forecast.central;

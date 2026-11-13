@@ -111,8 +111,8 @@ test('forecast state merge unions video slots once and gives a daily total autho
 });
 test('today financial projection keeps the confirmed fact and predicts only the remaining plan',()=>{
  let s=emptyState();s.forecast=history();s.forecast=saveDay(s.forecast,{...confirmed('2026-10-01',100),completed:false,asOfMinute:17*60});
- let r=forecastFinances(s,'2026-10-01',{},'2026-10-01').weekFinancial.rows[0];assert.ok(r.orders>100&&r.orders<127);assert.equal(r.source,'fact+remaining');
- s.forecast=saveDay(s.forecast,{date:'2026-10-01',completed:true});r=forecastFinances(s,'2026-10-01',{},'2026-10-01').weekFinancial.rows[0];assert.equal(r.orders,100);assert.equal(r.source,'fact');
+ let r=forecastFinances(s,'2026-10-01',{},'2026-10-01').weekFinancial.rows[0];assert.ok(r.orders>100&&r.orders<127);assert.equal(r.source,'fact+remaining');assert.equal(r.workingMin,540);assert.equal(r.accountedMin,840);
+ s.forecast=saveDay(s.forecast,{date:'2026-10-01',completed:true});r=forecastFinances(s,'2026-10-01',{},'2026-10-01').weekFinancial.rows[0];assert.equal(r.orders,100);assert.equal(r.source,'fact');assert.equal(r.workingMin,540);assert.equal(r.accountedMin,840);
 });
 test('interval scenarios union overlaps and split midnight without shifting payment assumptions',()=>{
  const data=history(),start='2026-10-01';let week=weekPlan(data,start,{[start]:{workingMin:420,accountedMin:840,intervals:parseWindows('09:00–12:00;11:00–15:00')}});
