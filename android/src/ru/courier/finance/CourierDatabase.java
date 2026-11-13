@@ -361,6 +361,9 @@ public final class CourierDatabase extends SQLiteOpenHelper {
 
     private static boolean supersedePreviousWorkbookIfComplete(SQLiteDatabase db,String sourceId,
             JSONObject sheets,java.util.Map<String,Integer> normalizedExpected,String when) throws Exception {
+        String[] required={"orders","aggregate_order_counts","financial_ledger",
+            "period_snapshots","historical_forecasts","historical_rule_specs",
+            "historical_model_specs"};
         long represented=countQuery(db,
             "SELECT COUNT(DISTINCT sheet_name) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
         boolean complete=sheets.length()==15 && represented==15;
@@ -449,9 +452,6 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             }
             // Source revisions are immutable evidence. Only one COMPLETE XLSX
             // revision is active; partial files never supersede verified facts.
-            String[] required={"orders","aggregate_order_counts","financial_ledger",
-                "period_snapshots","historical_forecasts","historical_rule_specs",
-                "historical_model_specs"};
             boolean complete=supersedePreviousWorkbookIfComplete(db,sourceId,sheets,normalizedExpected,when);
             ContentValues success=new ContentValues();
             success.put("status",complete?"mirrored":"partial");
