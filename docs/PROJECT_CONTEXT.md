@@ -12,6 +12,7 @@
 - `normalizeForecast` delegates archive lists to `normalizeForecastArchive`; limits, field validation and duplicate rejection stay unchanged.
 - `resolveFinancialDay` delegates current-day remaining-window estimation to `forecastRemainingToday`; full planned working and accounted minutes remain separate.
 - `countForecast` delegates per-window order allocation to `allocateForecastIntervals`; cumulative rounding still sums to the daily central forecast.
+- `CourierDatabase.mirrorWorkbook` delegates row archival, normalized fact mapping and revision checks to focused helpers. The XLSX hash, idempotency, source parity, transaction and promotion rules stay in the existing method flow.
 - `normalizeDay` delegates order evidence, pause conflicts and work-window exposure to `reconcileDayOrderEvidence`; reconciliation rules stay unchanged.
 - `ensureForecast` delegates snapshot construction and model-list updates. Tests cover immutable MORNING, NOWCAST remaining time, no future leakage and no duplicate model update.
 - `dayView` separates fact parsing/validation, preview updates, event binding and saving. Its form HTML is unchanged; active hours stay separate from the reported slot.
@@ -25,4 +26,4 @@
 - No local Git checkout is available, so local `git status` and `git diff --check` cannot run. No production APK is produced by this cleanup.
 
 ## Next cleanup target
-- Review `mirrorWorkbook` (CC 48) for a safe persistence boundary, preserving user data and transaction behavior.
+- After the persistence checks pass on the current SHA, remeasure first-party complexity and select one remaining high-risk method.

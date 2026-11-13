@@ -259,6 +259,149 @@ public final class CourierDatabase extends SQLiteOpenHelper {
         }
     }
 
+    private static void insertNormalizedWorkbookFact(SQLiteDatabase db,String sourceId,String name,
+            int row,JSONObject values,JSONObject normalized,String when,String table) throws Exception {
+        ContentValues checked=new ContentValues();
+        checked.put("id",sourceId+":"+name+":"+row);
+        checked.put("source_id",sourceId);
+        checked.put("created_at",when);
+        if("orders".equals(table)){
+            checked.put("source_kind","xlsx");
+            checked.put("updated_at",when);
+            checked.put("date",normalized.getString("date"));
+            checked.put("confidence",normalized.getString("confidence"));
+            checked.put("precision",normalized.getString("precision"));
+            for(String timestampField : new String[]{"accepted_at","completed_at"})
+                if(normalized.has(timestampField))
+                    checked.put(timestampField,normalized.getString(timestampField));
+            if(normalized.has("reward_kopecks"))
+                checked.put("reward_kopecks",normalized.getLong("reward_kopecks"));
+        }else if("aggregate_order_counts".equals(table)){
+            checked.put("source_kind","xlsx");checked.put("updated_at",when);
+            checked.put("date",normalized.getString("date"));
+            checked.put("order_count",normalized.getInt("order_count"));
+            checked.put("confidence",normalized.getString("confidence"));
+        }else if("financial_ledger".equals(table)){
+            checked.put("source_kind","xlsx");checked.put("updated_at",when);
+            checked.put("date",normalized.getString("date"));
+            checked.put("kind",normalized.getString("kind"));
+            checked.put("amount_kopecks",normalized.getLong("amount_kopecks"));
+            checked.put("gross_or_net",normalized.optString("gross_or_net","unspecified"));
+            checked.put("confidence",normalized.getString("confidence"));
+        }else if("period_snapshots".equals(table)){
+            checked.put("source_kind","xlsx");checked.put("updated_at",when);
+            checked.put("period_start",normalized.getString("period_start"));
+            checked.put("period_end",normalized.getString("period_end"));
+            checked.put("seen_at",normalized.getString("seen_at"));
+            checked.put("precision",normalized.getString("precision"));
+            if(normalized.has("orders")) checked.put("orders",normalized.getInt("orders"));
+            if(normalized.has("accounted_hundredths")) checked.put("accounted_hundredths",normalized.getInt("accounted_hundredths"));
+        }else if("historical_forecasts".equals(table)){
+            checked.put("row_number",row);
+            checked.put("target_date",normalized.getString("target_date"));
+            checked.put("center_orders",normalized.getInt("center_orders"));
+            checked.put("source_status",normalized.getString("source_status"));
+            checked.put("record_json",values.toString());
+            for(String field : new String[]{"window_label","claimed_publication","claimed_model"})
+                if(normalized.has(field))checked.put(field,normalized.getString(field));
+            for(String field : new String[]{"lower_orders","upper_orders"})
+                if(normalized.has(field))checked.put(field,normalized.getInt(field));
+        }else if("historical_rule_specs".equals(table)){
+            checked.put("row_number",row);
+            checked.put("rule_label",normalized.getString("rule_label"));
+            checked.put("source_status",normalized.getString("source_status"));
+            if(normalized.has("rule_text"))
+                checked.put("rule_text",normalized.getString("rule_text"));
+        }else if("historical_model_specs".equals(table)){
+            checked.put("row_number",row);
+            checked.put("model_label",normalized.getString("model_label"));
+            checked.put("source_status",normalized.getString("source_status"));
+            if(normalized.has("model_state"))
+                checked.put("model_state",normalized.getString("model_state"));
+            if(normalized.has("declared_version"))
+                checked.put("declared_version",normalized.getString("declared_version"));
+        }else throw new SQLiteException("Unexpected sheet normalization table");
+        db.insertOrThrow(table,null,checked);
+    }
+
+    private static int archiveWorkbookRows(SQLiteDatabase db,String sourceId,String when,
+            JSONObject sheets,java.util.Map<String,Integer> normalizedExpected) throws Exception {
+        int rowsInserted=0;
+        java.util.Iterator<String> names=sheets.keys();
+        while(names.hasNext()){
+            String name=names.next();
+            JSONObject rows=sheets.getJSONObject(name);
+            java.util.Iterator<String> keys=rows.keys();
+            while(keys.hasNext()){
+                String key=keys.next();
+                int row=Integer.parseInt(key);
+                if(row<2) continue; // headers belong to workbook structure
+                JSONObject values=rows.getJSONObject(key);
+                if(values.length()==0) continue;
+                if(++rowsInserted>50_000) throw new IllegalArgumentException("Too many history rows");
+                ContentValues fact=new ContentValues();
+                fact.put("id",sourceId+":"+name+":"+row);
+                fact.put("source_id",sourceId);fact.put("sheet_name",name);
+                fact.put("row_number",row);fact.put("raw_json",values.toString());
+                fact.put("created_at",when);fact.put("updated_at",when);
+                db.insertOrThrow("sheet_import_rows",null,fact);
+
+                // Normalize only fields that carry unambiguous semantics.
+                // Never create individual orders from spreadsheet aggregates.
+                JSONObject normalized=SheetFactNormalizer.normalize(name,values);
+                if(normalized==null)continue;
+                String table=normalized.getString("table");
+                normalizedExpected.put(table,normalizedExpected.containsKey(table)
+                    ? normalizedExpected.get(table)+1 : 1);
+                insertNormalizedWorkbookFact(db,sourceId,name,row,values,normalized,when,table);
+            }
+        }
+        return rowsInserted;
+    }
+
+    private static boolean supersedePreviousWorkbookIfComplete(SQLiteDatabase db,String sourceId,
+            JSONObject sheets,java.util.Map<String,Integer> normalizedExpected,String when) throws Exception {
+        long represented=countQuery(db,
+            "SELECT COUNT(DISTINCT sheet_name) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
+        boolean complete=sheets.length()==15 && represented==15;
+        for(String category:required)
+            complete &= normalizedExpected.getOrDefault(category,0)>0;
+        // A later exported workbook can omit an already-confirmed
+        // historic order or settlement. Preserve the last verified
+        // projection and archive the reduced source for explicit review.
+        // The owner may later approve a correction, never lose it silently.
+        // Do not auto-promote a revision of a previously verified
+        // workbook: equal row counts do not imply equal facts. Preserve
+        // every new export as evidence until correction review.
+        if(complete) {
+            long preceding=countQuery(db,
+                "SELECT COUNT(*) FROM import_sources WHERE source_kind='xlsx'"+
+                " AND status='mirrored' AND id<>'"+sourceId+"'");
+            if(preceding>0) complete=false;
+        }
+        if(complete) {
+            for(String category:required) {
+                long older=countQuery(db,
+                    "SELECT COUNT(*) FROM "+category+
+                    " WHERE source_id IN (SELECT id FROM import_sources"+
+                    " WHERE source_kind='xlsx' AND status='mirrored')");
+                if(normalizedExpected.getOrDefault(category,0)<older) {
+                    complete=false;
+                    break;
+                }
+            }
+        }
+        if(complete) {
+            ContentValues obsolete=new ContentValues();
+            obsolete.put("status","superseded");obsolete.put("updated_at",when);
+            db.update("import_sources",obsolete,
+                "source_kind=? AND status=? AND id<>?",
+                new String[]{"xlsx","mirrored",sourceId});
+        }
+
+        return complete;
+    }
+
     /**
      * Mirror every historical XLSX row exactly once. No "orders" are generated
      * here, since sheet rows can be reconstructed, incomplete or aggregates.
@@ -286,97 +429,8 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             source.put("source_kind","xlsx"); source.put("parser_version","m2-sheet-archive-1");
             source.put("status","staging");source.put("created_at",when);source.put("updated_at",when);
             db.insertWithOnConflict("import_sources",null,source,SQLiteDatabase.CONFLICT_REPLACE);
-            int rowsInserted=0;
             java.util.Map<String,Integer> normalizedExpected=new java.util.HashMap<>();
-            java.util.Iterator<String> names=sheets.keys();
-            while(names.hasNext()){
-                String name=names.next();
-                JSONObject rows=sheets.getJSONObject(name);
-                java.util.Iterator<String> keys=rows.keys();
-                while(keys.hasNext()){
-                    String key=keys.next();
-                    int row=Integer.parseInt(key);
-                    if(row<2) continue; // headers belong to workbook structure
-                    JSONObject values=rows.getJSONObject(key);
-                    if(values.length()==0) continue;
-                    if(++rowsInserted>50_000) throw new IllegalArgumentException("Too many history rows");
-                    ContentValues fact=new ContentValues();
-                    fact.put("id",sourceId+":"+name+":"+row);
-                    fact.put("source_id",sourceId);fact.put("sheet_name",name);
-                    fact.put("row_number",row);fact.put("raw_json",values.toString());
-                    fact.put("created_at",when);fact.put("updated_at",when);
-                    db.insertOrThrow("sheet_import_rows",null,fact);
-
-                    // Normalize only fields that carry unambiguous semantics.
-                    // Never create individual orders from spreadsheet aggregates.
-                    JSONObject normalized=SheetFactNormalizer.normalize(name,values);
-                    if(normalized==null)continue;
-                    String table=normalized.getString("table");
-                    normalizedExpected.put(table,normalizedExpected.containsKey(table)
-                        ? normalizedExpected.get(table)+1 : 1);
-                    ContentValues checked=new ContentValues();
-                    checked.put("id",sourceId+":"+name+":"+row);
-                    checked.put("source_id",sourceId);
-                    checked.put("created_at",when);
-                    if("orders".equals(table)){
-                        checked.put("source_kind","xlsx");
-                        checked.put("updated_at",when);
-                        checked.put("date",normalized.getString("date"));
-                        checked.put("confidence",normalized.getString("confidence"));
-                        checked.put("precision",normalized.getString("precision"));
-                        for(String timestampField : new String[]{"accepted_at","completed_at"})
-                            if(normalized.has(timestampField))
-                                checked.put(timestampField,normalized.getString(timestampField));
-                        if(normalized.has("reward_kopecks"))
-                            checked.put("reward_kopecks",normalized.getLong("reward_kopecks"));
-                    }else if("aggregate_order_counts".equals(table)){
-                        checked.put("source_kind","xlsx");checked.put("updated_at",when);
-                        checked.put("date",normalized.getString("date"));
-                        checked.put("order_count",normalized.getInt("order_count"));
-                        checked.put("confidence",normalized.getString("confidence"));
-                    }else if("financial_ledger".equals(table)){
-                        checked.put("source_kind","xlsx");checked.put("updated_at",when);
-                        checked.put("date",normalized.getString("date"));
-                        checked.put("kind",normalized.getString("kind"));
-                        checked.put("amount_kopecks",normalized.getLong("amount_kopecks"));
-                        checked.put("gross_or_net",normalized.optString("gross_or_net","unspecified"));
-                        checked.put("confidence",normalized.getString("confidence"));
-                    }else if("period_snapshots".equals(table)){
-                        checked.put("source_kind","xlsx");checked.put("updated_at",when);
-                        checked.put("period_start",normalized.getString("period_start"));
-                        checked.put("period_end",normalized.getString("period_end"));
-                        checked.put("seen_at",normalized.getString("seen_at"));
-                        checked.put("precision",normalized.getString("precision"));
-                        if(normalized.has("orders")) checked.put("orders",normalized.getInt("orders"));
-                        if(normalized.has("accounted_hundredths")) checked.put("accounted_hundredths",normalized.getInt("accounted_hundredths"));
-                    }else if("historical_forecasts".equals(table)){
-                        checked.put("row_number",row);
-                        checked.put("target_date",normalized.getString("target_date"));
-                        checked.put("center_orders",normalized.getInt("center_orders"));
-                        checked.put("source_status",normalized.getString("source_status"));
-                        checked.put("record_json",values.toString());
-                        for(String field : new String[]{"window_label","claimed_publication","claimed_model"})
-                            if(normalized.has(field))checked.put(field,normalized.getString(field));
-                        for(String field : new String[]{"lower_orders","upper_orders"})
-                            if(normalized.has(field))checked.put(field,normalized.getInt(field));
-                    }else if("historical_rule_specs".equals(table)){
-                        checked.put("row_number",row);
-                        checked.put("rule_label",normalized.getString("rule_label"));
-                        checked.put("source_status",normalized.getString("source_status"));
-                        if(normalized.has("rule_text"))
-                            checked.put("rule_text",normalized.getString("rule_text"));
-                    }else if("historical_model_specs".equals(table)){
-                        checked.put("row_number",row);
-                        checked.put("model_label",normalized.getString("model_label"));
-                        checked.put("source_status",normalized.getString("source_status"));
-                        if(normalized.has("model_state"))
-                            checked.put("model_state",normalized.getString("model_state"));
-                        if(normalized.has("declared_version"))
-                            checked.put("declared_version",normalized.getString("declared_version"));
-                    }else throw new SQLiteException("Unexpected sheet normalization table");
-                    db.insertOrThrow(table,null,checked);
-                }
-            }
+            int rowsInserted=archiveWorkbookRows(db,sourceId,when,sheets,normalizedExpected);
             long stored=countQuery(db,"SELECT COUNT(*) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
             if(stored!=rowsInserted) throw new SQLiteException("Sheet row parity mismatch");
             // Independent normalized-vs-source-row count check: a failed/partial
@@ -398,43 +452,7 @@ public final class CourierDatabase extends SQLiteOpenHelper {
             String[] required={"orders","aggregate_order_counts","financial_ledger",
                 "period_snapshots","historical_forecasts","historical_rule_specs",
                 "historical_model_specs"};
-            long represented=countQuery(db,
-                "SELECT COUNT(DISTINCT sheet_name) FROM sheet_import_rows WHERE source_id='"+sourceId+"'");
-            boolean complete=sheets.length()==15 && represented==15;
-            for(String category:required)
-                complete &= normalizedExpected.getOrDefault(category,0)>0;
-            // A later exported workbook can omit an already-confirmed
-            // historic order or settlement. Preserve the last verified
-            // projection and archive the reduced source for explicit review.
-            // The owner may later approve a correction, never lose it silently.
-            // Do not auto-promote a revision of a previously verified
-            // workbook: equal row counts do not imply equal facts. Preserve
-            // every new export as evidence until correction review.
-            if(complete) {
-                long preceding=countQuery(db,
-                    "SELECT COUNT(*) FROM import_sources WHERE source_kind='xlsx'"+
-                    " AND status='mirrored' AND id<>'"+sourceId+"'");
-                if(preceding>0) complete=false;
-            }
-            if(complete) {
-                for(String category:required) {
-                    long older=countQuery(db,
-                        "SELECT COUNT(*) FROM "+category+
-                        " WHERE source_id IN (SELECT id FROM import_sources"+
-                        " WHERE source_kind='xlsx' AND status='mirrored')");
-                    if(normalizedExpected.getOrDefault(category,0)<older) {
-                        complete=false;
-                        break;
-                    }
-                }
-            }
-            if(complete) {
-                ContentValues obsolete=new ContentValues();
-                obsolete.put("status","superseded");obsolete.put("updated_at",when);
-                db.update("import_sources",obsolete,
-                    "source_kind=? AND status=? AND id<>?",
-                    new String[]{"xlsx","mirrored",sourceId});
-            }
+            boolean complete=supersedePreviousWorkbookIfComplete(db,sourceId,sheets,normalizedExpected,when);
             ContentValues success=new ContentValues();
             success.put("status",complete?"mirrored":"partial");
             success.put("updated_at",when);
