@@ -262,6 +262,26 @@ function snapshot(s) {
   }
   return {...copy(s),...(parts?{intervalForecasts:parts}:{}),central:c,lower:l,upper:u,comparableN:integer(s.comparableN,100000)??0,reasons:s.reasons.map(v=>String(v).slice(0,500)),baseline:number(s.baseline),workingMin:number(s.workingMin,1440),timezone:validZone(String(s.timezone??'Europe/Moscow'))};
 }
+function normalizeForecastArchive(input) {
+  const archive = {};
+  for (const key of ['forecasts', 'accuracy', 'models', 'financialRules']) {
+    archive[key] = safeRecords(input?.[key] ?? [], 5000, 'архив ' + key).map(record => {
+      recordId(record.id);
+      if (key === 'forecasts') {
+        if (record.date != null) dayStamp(record.date);
+        for (const field of ['central', 'lower', 'upper', 'factAddedLater', 'absoluteError', 'percentageError']) {
+          record[field] = number(record[field]);
+        }
+      }
+      return record;
+    });
+    if (new Set(archive[key].map(record => record.id)).size !== archive[key].length) {
+      fail('Повторяется запись архива.');
+    }
+  }
+  return archive;
+}
+
 export function normalizeForecast(input) {
   if(input==null) return emptyForecast();
   if(input.version!==1) fail('Версия прогноза пока не поддерживается.');
@@ -283,7 +303,7 @@ export function normalizeForecast(input) {
   result.weather=input.weather==null?null:copy(input.weather);
   result.location=input.location==null?null:{weatherCity:String(input.location.weatherCity??'').slice(0,120),timezone:validZone(String(input.location.timezone??'Europe/Moscow')),source:String(input.location.source??'settings').slice(0,200)};
   if(input.typicalPlan)result.typicalPlan={intervals:intervals(input.typicalPlan.intervals??[]),timezone:validZone(String(input.typicalPlan.timezone??'Europe/Moscow')),zone:String(input.typicalPlan.zone??'').slice(0,120),source:String(input.typicalPlan.source??'history').slice(0,200),status:'RECONSTRUCTED'};
-  for(const k of ['forecasts','accuracy','models','financialRules']){result.archive[k]=safeRecords(input.archive?.[k]??[],5000,'архив '+k).map(r=>{recordId(r.id);if(k==='forecasts'){if(r.date!=null)dayStamp(r.date);for(const f of ['central','lower','upper','factAddedLater','absoluteError','percentageError'])r[f]=number(r[f]);}return r;});if(new Set(result.archive[k].map(r=>r.id)).size!==result.archive[k].length)fail('Повторяется запись архива.');}
+  result.archive = normalizeForecastArchive(input.archive);
   // Legacy imports already contain source-tagged reconstructed totals. They stay reconstructed.
   for(const d of Object.values(result.days))if(d.source.startsWith('sheets_import:')&&!d.manualTime&&!d.workConfirmed&&d.workingMin>0&&!d.estimatedIntervals.length&&!input.days[d.date].fieldSources?.workingMin?.status)d.estimatedExposureJustified=true;
   return result;

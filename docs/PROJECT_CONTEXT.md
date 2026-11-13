@@ -6,9 +6,10 @@
 - Accepted historical PR heads #1, #4–#9 and #14–#18 are ancestors. Other ahead-only branches remain historical and outside this cleanup line.
 
 ## Current implementation
-- Active context: 110 lines / 1345 words versus baseline 239 lines / 5,696 words (54.0% fewer lines; 76.4% fewer words). Historical evidence is in [the archive](archive/REFACTOR_CHECKPOINTS_2026-11.md).
+- Active context: 111 lines / 1,361 words versus baseline 239 lines / 5,696 words (53.6% fewer lines; 76.1% fewer words). Historical evidence is in [the archive](archive/REFACTOR_CHECKPOINTS_2026-11.md).
 - `SheetFactNormalizer.normalize` dispatches seven known sheet formats to helpers with existing mappings.
 - `validCountModel` delegates row, fit and validation checks without changing its API or acceptance rules. The generated worker bundle matches `tools/generate_forecast_worker.py`.
+- `normalizeForecast` delegates archive lists to `normalizeForecastArchive`; limits, field validation and duplicate rejection stay unchanged.
 - `normalizeDay` delegates order evidence, pause conflicts and work-window exposure to `reconcileDayOrderEvidence`; reconciliation rules stay unchanged.
 - `ensureForecast` delegates snapshot construction and model-list updates. Tests cover immutable MORNING, NOWCAST remaining time, no future leakage and no duplicate model update.
 - `dayView` separates fact parsing/validation, preview updates, event binding and saving. Its form HTML is unchanged; active hours stay separate from the reported slot.
@@ -22,4 +23,4 @@
 - No local Git checkout is available, so local `git status` and `git diff --check` cannot run. No production APK is produced by this cleanup.
 
 ## Next cleanup target
-- Review `normalizeForecast` (last measured CC 51) for a separable normalization responsibility, preserving saved facts and import/migration rules.
+- Review `mergeVideoSlotDay` (CC 50) only for a concrete responsibility split; it already delegates slot, source and evidence reconciliation.
