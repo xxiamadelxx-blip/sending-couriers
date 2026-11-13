@@ -9,16 +9,18 @@ const app=await readFile(new URL('../web/app.mjs',import.meta.url),'utf8');
 
 test('approved Forecast visual: two existing persisted time controls and real unknown state',()=>{
   const simple=forecast.slice(forecast.indexOf('function simpleView(ctx)'),forecast.indexOf('function todayView(ctx)'));
+  const preview=forecast.slice(forecast.indexOf('function refreshSimpleForecastPreview(ctx,date,read)'),forecast.indexOf('function simpleView(ctx)'));
   for(const id of ['todaySlotHours','todayWorkHours'])assert.ok(simple.includes(`durationField('${id}'`),id);
+  assert.match(simple,/refreshSimpleForecastPreview\\(ctx,date,read\\)/);
   assert.match(simple,/saveForecastHours\(data\(\),date,pair\.slotMin,pair\.workingMin\)/);
   assert.match(simple,/class="forecast-band forecast-insufficient"/);
   assert.match(simple,/id="simpleCount"/);
   assert.match(simple,/id="simpleRange"/);
   assert.match(simple,/Время простоя не считается активной работой\./);
-  assert.match(simple,/result\.central==null/);
-  assert.match(simple,/result\.preparing/);
-  assert.match(simple,/result\.lower/);
-  assert.match(simple,/result\.upper/);
+  assert.match(preview,/result\.central==null/);
+  assert.match(preview,/result\.preparing/);
+  assert.match(preview,/result\.lower/);
+  assert.match(preview,/result\.upper/);
 });
 
 test('Forecast sliders move by 30 minutes while exact numeric entry remains available',()=>{
