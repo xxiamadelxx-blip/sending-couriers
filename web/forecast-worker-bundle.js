@@ -152,6 +152,24 @@ function countBand(mean,base,choice,fit){
  for(let k=1;k<=cap;k++){mass*=((k-1+r)/k)*(1-p);cdf+=mass;if(!lowFound&&cdf>=.05){lower=k;lowFound=true;}if(cdf>=.95){upper=k;break;}upper=k;}
  return {lower:Math.min(Math.round(mean),lower),upper:Math.max(Math.round(mean),upper),bandMethod:'gamma-poisson predictive',coverageTarget:.9};
 }
+function allocateForecastIntervals(parts, forecast) {
+ const total = parts.reduce((sum, part) => sum + part.weight, 0);
+ let cumulative = 0;
+ return parts.map(part => {
+  const before = cumulative;
+  cumulative += total ? part.weight / total : 0;
+  const central = Math.round(forecast.central * cumulative) - Math.round(forecast.central * before);
+  const fraction = total ? part.weight / total : 0;
+  return {
+   start: part.start,
+   end: part.end,
+   central,
+   lower: Math.min(central, Math.floor(forecast.lower * fraction)),
+   upper: Math.max(central, Math.ceil(forecast.upper * fraction))
+  };
+ });
+}
+
 function countForecast(input,date,plan){
  const h=history(input,date,plan.zone),workingMin=plan.workingMin,cutoff=new Date(stamp(date)-DAY).toISOString().slice(0,10);
  const meta={comparableN:h.totals.length,modelVersion:plan.modelVersion,trainingCutoff:cutoff,sourceHash:h.key,workingMin,intervalForecasts:[]};
@@ -171,8 +189,8 @@ function countForecast(input,date,plan){
  if(precise&&fits.bins.length)base.mean=weights.reduce((n,w)=>n+w.weight,0);
  const candidate=choice.selected==='nb'?fits.nb:choice.selected==='poisson'?fits.poisson:null,fit=precise?candidate:null,mean=fit?modelMean(fit,date,plan):base.mean;
  if(!Number.isFinite(mean)||mean>1000000)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Проверьте длительность работы и аномальные итоги истории']};
- const selected=fit?choice.selected:'baseline',usedChoice={...choice,selected},b={central:Math.round(mean),...countBand(mean,base,usedChoice,fit)},parts=fit?windows(plan).map(w=>({...w,weight:modelMean(fit,date,{intervals:[{...w,state:'WORK'}]})})):weights,total=parts.reduce((n,w)=>n+w.weight,0);let cumul=0;
- const intervalForecasts=precise?parts.map(w=>{const before=cumul;cumul+=total?w.weight/total:0;const central=Math.round(b.central*cumul)-Math.round(b.central*before),fraction=total?w.weight/total:0;return {start:w.start,end:w.end,central,lower:Math.min(central,Math.floor(b.lower*fraction)),upper:Math.max(central,Math.ceil(b.upper*fraction))};}):[];
+ const selected=fit?choice.selected:'baseline',usedChoice={...choice,selected},b={central:Math.round(mean),...countBand(mean,base,usedChoice,fit)},parts=fit?windows(plan).map(w=>({...w,weight:modelMean(fit,date,{intervals:[{...w,state:'WORK'}]})})):weights;
+ const intervalForecasts=precise?allocateForecastIntervals(parts,b):[];
  const low=partialOnly||base.n<5||base.reconstructed>0||!precise||!!plan.assumption;
  const reasons=[base.n>=3?'Личная история с учётом дня недели и свежести':'Мало сопоставимых наблюдений',base.reconstructed?`${base.reconstructed} реконструкций в baseline с весом0,3; не подтверждённые часы`:'Подтверждённая экспозиция',fits.timeKind?`Единый тип времени: ${fits.timeKind}; интервалы${fits.step}мин`:'Недостаточно данных для почасового профиля',precise?'Личные паузы исключены':'Время суток неизвестно; только дневная оценка'];
  return {...meta,...b,intervalForecasts,confidence:low?'low':base.n<15?'limited':'moderate',baseline:Math.round(base.mean),comparableN:base.n,reasons,selectedModel:fit?.type??'weighted-count-baseline',fit:fit??fits.poisson,timeKind:fits.timeKind,selection:{...choice,selected,results:undefined},features:['exposure','weekday','recency',...(fits.bins.length?['hourly order events']:[])],estimatedExposureN:base.reconstructed};
