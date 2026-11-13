@@ -197,7 +197,7 @@ function bindDayFactForm(ctx,f,d,plan) {
 }
 
 function dayView(ctx) {
- const {data,current,shell}=ctx;
+ const {data,current,shell}=ctx,{$}=ctx;
  const f=data(),d=f.days[ctx.dayDate],plan=planDay(f,ctx.dayDate);
     shell('Факт дня',`<form id="workDayForm" novalidate>${textField('factDate','Дата',ctx.dayDate,'date')}
       ${textField('factOrders','Заказов за день',d?.orders??'','number','min="0" max="1000000" step="1" inputmode="numeric"')}${durationField('factAccounted','Учтено Яндексом',d?.appAccountedMin??null,'',30)}
