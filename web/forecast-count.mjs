@@ -151,7 +151,7 @@ function countBand(mean,base,choice,fit){
  for(let k=1;k<=cap;k++){mass*=((k-1+r)/k)*(1-p);cdf+=mass;if(!lowFound&&cdf>=.05){lower=k;lowFound=true;}if(cdf>=.95){upper=k;break;}upper=k;}
  return {lower:Math.min(Math.round(mean),lower),upper:Math.max(Math.round(mean),upper),bandMethod:'gamma-poisson predictive',coverageTarget:.9};
 }
-export function allocateForecastIntervals(parts, forecast) {
+function allocateForecastIntervals(parts, forecast) {
  const total = parts.reduce((sum, part) => sum + part.weight, 0);
  let cumulative = 0;
  return parts.map(part => {
@@ -169,7 +169,7 @@ export function allocateForecastIntervals(parts, forecast) {
  });
 }
 
-function countForecast(input,date,plan){
+export function countForecast(input,date,plan){
  const h=history(input,date,plan.zone),workingMin=plan.workingMin,cutoff=new Date(stamp(date)-DAY).toISOString().slice(0,10);
  const meta={comparableN:h.totals.length,modelVersion:plan.modelVersion,trainingCutoff:cutoff,sourceHash:h.key,workingMin,intervalForecasts:[]};
  if(workingMin===0)return {...meta,central:0,lower:0,upper:0,confidence:'rest',baseline:0,reasons:['День отдыха'],selectedModel:'baseline'};
