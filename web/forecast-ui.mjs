@@ -160,9 +160,45 @@ function todayView(ctx) {
     $('#todayPlan').onsubmit=e=>{e.preventDefault();if(closed)return;run(()=>{const pair=refresh();write({...data(),plans:{...data().plans,[clock.date]:pair}},{nowcast:false});notify('План сохранён');ctx.views.todayPlan();});};
   }
 
+function readDayFactInput(ctx,f,d) {
+ const {root,current,readHours}=ctx,{$}=ctx;
+ const date=$('#factDate').value,mode=$('#workPrecision').value,orders=$('#factOrders').value.trim();
+ if(orders&&!/^\d+$/.test(orders))throw new Error('Количество заказов должно быть целым.');
+ let list=mode==='intervals'?[...intervalValue(root,'factWorkHours').intervals,...parseWindows($('#factPause').value,'UNAVAILABLE')]:[];
+ if(mode==='intervals'&&!list.some(i=>i.state==='WORK'))throw new Error('Введите рабочие окна или выберите «Не работал».');
+ if(mode==='intervals'&&$('#restUnavailable').checked) {
+   const report=parseWindows($('#reportWindow').value);if(report.length!==1||report[0].end>1440)throw new Error('Укажите одно окно отчёта внутри суток.');
+   const [span]=report;if(list.some(i=>i.start<span.start||i.end>span.end))throw new Error('Рабочие окна выходят за границы отчёта.');
+   const boundaries=[span.start,span.end,...list.flatMap(i=>[i.start,i.end])].sort((a,b)=>a-b);
+   for(let i=0;i<boundaries.length-1;i++){const a=boundaries[i],b=boundaries[i+1];if(b>a&&!list.some(j=>j.start<=a&&j.end>=b))list.push({start:a,end:b,state:'UNAVAILABLE',paymentCounted:'UNKNOWN'});}
+ }
+ const total=mode==='total'?readHours($('#factTotal').value):mode==='rest'?0:null;if(mode==='total'&&total==null)throw new Error('Укажите суммарные рабочие часы.');
+ const input={date,zone:d?.zone??currentProfile(f)?.zone??'',timezone:d?.timezone??currentProfile(f)?.timezone??'Europe/Moscow',completed:$('#dayCompleted').checked,asOfMinute:parseMinute($('#factAsOf').value),orders:orders===''?null:Number(orders),ordersConfirmed:orders!=='',appAccountedMin:readHours($('#factAccounted').value),accountedConfirmed:$('#factAccounted').value.trim()!=='',
+   precision:mode==='rest'?'total':mode,workingMin:total,intervals:list,workConfirmed:mode!=='unknown',source:'manual',sourceConflicts:$('#resolveSources')?.checked?[]:d?.sourceConflicts??[]};
+ return {date,input};
+}
+function saveDayFact(ctx,f,d) {
+ const {date,input}=readDayFactInput(ctx,f,d);
+ ctx.write(saveTimeline(f,input));ctx.dayDate=date;ctx.render('today');ctx.notify('Факт и уточнение времени сохранены');
+}
+function updateDayWorkPreview(ctx) {
+ const {root,readHours}=ctx,{$}=ctx;
+ const mode=$('#workPrecision').value;
+ $('#intervalFields').hidden=mode!=='intervals';$('#totalFields').hidden=mode!=='total';
+ try{const minutes=mode==='rest'?0:mode==='total'?readHours($('#factTotal').value):mode==='intervals'?intervalValue(root,'factWorkHours').workingMin:null;$('#workingPreview').textContent=`Рабочее время: ${hours(minutes)}`;}catch{$('#workingPreview').textContent='Проверьте интервалы';}
+}
+function bindDayFactForm(ctx,f,d,plan) {
+ const {root}=ctx,{$}=ctx;
+ const update=()=>updateDayWorkPreview(ctx);
+ $('#workPrecision').onchange=update;$('#factWorkHours').oninput=update;$('#factTotal').oninput=update;update();
+ $('#factDate').onchange=()=>{ctx.dayDate=$('#factDate').value;ctx.run(()=>dayView(ctx));};
+ $('#usePlannedWork').onclick=()=>{setIntervals(root,'factWorkHours',plan.intervals.filter(i=>i.state==='WORK'),plan.workingMin);$('#factPause').value=windowsText(plan.intervals.filter(i=>i.state==='UNAVAILABLE'));update();};
+ $('#workDayForm').onsubmit=e=>{e.preventDefault();ctx.run(()=>saveDayFact(ctx,f,d));};
+}
+
 function dayView(ctx) {
- const {root,data,current,write,run,shell,readPair,readHours,notify}=ctx,{$}=ctx;
-    const f=data(),d=f.days[ctx.dayDate],plan=planDay(f,ctx.dayDate);
+ const {data,current,shell}=ctx;
+ const f=data(),d=f.days[ctx.dayDate],plan=planDay(f,ctx.dayDate);
     shell('Факт дня',`<form id="workDayForm" novalidate>${textField('factDate','Дата',ctx.dayDate,'date')}
       ${textField('factOrders','Заказов за день',d?.orders??'','number','min="0" max="1000000" step="1" inputmode="numeric"')}${durationField('factAccounted','Учтено Яндексом',d?.appAccountedMin??null,'',30)}
       <div class="field"><label for="workPrecision">Фактическое рабочее время</label><select class="period-select" id="workPrecision"><option value="intervals">Знаю интервалы</option><option value="total">Знаю только сумму часов</option><option value="rest">Не работал</option><option value="unknown">Пока неизвестно</option></select></div>
@@ -172,31 +208,8 @@ function dayView(ctx) {
       ${d?`<details class="calculation"><summary>Источник и уточнения</summary><p>${esc(d.source)} · ревизия ${d.revision}</p><p>RAW: ${d.orderEvidence.length}/${d.orders??'—'} · перечень ${d.rawComplete?'полный':'частичный'} · принятия/доставки ${d.evidenceComplete?'полные':'частичные'}</p><p>На заказах: ${hours(d.onOrderMin)} · ожидание без заказа: ${hours(d.availableNoOrderMin)}</p><p>Исправлений времени: ${d.revisions.length}</p></details>`:''}
       ${d?.conflicts.length?`<p class="field-warning">${esc(d.conflicts.join(' '))}</p><label class="forecast-checkbox"><input type="checkbox" id="resolveSources">Подтверждаю выбранный итог вместо расходящихся источников</label>`:''}<label class="forecast-checkbox"><input type="checkbox" id="dayCompleted" ${(d?.completed??ctx.dayDate<current().date)?'checked':''}>День завершён, это полный итог</label>${textField('factAsOf','Данные на время',minuteLabel(d?.asOfMinute??current().minute),'time')}${errorHTML}<button class="button primary" id="saveWorkDay" type="submit">Сохранить факт</button></form>`,'day');
     $('#workPrecision').value=d?.precision==='total'?'total':d?.workConfirmed&&d.workingMin===0?'rest':d?.precision==='intervals'?'intervals':'unknown';
-    const update=()=>{
-      const mode=$('#workPrecision').value;$('#intervalFields').hidden=mode!=='intervals';$('#totalFields').hidden=mode!=='total';
-      try{let minutes=mode==='rest'?0:mode==='total'?readHours($('#factTotal').value):mode==='intervals'?intervalValue(root,'factWorkHours').workingMin:null;$('#workingPreview').textContent=`Рабочее время: ${hours(minutes)}`;}catch{$('#workingPreview').textContent='Проверьте интервалы';}
-    };
-    $('#workPrecision').onchange=update;$('#factWorkHours').oninput=update;$('#factTotal').oninput=update;update();
-    $('#factDate').onchange=()=>{ctx.dayDate=$('#factDate').value;run(()=>dayView(ctx));};
-    $('#usePlannedWork').onclick=()=>{setIntervals(root,'factWorkHours',plan.intervals.filter(i=>i.state==='WORK'),plan.workingMin);$('#factPause').value=windowsText(plan.intervals.filter(i=>i.state==='UNAVAILABLE'));update();};
-    $('#workDayForm').onsubmit=e=>{e.preventDefault();run(()=>{
-      const date=$('#factDate').value,mode=$('#workPrecision').value,orders=$('#factOrders').value.trim();
-      if(orders&&!/^\d+$/.test(orders))throw new Error('Количество заказов должно быть целым.');
-      let list=mode==='intervals'?[...intervalValue(root,'factWorkHours').intervals,...parseWindows($('#factPause').value,'UNAVAILABLE')]:[];
-      if(mode==='intervals'&&!list.some(i=>i.state==='WORK'))throw new Error('Введите рабочие окна или выберите «Не работал».');
-      if(mode==='intervals'&&$('#restUnavailable').checked) {
-        const report=parseWindows($('#reportWindow').value);if(report.length!==1||report[0].end>1440)throw new Error('Укажите одно окно отчёта внутри суток.');
-        const [span]=report;if(list.some(i=>i.start<span.start||i.end>span.end))throw new Error('Рабочие окна выходят за границы отчёта.');
-        const boundaries=[span.start,span.end,...list.flatMap(i=>[i.start,i.end])].sort((a,b)=>a-b);
-        for(let i=0;i<boundaries.length-1;i++){const a=boundaries[i],b=boundaries[i+1];if(b>a&&!list.some(j=>j.start<=a&&j.end>=b))list.push({start:a,end:b,state:'UNAVAILABLE',paymentCounted:'UNKNOWN'});}
-      }
-      const total=mode==='total'?readHours($('#factTotal').value):mode==='rest'?0:null;if(mode==='total'&&total==null)throw new Error('Укажите суммарные рабочие часы.');
-      const input={date,zone:d?.zone??currentProfile(f)?.zone??'',timezone:d?.timezone??currentProfile(f)?.timezone??'Europe/Moscow',completed:$('#dayCompleted').checked,asOfMinute:parseMinute($('#factAsOf').value),orders:orders===''?null:Number(orders),ordersConfirmed:orders!=='',appAccountedMin:readHours($('#factAccounted').value),accountedConfirmed:$('#factAccounted').value.trim()!=='',
-        precision:mode==='rest'?'total':mode,workingMin:total,intervals:list,workConfirmed:mode!=='unknown',source:'manual',sourceConflicts:$('#resolveSources')?.checked?[]:d?.sourceConflicts??[]};
-      write(saveTimeline(f,input));ctx.dayDate=date;ctx.render('today');notify('Факт и уточнение времени сохранены');
-    });};
+    bindDayFactForm(ctx,f,d,plan);
   }
-
 function weekView(ctx) {
  const {root,getState,notify,data,current,write,run,shell,readPair}=ctx,{$}=ctx;
     const conditional={};
