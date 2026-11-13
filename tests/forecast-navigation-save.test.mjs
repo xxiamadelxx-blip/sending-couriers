@@ -254,3 +254,19 @@ test('an invalid duration pair blocks flush without losing the draft or writing 
   assert.equal(f.commits,1);
   assert.equal(f.timers.count(500),0);
 });
+
+test('simple forecast preview keeps the insufficient-data state without writing facts',t=>{
+  const f=fixture(t);
+  f.mount();
+  const count=f.root.querySelector('#simpleCount'),range=f.root.querySelector('#simpleRange');
+
+  assert.ok(count);
+  assert.ok(range);
+  assert.equal(count.hidden,true);
+  assert.equal(count.innerHTML,'—');
+  assert.equal(count.attributes.get('aria-label'),'Прогноз заказов неизвестен');
+  assert.match(range.innerHTML,/Пока мало данных/);
+  assert.equal(f.attempts,0);
+  assert.equal(f.commits,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+});
