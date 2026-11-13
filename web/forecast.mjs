@@ -181,6 +181,22 @@ function normalizeFieldSources(input, source, orders, workingMin) {
   }
   return normalized;
 }
+function reconcileDayOrderEvidence(input,list,orders,orderEvidence,precision,workConfirmed) {
+  const orderFacts=orderEvidenceFacts(orders,orderEvidence,input.evidenceComplete);
+  // Equal displayed minutes preserve the timestamps, but the hidden seconds
+  // leave the duration unknown; they are not proof of zero time on delivery.
+  const pause=list.filter(i=>i.state==='UNAVAILABLE').map(i=>[i.start,i.end]);
+  const conflicts=[...(input.sourceConflicts??[]).map(String).slice(0,50)];
+  if(orders!=null&&orderEvidence.length>orders) conflicts.push('Список содержит больше заказов, чем подтверждённый итог. Проверьте возможные дубликаты.');
+  if(orderFacts.orderRanges.some(a=>pause.some(b=>overlap(a,b)>0))) conflicts.push('Личная пауза пересекается с выполняемой доставкой. Уточните время.');
+  const workRanges=list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end]);
+  const busyInside=duration(orderFacts.orderRanges.flatMap(orderRange=>workRanges
+    .map(workRange=>[Math.max(orderRange[0],workRange[0]),Math.min(orderRange[1],workRange[1])])
+    .filter(([start,end])=>start<end)));
+  if(workConfirmed&&precision==='intervals'&&orderFacts.onOrderMin!=null&&busyInside<orderFacts.onOrderMin&&!conflicts.length)
+    conflicts.push('Доставка выходит за подтверждённые рабочие окна. Уточните рабочее время.');
+  return {orderFacts,pause,conflicts,busyInside};
+}
 function normalizeDay(input) {
   dayStamp(input.date);
   const list=intervals(input.intervals??[]);
@@ -195,19 +211,7 @@ function normalizeDay(input) {
   const timezone=validZone(String(input.timezone??'Europe/Moscow'));
   const workingMin=precision==='intervals' ? duration(list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end])) : number(input.workingMin,1440);
   if(precision==='total' && workingMin==null) fail('Укажите суммарное время работы.');
-  const orderFacts=orderEvidenceFacts(orders,orderEvidence,input.evidenceComplete);
-  // Equal displayed minutes preserve the timestamps, but the hidden seconds
-  // leave the duration unknown; they are not proof of zero time on delivery.
-  const pause=list.filter(i=>i.state==='UNAVAILABLE').map(i=>[i.start,i.end]);
-  const conflicts=[...(input.sourceConflicts??[]).map(String).slice(0,50)];
-  if(orders!=null&&orderEvidence.length>orders) conflicts.push('Список содержит больше заказов, чем подтверждённый итог. Проверьте возможные дубликаты.');
-  if(orderFacts.orderRanges.some(a=>pause.some(b=>overlap(a,b)>0))) conflicts.push('Личная пауза пересекается с выполняемой доставкой. Уточните время.');
-  const workRanges=list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end]);
-  const busyInside=duration(orderFacts.orderRanges.flatMap(orderRange=>workRanges
-    .map(workRange=>[Math.max(orderRange[0],workRange[0]),Math.min(orderRange[1],workRange[1])])
-    .filter(([start,end])=>start<end)));
-  if(workConfirmed&&precision==='intervals'&&orderFacts.onOrderMin!=null&&busyInside<orderFacts.onOrderMin&&!conflicts.length)
-    conflicts.push('Доставка выходит за подтверждённые рабочие окна. Уточните рабочее время.');
+  const {orderFacts,pause,conflicts,busyInside}=reconcileDayOrderEvidence(input,list,orders,orderEvidence,precision,workConfirmed);
   const source=String(input.source??'manual').slice(0,200);
   const fieldSources=normalizeFieldSources(input,source,orders,workingMin);
   const suppliedOrderSource=String(input.fieldSources?.orders?.source??'');

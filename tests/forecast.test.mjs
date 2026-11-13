@@ -279,3 +279,15 @@ test('baseline artifacts remain valid and installation skips corrupted persisted
   assert.deepEqual(exportCountModels(),[complete,baseline]);
  } finally { resetCountModels(); }
 });
+test('day normalization retains order/pause conflicts and derives work exposure',()=>{
+ const intervals=[...parseWindows('09:00–13:00;14:00–17:00'),...parseWindows('13:00–14:00','UNAVAILABLE')];
+ const day=saveDay(profile(),{date:'2026-10-01',orders:1,ordersConfirmed:true,precision:'intervals',intervals,workConfirmed:true,evidenceComplete:true,orderEvidence:[{id:'order-1',acceptedMin:770,deliveredMin:810,confirmed:true}] }).days['2026-10-01'];
+ assert.equal(day.workingMin,420);
+ assert.equal(day.unavailableMin,60);
+ assert.equal(day.onOrderMin,40);
+ assert.equal(day.availableNoOrderMin,null);
+ assert.deepEqual(day.conflicts,['Личная пауза пересекается с выполняемой доставкой. Уточните время.']);
+ const outside=saveDay(profile(),{date:'2026-10-02',orders:1,ordersConfirmed:true,precision:'intervals',intervals:parseWindows('09:00–13:00;14:00–17:00'),workConfirmed:true,evidenceComplete:true,orderEvidence:[{id:'order-2',acceptedMin:770,deliveredMin:860,confirmed:true}]}).days['2026-10-02'];
+ assert.equal(outside.onOrderMin,90);
+ assert.deepEqual(outside.conflicts,['Доставка выходит за подтверждённые рабочие окна. Уточните рабочее время.']);
+});

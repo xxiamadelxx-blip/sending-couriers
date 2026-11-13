@@ -1,19 +1,21 @@
 # Project context
 
 ## Canonical line
-- One active line: `refactor/deep-cleanup-20261104-recovered`, PR [#19](https://github.com/xxiamadelxx-blip/sending-couriers/pull/19), base `main`. Read the live PR head before editing; keep `main` unchanged.
-- App identity: version **1.7.36 / code 50**, package `ru.courier.finance.transfer`.
-- Compared branch heads: PRs #1, #4–#9 and #14–#18 are ancestors of this line. Ahead-only refs contain unmerged, unaccepted design, M5/M7 feature, weather-diagnostic and QA-only workflow work; they remain historical because they add behavior or duplicate CI outside this cleanup. Only PR #19 is open.
+- One active line: `refactor/deep-cleanup-20261104-recovered`, PR [#19](https://github.com/xxiamadelxx-blip/sending-couriers/pull/19), base `main`. Keep `main` unchanged until acceptance; do not create parallel work branches.
+- App identity: **1.7.36 / versionCode 50**, package `ru.courier.finance.transfer`.
+- At the recorded branch audit, PR heads #1, #4–#9 and #14–#18 were ancestors of this line; only PR #19 was open. Ahead-only feature, design, weather and QA branches were not accepted into the cleanup line. Keep their refs as history; do not merge them without a scoped requirement.
 
-## Source and tests
-- Active docs now total 108 lines / 1,338 words versus the recorded baseline of 239 lines / 5,696 words (54.8% fewer lines; 76.5% fewer words). Superseded checkpoints are in [the archive](archive/REFACTOR_CHECKPOINTS_2026-11.md).
-- `SheetFactNormalizer.normalize` dispatches to named helpers for seven known sheets. Their mappings preserve the prior field rules; UI audit #278 passed this change on `377fac5e`.
-- `validCountModel` delegates row, fit and validation checks to focused helpers without changing its public API or acceptance rules. Tests cover complete and baseline artifacts, malformed nested records, array limits and install filtering. The generated worker bundle is refreshed from this source.
-- The prior and refactored validators passed the same 56-case differential matrix; focused characterization passed 2/2 against both versions. CI #278 passed on parent SHA `377fac5e1b5b7fc252aac3c93088dbf017e0b8cf`; those results do not replace checks on the live PR head.
-- [UI audit #278](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/43320823306) passed all 30 steps, including Android 35. Its quality artifact is [13990955911](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/43320823306/artifacts/13990955911).
-- [Android QA #124](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/43320822787) passed on its pinned 1.7.11 smoke APK; it does not prove an installed-app upgrade from 1.7.36.
+## Current implementation
+- Active docs: 106 lines / 1,369 words, versus the recorded baseline of 239 lines / 5,696 words (55.6% fewer lines; 76.0% fewer words). Historical checkpoints are in [the archive](archive/REFACTOR_CHECKPOINTS_2026-11.md).
+- `SheetFactNormalizer.normalize` dispatches to helpers for seven known sheets; mappings preserve prior field rules.
+- `validCountModel` delegates nested row, fit and validation checks to focused helpers without changing its API or acceptance rules. Tests cover valid, baseline and malformed records. The generated worker bundle matches `tools/generate_forecast_worker.py`.
+- `normalizeDay` delegates order evidence, pause conflicts and work-window exposure to pure `reconcileDayOrderEvidence`. It preserves conflict ordering, record shape and messages; characterization and the existing forecast suite pass on both the pre-change and refactored source.
 
-## Limits and next action
-- CI APKs use a temporary signer. No production-signed update was generated; owner visual approval remains separate.
-- This workspace has no local Git checkout. Use the connected branch and current-SHA CI for repository changes; report local `git diff --check` as unavailable.
-- After the current PR head passes, characterize `normalizeDay`'s evidence/conflict derivation and extract it only if the responsibility boundary is clear. Preserve data shape and all existing tests.
+## Verification and limits
+- Use live checks on the exact PR head as the source of build and Android QA status. Older results apply only to their cited SHA.
+- The last Crapper report was run on `eecfc405` in UI audit #281. With coverage disabled, CRAP scores were N/A. Highest product code CCs were `dayView` 69, `simpleView` 67, `ensureForecast` 57, `normalizeDay` 55, `weekView` 55 and `calculate` 54. `mountForecast` was CC 4; JS `parseWorkbook` was CC 5; Java `WorkbookReader.read` was CC 30.
+- This workspace has no local Git checkout. Local `git status` and repository `git diff --check` are unavailable; inspect GitHub commit diffs and run source checks in isolated copies.
+- CI APKs use a temporary signer and cannot update an installed production app. Owner visual approval remains separate.
+
+## Next cleanup target
+- After verifying the `normalizeDay` extraction on the new PR head, inspect `ensureForecast` and its callers. Characterize date windows, saved forecast revisions, merges and failure paths before changing its structure.
