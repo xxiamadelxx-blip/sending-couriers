@@ -82,6 +82,27 @@ function videoRecoveryNote(receipt,recovery) {
  return `Перепроверка сохранённых кадров: ${Number(recovery.frames)||0}; карточек ${Number(recovery.savedDetails)||0}; пар времени ${Number(recovery.timePairs)||0}. В истории уже заполнены обе отметки у ${Number(recovery.alreadyComplete)||0} из ${receipt.orders} заказов; добавлено ${Number(recovery.newRows)||0}. Совпало по номеру ${Number(recovery.matchedByOrderId)||0}, по единственному времени завершения ${Number(recovery.matchedByUniqueCompletion)||0}; неоднозначных совпадений ${Number(recovery.ambiguousMatches)||0}.`;
 }
 
+function refreshSimpleForecastPreview(ctx,date,read) {
+ const {data,$}=ctx;
+
+      const pair=read(),result=predict(data(),date,planDay(data(),date,{[date]:pair}));
+      const count=$('#simpleCount'),band=$('#simpleRange');
+      const unknown=result.central==null;
+      count.hidden=unknown;
+      count.classList.toggle('is-unknown',unknown);
+      count.innerHTML=unknown?'—':`${orderText(result.central)}`;
+      if(unknown)count.setAttribute('aria-label','Прогноз заказов неизвестен');
+      else count.removeAttribute('aria-label');
+      band.classList.toggle('forecast-insufficient',unknown);
+      if(unknown){
+        const title=result.preparing?'Готовим прогноз…':ctx.modelFailure?'Нет прогноза':'Пока мало данных';
+        const detail=result.preparing?'Расчёт по истории смен':ctx.modelFailure?'Не удалось рассчитать прогноз. Откройте экран ещё раз.':'Прогноз появится после накопления истории смен';
+        band.innerHTML=`<span class="forecast-insufficient-mark" aria-hidden="true"></span><span class="forecast-insufficient-copy"><strong>${esc(title)}</strong><small>${esc(detail)}</small></span>`;
+      }else band.innerHTML=`<span>Возможный диапазон: ${num(result.lower)}–${num(result.upper)} ${plural(result.upper,['заказ','заказа','заказов'])}</span><details class="forecast-range-help"><summary aria-label="О возможном диапазоне" title="О возможном диапазоне">${icon['info-circle']}</summary><p>Диапазон рассчитан по похожим сменам и отражает неопределённость оценки. Это не предел и не гарантия.</p></details>`;
+      $('#forecastError').hidden=true;
+      return pair;
+  }
+
 function simpleView(ctx) {
  const {root,getState,Native,notify,data,current,write,showError,run,shell,readPair}=ctx,{$}=ctx;
     const f=data(),date=current().date,own=f.plans[date],receipt=videoImportReceipt(f);
@@ -108,24 +129,7 @@ function simpleView(ctx) {
     if(slotCaption)slotCaption.textContent='Полный слот';
     let saveTimer,dirty=false;
     const read=()=>{const pair=readPair('todayWorkHours','todaySlotHours');if(pair.slotMin==null||pair.workingMin==null)throw new Error('Укажите длительность слота и рабочее время.');return {...pair,intervals:[],precision:'total',mode:'simple'};};
-    const preview=()=>{
-      const pair=read(),result=predict(data(),date,planDay(data(),date,{[date]:pair}));
-      const count=$('#simpleCount'),band=$('#simpleRange');
-      const unknown=result.central==null;
-      count.hidden=unknown;
-      count.classList.toggle('is-unknown',unknown);
-      count.innerHTML=unknown?'—':`${orderText(result.central)}`;
-      if(unknown)count.setAttribute('aria-label','Прогноз заказов неизвестен');
-      else count.removeAttribute('aria-label');
-      band.classList.toggle('forecast-insufficient',unknown);
-      if(unknown){
-        const title=result.preparing?'Готовим прогноз…':ctx.modelFailure?'Нет прогноза':'Пока мало данных';
-        const detail=result.preparing?'Расчёт по истории смен':ctx.modelFailure?'Не удалось рассчитать прогноз. Откройте экран ещё раз.':'Прогноз появится после накопления истории смен';
-        band.innerHTML=`<span class="forecast-insufficient-mark" aria-hidden="true"></span><span class="forecast-insufficient-copy"><strong>${esc(title)}</strong><small>${esc(detail)}</small></span>`;
-      }else band.innerHTML=`<span>Возможный диапазон: ${num(result.lower)}–${num(result.upper)} ${plural(result.upper,['заказ','заказа','заказов'])}</span><details class="forecast-range-help"><summary aria-label="О возможном диапазоне" title="О возможном диапазоне">${icon['info-circle']}</summary><p>Диапазон рассчитан по похожим сменам и отражает неопределённость оценки. Это не предел и не гарантия.</p></details>`;
-      $('#forecastError').hidden=true;
-      return pair;
-    };
+    const preview=()=>refreshSimpleForecastPreview(ctx,date,read);
     const save=pair=>{
       const next=saveForecastHours(data(),date,pair.slotMin,pair.workingMin);
       if(JSON.stringify(next.weekConfig)===JSON.stringify(data().weekConfig)&&JSON.stringify(next.plans[date])===JSON.stringify(data().plans[date]))return;
