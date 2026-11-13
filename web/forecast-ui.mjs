@@ -263,11 +263,29 @@ function weekView(ctx) {
     root.querySelectorAll('[data-load-scenario]').forEach(b=>b.onclick=()=>{const s=data().scenarios.find(s=>s.id===b.dataset.loadScenario);ctx.start=s.start;ctx.overrides=JSON.parse(JSON.stringify(s.overrides));ctx.views.week();});
   }
 
+function accuracyMetricsMarkup(q) {
+ return `<div class="forecast-metrics">${metric('Проверенных дней',q.n)}${metric('Средняя ошибка, заказов',num(q.mae))}${metric('Смещение',num(q.bias))}${metric('Ошибка простой базы',num(q.baselineMAE))}${metric('WAPE',q.wape==null?'—':num(q.wape*100)+'%')}${metric('Попадание в диапазон',q.coverage==null?'—':num(q.coverage*100)+'%')}</div>`;
+}
+function accuracyEvaluationsMarkup(f) {
+ const prospective=f.evaluations.filter(e=>e.prospective);
+ const rows=f.evaluations.length
+  ?f.evaluations.slice(-12).reverse().map(e=>`<div class="forecast-audit-row"><strong>${esc(formatDate(e.factDate))} · факт v${e.factRevision}</strong><span>Факт ${e.fact}, ошибка ${num(e.signedError)} · ${e.covered?'в диапазоне':'вне диапазона'}${e.prospective?'':' · поздняя фиксация'}</span></div>`).join('')
+  :'<p class="hint">Оценка появится после подтверждения итога прошедшего дня.</p>';
+ return `<p>${f.snapshots.filter(s=>s.kind==='MORNING').length} исходных прогнозов · ${prospective.length} оценок до начала работы</p>${rows}`;
+}
+function archivedAccuracyMarkup(f) {
+ const forecasts=f.archive?.forecasts??[];
+ const rows=forecasts.filter(r=>r.central!=null).slice(-8).reverse().map(r=>`<div class="forecast-audit-row"><strong>${esc(r.date)} · ${esc(r.interval)}</strong><span>Прогноз ${esc(r.central)} [${esc(r.lower??'—')}–${esc(r.upper??'—')}] · факт ${esc(r.factAddedLater??'—')} · ошибка ${num(r.absoluteError)}</span></div>`).join('');
+ return `<p>${f.archive?.forecasts?.length??0} прогнозов · ${f.archive?.accuracy?.length??0} записей точности</p>${rows}<p class="hint">Архивные записи отделены от независимой проверки новой модели.</p>`;
+}
+function modelVersionsMarkup(f) {
+ return f.models.slice(-8).reverse().map(m=>`<p>${esc(m.modelVersion)} · до ${esc(m.trainingDataCutoff)} · ${esc(m.sourceHash)}</p>`).join('');
+}
 function accuracyView(ctx) {
  const {data,current,shell}=ctx;
-    const f=data(),q=backtest(f,current().date),prospective=f.evaluations.filter(e=>e.prospective);
-    shell('Точность прогноза',`<section class="detail-card"><h2>Проверка по прошлым дням</h2><div class="forecast-metrics">${metric('Проверенных дней',q.n)}${metric('Средняя ошибка, заказов',num(q.mae))}${metric('Смещение',num(q.bias))}${metric('Ошибка простой базы',num(q.baselineMAE))}${metric('WAPE',q.wape==null?'—':num(q.wape*100)+'%')}${metric('Попадание в диапазон',q.coverage==null?'—':num(q.coverage*100)+'%')}</div><p class="hint">Каждый день проверяется только по более ранней истории. ${q.n<20?'Истории мало; вероятности выполнения условий пока не показываются.':'Диапазон отражает наблюдаемую изменчивость, без обещания гарантии.'}</p></section>
-      <section class="detail-card"><h2>Зафиксированные выпуски</h2><p>${f.snapshots.filter(s=>s.kind==='MORNING').length} исходных прогнозов · ${prospective.length} оценок до начала работы</p>${f.evaluations.length?f.evaluations.slice(-12).reverse().map(e=>`<div class="forecast-audit-row"><strong>${esc(formatDate(e.factDate))} · факт v${e.factRevision}</strong><span>Факт ${e.fact}, ошибка ${num(e.signedError)} · ${e.covered?'в диапазоне':'вне диапазона'}${e.prospective?'':' · поздняя фиксация'}</span></div>`).join(''):'<p class="hint">Оценка появится после подтверждения итога прошедшего дня.</p>'}</section><section class="detail-card"><h2>Архив из отчёта</h2><p>${f.archive?.forecasts?.length??0} прогнозов · ${f.archive?.accuracy?.length??0} записей точности</p>${(f.archive?.forecasts??[]).filter(r=>r.central!=null).slice(-8).reverse().map(r=>`<div class="forecast-audit-row"><strong>${esc(r.date)} · ${esc(r.interval)}</strong><span>Прогноз ${esc(r.central)} [${esc(r.lower??'—')}–${esc(r.upper??'—')}] · факт ${esc(r.factAddedLater??'—')} · ошибка ${num(r.absoluteError)}</span></div>`).join('')}<p class="hint">Архивные записи отделены от независимой проверки новой модели.</p></section><details class="calculation"><summary>Версии модели</summary>${f.models.slice(-8).reverse().map(m=>`<p>${esc(m.modelVersion)} · до ${esc(m.trainingDataCutoff)} · ${esc(m.sourceHash)}</p>`).join('')}</details>${errorHTML}`);
+ const f=data(),q=backtest(f,current().date);
+ shell('Точность прогноза',`<section class="detail-card"><h2>Проверка по прошлым дням</h2>${accuracyMetricsMarkup(q)}<p class="hint">Каждый день проверяется только по более ранней истории. ${q.n<20?'Истории мало; вероятности выполнения условий пока не показываются.':'Диапазон отражает наблюдаемую изменчивость, без обещания гарантии.'}</p></section>
+      <section class="detail-card"><h2>Зафиксированные выпуски</h2>${accuracyEvaluationsMarkup(f)}</section><section class="detail-card"><h2>Архив из отчёта</h2>${archivedAccuracyMarkup(f)}</section><details class="calculation"><summary>Версии модели</summary>${modelVersionsMarkup(f)}</details>${errorHTML}`);
   }
 
 function dataView(ctx) {
