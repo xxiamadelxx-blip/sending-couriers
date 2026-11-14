@@ -313,6 +313,7 @@ test('New slots persist editable zero order count without changing unknown entri
  const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
  assert.ok(page.includes("const orderValue = original ? val('dailyOrders') : '0';"));
  assert.ok(page.includes("field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', orderValue"));
+ assert.ok(page.includes("if (ordersInput.value === '0') ordersInput.select();"));
  assert.ok(page.includes("note: carried ? 'Количество между записями' : 'По умолчанию 0. Введите фактическое число; очистите поле, если количество неизвестно.'"));
  assert.ok(page.includes("input.id === 'dailyOrders' ? ''"));
  assert.ok(core.includes("dailyOrders: ordersMissing ? null : parseInteger(input.dailyOrders, 'Заказы за день')"));

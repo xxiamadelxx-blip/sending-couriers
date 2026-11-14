@@ -747,6 +747,10 @@ function refreshSlotHint(ctx) {
 }
 
 function bindSlotFormEvents(ctx) {
+  const ordersInput = $('#dailyOrders');
+  ordersInput.addEventListener('focus', () => {
+    if (ordersInput.value === '0') ordersInput.select();
+  });
   for (const key of ['dailyHours','dailyOrders','reward','tips','tax','parkCommission','separateBonus']) {
     $('#'+key).addEventListener('input', () => { refreshSlotInlineValidation(); refreshSlotDeductions(); refreshSlotPreview(); $('#formError').hidden = true; saveSlotFormDraft(ctx); });
   }
