@@ -31,3 +31,12 @@ test('ChatGPT report includes eligibility and 80-hour rule alongside unchanged m
  const report=markdownReport(add(emptyState(),63,94),period,'2026-10-22');
  assert.match(report,/Минимум для выплаты: 80 ч/);assert.match(report,/Условия выплаты: не выполнены/);assert.match(report,/Не хватает часов: 17/);assert.match(report,/не гарантирована/);assert.match(report,/13.280/);
 });
+test('pace and missing orders recalculate from the same total hours',()=>{
+ const fortyTwo=add(add(add(emptyState(),14,26,period),14,25,'2026-10-17'),14,25,'2026-10-18');
+ const s42=calculate(fortyTwo,period);
+ assert.equal(s42.hours,42);assert.equal(s42.orders,76);assert.equal(s42.pace.toFixed(4),'1.8095');assert.equal(s42.paymentConditions.missingOrders,0);
+
+ const fortyThree=add(add(add(add(emptyState(),14,20,period),14,20,'2026-10-17'),14,20,'2026-10-18'),1,2,'2026-10-19');
+ const s43=calculate(fortyThree,period);
+ assert.equal(s43.hours,43);assert.equal(s43.orders,62);assert.equal(s43.pace,62/43);assert.equal(s43.paymentConditions.missingOrders,16);
+});

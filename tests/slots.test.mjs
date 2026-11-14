@@ -8,6 +8,17 @@ function twoSlots() {
   return upsertEntry(upsertEntry(emptyState(), slot({ note: 'Утро' })), slot({ dailyOrders: 10, reward: 900, tax: 10, parkCommission: 130, tips: 5, separateBonus: 25, note: 'Вечер' }));
 }
 
+test('explicit zero orders in the first slot of a new period remain zero after reload', () => {
+  let state = upsertEntry(emptyState(), { date: '2026-10-30', dailyHours: 8, dailyOrders: 20 });
+  state = upsertEntry(state, { date: '2026-11-13', dailyHours: '12', dailyOrders: '0' });
+  state = normalizeState(JSON.parse(JSON.stringify(state)));
+
+  const summary = calculate(state, '2026-11-13');
+  assert.equal(summary.hours, 12);
+  assert.equal(summary.orders, 0);
+  assert.equal(summary.pace, 0);
+});
+
 test('two slots on one date save separately and add hours, orders and all money exactly once', () => {
   const state = twoSlots(), s = calculate(state, period);
   assert.equal(state.entries.length, 2);
@@ -15,7 +26,8 @@ test('two slots on one date save separately and add hours, orders and all money 
   assert.equal(s.hours, 8); assert.equal(s.orders, 27);
   assert.equal(s.paidReward, 2600); assert.equal(s.tax, 94); assert.equal(s.parkCommission, 330);
   assert.equal(s.tips, 95); assert.equal(s.separateBonus, 25);
-  assert.equal(s.grossUserIncome, 3000); assert.equal(s.estimatedYandexOwed, 280);
+  assert.equal(s.deductions, 424); assert.equal(s.accruedIncome, 2551);
+  assert.equal(s.grossUserIncome, 2576); assert.equal(s.estimatedYandexOwed, -49);
 });
 
 test('identical slots are legitimate separate records; edits target their stable ID', () => {
@@ -100,7 +112,10 @@ test('slot Markdown distinguishes records and shows day totals without counting 
   assert.match(md, /Слот \/ запись/);
   assert.match(md, /\| 2026-10-13 \| 8 \| 27 \| 2.?600\s?₽/);
   assert.match(md, /Часы за период: 8/); assert.match(md, /Заказы за период: 27/);
-  assert.doesNotMatch(md, /налог|комисси|NaN|Infinity/i);
+  assert.match(md,/Удержания \(налог и комиссия парка\): 424/);
+  assert.match(md,/Начислено по формуле база \+ чаевые − удержания: 2.?551/);
+  assert.match(md,/\| Выплачено \| Чаевые \| Налог \| Комиссия парка \|/);
+  assert.doesNotMatch(md,/NaN|Infinity/i);
 });
 
 test('29 slots across fourteen days preserve unique IDs, day sums and period money after repeated import', () => {
@@ -114,7 +129,8 @@ test('29 slots across fourteen days preserve unique IDs, day sums and period mon
   assert.equal(state.entries.length, 29); assert.equal(new Set(state.entries.map(e => e.id)).size, 29);
   const s = calculate(state, period), d = calculateDay(state, period);
   assert.equal(s.dayCount, 14); assert.equal(s.hours, 57); assert.equal(s.orders, 142);
-  assert.equal(s.paidReward, 7198); assert.equal(s.grossUserIncome, 20520); assert.equal(s.estimatedYandexOwed, 13322);
+  assert.equal(s.paidReward, 7198); assert.equal(s.deductions, 2394); assert.equal(s.accruedIncome, 18126);
+  assert.equal(s.grossUserIncome, 18126); assert.equal(s.estimatedYandexOwed, 10928);
   assert.equal(d.entries.length, 3); assert.equal(d.hours, 5); assert.equal(d.orders, 12);
   const backup = JSON.parse(JSON.stringify(state));
   assert.deepEqual(mergeImport(mergeImport(state, backup), backup), state);

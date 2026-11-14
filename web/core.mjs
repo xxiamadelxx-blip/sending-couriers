@@ -2,7 +2,7 @@ import { emptyForecast, normalizeForecast, mergeForecast, forecastReport, weekPl
 export const RATE = 360;
 export const THRESHOLD = 1.8;
 export const SCHEMA_VERSION = 6;
-export const APP_VERSION = '1.7.9';
+export const APP_VERSION = '1.7.36';
 export const MIN_PAYMENT_HOURS = 80;
 export const PREMIUM_PACE = 2.8;
 export const PREMIUM_PERCENT = 5;
@@ -53,13 +53,27 @@ export function parseInteger(raw, label) {
 }
 export function parseHours(raw) {
   const s = String(raw ?? '').trim().replace(',', '.');
+  if (s.includes(':')) {
+    const match = /^(\d+):([0-5]\d)$/.exec(s);
+    if (!match) throw new Error('Часы за день: введите время в формате ЧЧ:ММ.');
+    const hours = Number(match[1]) + Number(match[2]) / 60;
+    if (hours > 1000000) throw new Error('Часы за день: число слишком велико.');
+    return Math.round(hours * 100) / 100;
+  }
   if (!/^\d+(?:\.\d{1,2})?$/.test(s)) throw new Error('Часы за день: введите 0 или положительное число, до двух знаков после запятой.');
   if (Number(s) > 1000000) throw new Error('Часы за день: число слишком велико.');
   return Math.round(Number(s) * 100) / 100;
 }
-export function hoursText(value) {
-  return value == null ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
+export function ruNumber(value, options = {}) {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, ...options }).format(Number(value)).replace(/\u202f/g, '\u00a0');
 }
+export function plural(value, forms) {
+  const count = Math.abs(Math.trunc(Number(value)));
+  const category = new Intl.PluralRules('ru-RU').select(count);
+  return forms[{one:0,few:1,many:2,other:2}[category] ?? 2];
+}
+export function hoursText(value) { return value == null ? '—' : ruNumber(value); }
 export function parseMoney(raw, label = 'Сумма', signed = false) {
   const s = String(raw ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
   if (!s) return 0;
@@ -74,7 +88,13 @@ export function money(amount) {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency', currency: 'RUB', minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2
-  }).format(amount);
+  }).format(amount).replace(/\u202f/g, '\u00a0');
+}
+export function accruedIncome(hourlyBase, tips = 0, tax = 0, parkCommission = 0) {
+  if (hourlyBase == null) return null;
+  const cents = [hourlyBase, tips, -tax, -parkCommission].reduce((sum, value) => sum + Math.round(Number(value ?? 0) * 100), 0);
+  if (!Number.isSafeInteger(cents)) throw new Error('Сумма начисления слишком велика.');
+  return cents / 100;
 }
 export function deductionChecks(input) {
   const reward = parseMoney(input.reward, 'Вознаграждение');
@@ -99,7 +119,7 @@ export function deductionChecks(input) {
   }
   return { reward, expectedTax, expectedCommission, warnings, errors };
 }
-export function paceText(pace) { return pace == null ? '—' : pace.toFixed(3).replace('.', ','); }
+export function paceText(pace) { return pace == null ? '—' : ruNumber(pace,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 export function reserveMinutes(hours, orders, hiddenMinutes = 0, threshold = THRESHOLD) {
   // Only migrated cumulative readings retain their old unknown minute remainder.
   return Math.max(0, Math.floor((orders / threshold - hours - hiddenMinutes / 60) * 60 + 1e-8));
@@ -122,7 +142,7 @@ function paymentNumber(value, key) {
 function normalizePaymentRule(input) {
   if (!input || typeof input !== 'object') throw new Error('Проверьте условия оплаты.');
   const effectivePeriodStart = String(input.effectivePeriodStart ?? '');
-  if (periodFor(effectivePeriodStart).id !== effectivePeriodStart) throw new Error('Условия должны начинаться с первого дня двухнедельного периода.');
+  dateMillis(effectivePeriodStart);
   const result = {effectivePeriodStart};
   for (const key of Object.keys(DEFAULT_PAYMENT_TERMS)) result[key] = paymentNumber(input[key], key);
   for (const key of ['minimumHours','criticalPace']) if (input[key] != null && input[key] !== '') result[key] = paymentNumber(input[key],key);
@@ -131,23 +151,52 @@ function normalizePaymentRule(input) {
 function normalizePaymentRules(input = []) {
   if (!Array.isArray(input) || input.length > 500) throw new Error('Проверьте историю условий оплаты.');
   const rules = input.map(normalizePaymentRule).sort((a,b)=>a.effectivePeriodStart.localeCompare(b.effectivePeriodStart));
-  if (new Set(rules.map(r=>r.effectivePeriodStart)).size !== rules.length) throw new Error('Условия оплаты за один период повторяются.');
+  if (new Set(rules.map(r=>r.effectivePeriodStart)).size !== rules.length) throw new Error('Условия оплаты за одну дату повторяются.');
   return rules;
 }
 export function paymentTermsFor(state, period) {
-  const start = periodFor(period).start;
-  return (state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart <= start).at(-1) ?? DEFAULT_PAYMENT_TERMS;
+  dateMillis(period);
+  return (state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart <= period).at(-1) ?? DEFAULT_PAYMENT_TERMS;
+}
+export function paymentSettingsDraft(state, periodId) {
+  const period = periodFor(periodId);
+  // Start with the latest saved terms for this period, but make applying them
+  // to its earlier recorded hours an explicit Save action.
+  const latest = (state.settings?.paymentRules ?? [])
+    .filter(rule => rule.effectivePeriodStart >= period.start && rule.effectivePeriodStart <= period.end).at(-1);
+  return { ... (latest ?? paymentTermsFor(state, period.start)), effectivePeriodStart: period.start };
 }
 export function setPaymentTerms(state, input) {
   const rule = normalizePaymentRule(input);
   return updateSettings(state, {paymentRules:[...(state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart !== rule.effectivePeriodStart),rule]});
 }
-export function goalText(number) { return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:3}).format(number); }
-export function percentText(number) { return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(number); }
+export function applyPaymentTermsFromDate(state, input) {
+  const rule = normalizePaymentRule(input);
+  // A tariff correction replaces later rules. Older history remains intact;
+  // a later tariff can still be entered explicitly after this one.
+  return updateSettings(state, {paymentRules:[...(state.settings?.paymentRules ?? []).filter(r=>r.effectivePeriodStart < rule.effectivePeriodStart),rule]});
+}
+export function goalText(number) { return ruNumber(number,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+export function percentText(number) { return ruNumber(number,{maximumFractionDigits:2}); }
 function baseForHours(hundredths, rate) {
   const cents = (BigInt(hundredths) * BigInt(Math.round(rate * 100)) + 50n) / 100n;
   if (cents > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Почасовая сумма слишком велика. Проверьте часы и ставку.');
   return Number(cents) / 100;
+}
+function ratedHours(state, entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    if (entry.dailyHours == null) continue;
+    const terms = paymentTermsFor(state, entry.date);
+    const key = `${terms.hourlyRate}|${terms.cycleBonusPercent}`;
+    const group = groups.get(key) ?? {hourlyRate:terms.hourlyRate,cycleBonusPercent:terms.cycleBonusPercent,hundredths:0};
+    group.hundredths += Math.round(entry.dailyHours * 100);
+    groups.set(key,group);
+  }
+  return [...groups.values()].map(group=>({...group,base:baseForHours(group.hundredths,group.hourlyRate)}));
+}
+function ratedBase(state, entries) {
+  return ratedHours(state,entries).reduce((sum,part)=>sum+Math.round(part.base*100),0)/100;
 }
 function percentage(amount, percent) {
   if (amount == null) return null;
@@ -157,6 +206,28 @@ function percentage(amount, percent) {
 function requiredOrderCount(hundredths, pace) { return Number((BigInt(hundredths) * BigInt(Math.round(pace*1000)) + 99999n) / 100000n); }
 function reachesPace(hundredths, orders, pace) { return BigInt(orders)*100000n >= BigInt(hundredths)*BigInt(Math.round(pace*1000)); }
 export function emptyState() { return { schemaVersion: SCHEMA_VERSION, entries: [], closures: {}, settings: normalizeSettings(), forecast:emptyForecast() }; }
+function normalizeCycleOpening(raw, anchor) {
+  if (raw == null) return null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Проверьте накопленную сумму за 12 недель.');
+  if (!anchor) throw new Error('Сначала укажите начало 12-недельного цикла.');
+  const cycleStart = String(raw.cycleStart ?? '');
+  const through = String(raw.through ?? '');
+  if (cycleStart !== anchor) throw new Error('Накопленная сумма относится к другому 12-недельному циклу.');
+  const end = isoDate(dateMillis(cycleStart) + 83 * DAY);
+  dateMillis(through);
+  if (through < cycleStart || through > end) throw new Error('Дата накопленного дохода должна быть внутри выбранного цикла.');
+  if (raw.grossIncome == null || String(raw.grossIncome).trim() === '') throw new Error('Введите сумму накопленного общего дохода.');
+  const grossIncome = parseMoney(raw.grossIncome, 'Накопленный общий доход');
+  const source = raw.source ?? 'manual';
+  if (!['manual','chatgpt'].includes(source)) throw new Error('Неизвестный источник накопленного дохода.');
+  return {cycleStart,through,grossIncome,source};
+}
+export function parseCycleIncomeReport(report) {
+  if (!report || typeof report !== 'object' || Array.isArray(report) || report.type !== 'courier-12week-income-v1')
+    throw new Error('Неверный формат отчёта: нужен JSON courier-12week-income-v1.');
+  return normalizeCycleOpening({cycleStart:report.cycleStart,through:report.through,
+    grossIncome:report.grossIncome,source:'chatgpt'},report.cycleStart);
+}
 function normalizeSettings(input) {
   const start = input?.premiumCycleStart;
   if (start != null && start !== '') dateMillis(start);
@@ -165,8 +236,9 @@ function normalizeSettings(input) {
     if (input?.[key] != null && typeof input[key] !== 'boolean') throw new Error('Проверьте настройки отклика.');
   }
   const theme = input?.theme ?? 'dark';
-  if (!['dark','light'].includes(theme)) throw new Error('Выберите дневную или ночную тему.');
+  if (!['dark','light','system'].includes(theme)) throw new Error('Выберите дневную, ночную или системную тему.');
   return { premiumCycleStart: start == null || start === '' ? null : start,
+    ...(input?.cycleOpening == null ? {} : {cycleOpening:normalizeCycleOpening(input.cycleOpening,start)}),
     soundEnabled: input?.soundEnabled ?? true, hapticsEnabled: input?.hapticsEnabled ?? true, theme, paymentRules:normalizePaymentRules(input?.paymentRules) };
 }
 export function updateSettings(state, input) {
@@ -187,91 +259,263 @@ export function calculateScenario({ hours: rawHours, orders: rawOrders }, terms 
     pacePremium: pace == null ? null : reachesPace(hundredths,orders,terms.premiumPace) ? percentage(hourlyBase,terms.paceBonusPercent) : 0,
     reserve: pace == null ? null : reserveMinutes(hours, orders,0,terms.basePace) };
 }
-// One financial path for week/fortnight scenarios. Facts and forecasts are never added twice.
-export function forecastFinances(state, start, overrides = {}, clockDate = today()) {
-  const week = weekPlan(state.forecast, start, overrides);
-  // A day is predicted once per evaluation, shared by the week and fortnight.
-  const projected = new Map(week.days.map(d=>[d.date,d]));
-  const plannedDay = date => {if(!projected.has(date))projected.set(date,forecastDay(state.forecast,date,overrides));return projected.get(date);};
-  const calculateRange = (from, count) => {
-    let orders=0, hours=0, complete=true, hasPrediction=false;
-    const rows=[];
-    for(let i=0;i<count;i++) {
-      const date=addDays(from,i),fact=state.forecast.days[date];
-      const planned=date<clockDate?null:plannedDay(date);
-      const slots=state.entries.filter(e=>e.date===date&&!e.legacyReading?.fromDate);
-      let n=null,m=null,source='unknown',lower=null,upper=null;
-      if(date<clockDate) {
-        // The user's confirmed day total wins; existing slots are an alternative source.
-        n=fact?.completed&&fact.ordersConfirmed&&!fact.conflicts.length?fact.orders:slots.length&&slots.every(e=>e.dailyOrders!=null)?slots.reduce((s,e)=>s+e.dailyOrders,0):null;
-        m=fact?.accountedConfirmed?fact.appAccountedMin:slots.length&&slots.every(e=>e.dailyHours!=null)?slots.reduce((s,e)=>s+e.dailyHours*60,0):null;
-        source='fact';
-        lower=upper=n;
-      } else if(date===clockDate && fact?.ordersConfirmed && !fact.conflicts.length) {
-        if(fact.completed) {n=fact.orders;m=fact.accountedConfirmed?fact.appAccountedMin:null;source='fact';lower=upper=n;}
-        else {
-          const asOf=fact.asOfMinute;
-          const remaining=asOf==null?null:planned.intervals.filter(i=>i.state==='WORK'&&i.end>asOf).reduce((n,i)=>n+i.end-Math.max(i.start,asOf),0);
-          const remainingWindows=asOf==null?[]:planned.intervals.filter(i=>i.state==='WORK'&&i.end>asOf).map(i=>({...i,start:Math.max(i.start,asOf)}));
-          const estimate=remaining==null?null:weekPlan(state.forecast,date,{[date]:{workingMin:remaining,accountedMin:planned.accountedMin,precision:'intervals',intervals:remainingWindows}}).days[0].forecast;
-          n=estimate?.central==null?null:fact.orders+estimate.central;m=planned.accountedMin;source='fact+remaining';hasPrediction=true;
-          lower=estimate?.lower==null?null:fact.orders+estimate.lower;upper=estimate?.upper==null?null:fact.orders+estimate.upper;
-        }
-      } else if(planned) { n=planned.forecast.central; m=planned.accountedMin;source='scenario';hasPrediction=true;lower=planned.forecast.lower;upper=planned.forecast.upper; }
-      if(n==null||m==null) complete=false;
-      const workingMin=date<clockDate||date===clockDate&&fact?.completed?fact?.workConfirmed?fact.workingMin:null:planned.workingMin;
-      if(m>1440) {m=null;complete=false;}
-      orders+=n??0;hours+=(m??0)/60;rows.push({date,orders:n,accountedMin:m,workingMin,source,lower,upper});
-    }
-    const terms=paymentTermsFor(state,from),minimumHours=terms.minimumHours??MIN_PAYMENT_HOURS;
-    const result=calculateScenario({hours:complete?hours.toFixed(2):'',orders:complete?orders:''},terms);
-    const critical=calculateScenario({hours:complete?hours.toFixed(2):'',orders:complete?orders:''},{...terms,basePace:terms.criticalPace??terms.basePace});
-    const lowerOrders=rows.every(r=>r.lower!=null)?rows.reduce((n,r)=>n+r.lower,0):null;
-    const upperOrders=rows.every(r=>r.upper!=null)?rows.reduce((n,r)=>n+r.upper,0):null;
-    return {...result,from,to:addDays(from,count-1),rows,complete,hasPrediction,terms,minimumHours,
-      lowerOrders,upperOrders,belowCritical:complete?critical.missingNorm>0:null,
-      missingHours:complete?Math.max(0,minimumHours-hours):null,
-      risk:!complete?'unknown':hours<minimumHours||result.missingNorm>0?'high':hasPrediction&&lowerOrders<result.normOrders?'medium':hasPrediction?'conditional':'met',
-      conditionalIncome:complete?result.hourlyBase:null};
-  };
-  const weekFinancial=calculateRange(start,7),fortnight=calculateRange(periodFor(start).start,14);
-  const projectedDays=week.days.map((d,i)=>{
-    const r=weekFinancial.rows[i];return {...d,workingMin:r.workingMin,accountedMin:r.accountedMin,status:r.source,
-      forecast:{...d.forecast,central:r.orders,lower:r.lower,upper:r.upper}};
-  });
-  const sum=key=>weekFinancial.rows.every(r=>r[key]!=null)?weekFinancial.rows.reduce((n,r)=>n+r[key],0):null;
-  return {week:{...week,days:projectedDays,central:sum('orders'),lower:sum('lower'),upper:sum('upper'),workingMin:sum('workingMin'),accountedMin:sum('accountedMin')},weekFinancial,fortnight};
-}
-export function calculatePremiumCycle(state, date = today()) {
-  const anchor = state.settings?.premiumCycleStart;
-  if (!anchor) return { status: 'unconfigured', start: null, end: null, premium: null, hourlyBase: null, hours: null, entries: [], missingHours: 0, elapsedDays: 0, cycleNumber: null, boundaryEntries: [], boundaryNote: '', breakdown:[] };
-  const stamp = dateMillis(date), first = dateMillis(anchor);
-  const cycleNumber = Math.max(0, Math.floor((stamp - first) / (84 * DAY)));
-  const startStamp = first + cycleNumber * 84 * DAY;
-  const start = isoDate(startStamp), end = isoDate(startStamp + 83 * DAY);
-  const beforeStart = stamp < first;
-  const entries = state.entries.filter(e => e.date >= start && e.date <= end).slice().sort(entryOrder);
-  const known = entries.filter(e => e.dailyHours != null);
-  const hours = known.length ? known.reduce((acc, e) => acc + Math.round(e.dailyHours * 100), 0) / 100 : null;
+function cyclePremiumBreakdown(state, entries) {
   const grouped = new Map();
-  for (const entry of known) { const key = periodFor(entry.date).id; grouped.set(key,(grouped.get(key) ?? 0)+Math.round(entry.dailyHours*100)); }
-  const breakdown = [...grouped].sort(([a],[b])=>a.localeCompare(b)).map(([periodId,hundredths])=>{
-    const terms = paymentTermsFor(state,periodId), base = baseForHours(hundredths,terms.hourlyRate);
-    return {periodId,hours:hundredths/100,hourlyRate:terms.hourlyRate,cycleBonusPercent:terms.cycleBonusPercent,hourlyBase:base,premium:percentage(base,terms.cycleBonusPercent)};
-  });
-  const hourlyBase = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.hourlyBase*100),0)/100;
-  const premium = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)/100;
-  const boundaryEntries = state.entries.filter(e => {
+  for (const entry of entries) {
+    const periodId = periodFor(entry.date).id;
+    const rows = grouped.get(periodId) ?? [];
+    rows.push(entry);
+    grouped.set(periodId, rows);
+  }
+  return [...grouped].sort(([a], [b]) => a.localeCompare(b)).flatMap(([periodId, rows]) =>
+    ratedHours(state, rows).map(part => ({
+      periodId,
+      hours: part.hundredths / 100,
+      hourlyRate: part.hourlyRate,
+      cycleBonusPercent: part.cycleBonusPercent,
+      hourlyBase: part.base,
+      totalIncome: part.base,
+      premium: percentage(part.base, part.cycleBonusPercent)
+    }))
+  );
+}
+function cycleBoundaryEntries(state, opening, start, end) {
+  return state.entries.filter(e => !opening || e.date > opening.through).filter(e => {
     const legacy = e.legacyReading;
     if (legacy?.interpretation !== 'cumulative' || legacy.hoursEdited || !(e.dailyHours > 0)) return false;
     const from = legacy.fromDate ? isoDate(dateMillis(legacy.fromDate) + DAY) : periodFor(legacy.date).start;
     const overlaps = from <= end && legacy.date >= start;
     return (overlaps && (from < start || legacy.date > end)) || (legacy.date !== e.date && (overlaps || (e.date >= start && e.date <= end)));
   });
+}
+// Resolve one day's confirmed counts and accounted time before range aggregation.
+function forecastRemainingToday(state, date, fact, planned) {
+  const asOf = fact.asOfMinute;
+  const remaining = asOf == null ? null : planned.intervals
+    .filter(interval => interval.state === 'WORK' && interval.end > asOf)
+    .reduce((sum, interval) => sum + interval.end - Math.max(interval.start, asOf), 0);
+  const remainingWindows = asOf == null ? [] : planned.intervals
+    .filter(interval => interval.state === 'WORK' && interval.end > asOf)
+    .map(interval => ({ ...interval, start: Math.max(interval.start, asOf) }));
+  const estimate = remaining == null ? null : weekPlan(state.forecast, date, {
+    [date]: {
+      workingMin: remaining,
+      accountedMin: planned.accountedMin,
+      precision: 'intervals',
+      intervals: remainingWindows
+    }
+  }).days[0].forecast;
+  return {
+    orders: estimate?.central == null ? null : fact.orders + estimate.central,
+    accountedMin: planned.accountedMin,
+    source: 'fact+remaining',
+    hasPrediction: true,
+    lower: estimate?.lower == null ? null : fact.orders + estimate.lower,
+    upper: estimate?.upper == null ? null : fact.orders + estimate.upper
+  };
+}
+
+function resolveFinancialDay(state, date, clockDate, plannedDay) {
+  const fact = state.forecast.days[date];
+  const planned = date < clockDate ? null : plannedDay(date);
+  const slots = state.entries.filter(e => e.date === date && !e.legacyReading?.fromDate);
+  let orders = null, accountedMin = null, source = 'unknown', lower = null, upper = null;
+  let hasPrediction = false;
+
+  if (date < clockDate) {
+    orders = fact?.completed && fact.ordersConfirmed && !fact.conflicts.length
+      ? fact.orders
+      : slots.length && slots.every(e => e.dailyOrders != null)
+        ? slots.reduce((sum, e) => sum + e.dailyOrders, 0)
+        : null;
+    accountedMin = fact?.accountedConfirmed
+      ? fact.appAccountedMin
+      : slots.length && slots.every(e => e.dailyHours != null)
+        ? slots.reduce((sum, e) => sum + e.dailyHours * 60, 0)
+        : null;
+    source = 'fact';
+    lower = upper = orders;
+  } else if (date === clockDate && fact?.ordersConfirmed && !fact.conflicts.length) {
+    if (fact.completed) {
+      orders = fact.orders;
+      accountedMin = fact.accountedConfirmed ? fact.appAccountedMin : null;
+      source = 'fact';
+      lower = upper = orders;
+    } else {
+      const remainingDay = forecastRemainingToday(state, date, fact, planned);
+      orders = remainingDay.orders;
+      accountedMin = remainingDay.accountedMin;
+      source = remainingDay.source;
+      hasPrediction = remainingDay.hasPrediction;
+      lower = remainingDay.lower;
+      upper = remainingDay.upper;
+    }
+  } else if (planned) {
+    orders = planned.forecast.central;
+    accountedMin = planned.accountedMin;
+    source = 'scenario';
+    hasPrediction = true;
+    lower = planned.forecast.lower;
+    upper = planned.forecast.upper;
+  }
+
+  const workingMin = date < clockDate || date === clockDate && fact?.completed
+    ? fact?.workConfirmed ? fact.workingMin : null
+    : planned.workingMin;
+  if (accountedMin > 1440) accountedMin = null;
+
+  return {
+    row: { date, orders, accountedMin, workingMin, source, lower, upper },
+    hasPrediction
+  };
+}
+
+function calculateFinancialRange(state, from, count, clockDate, plannedDay) {
+  let orders = 0, hours = 0, complete = true, hasPrediction = false;
+  const rows = [];
+
+  for (let i = 0; i < count; i++) {
+    const date = addDays(from, i);
+    const resolved = resolveFinancialDay(state, date, clockDate, plannedDay);
+    if (resolved.row.orders == null || resolved.row.accountedMin == null) complete = false;
+    if (resolved.hasPrediction) hasPrediction = true;
+    orders += resolved.row.orders ?? 0;
+    hours += (resolved.row.accountedMin ?? 0) / 60;
+    rows.push(resolved.row);
+  }
+
+  const to = addDays(from, count - 1);
+  const asOf = to < clockDate ? to : clockDate < from ? from : clockDate;
+  const terms = paymentTermsFor(state, asOf);
+  const minimumHours = terms.minimumHours ?? MIN_PAYMENT_HOURS;
+  const scenario = calculateScenario({
+    hours: complete ? hours.toFixed(2) : '',
+    orders: complete ? orders : ''
+  }, terms);
+  const byRate = new Map();
+  for (const row of rows) {
+    if (row.accountedMin == null) continue;
+    const rate = paymentTermsFor(state, row.date).hourlyRate;
+    byRate.set(rate, (byRate.get(rate) ?? 0) + row.accountedMin);
+  }
+  const base = complete
+    ? [...byRate].reduce((sum, [rate, minutes]) =>
+      sum + Math.round(baseForHours(Math.round(minutes / 60 * 100), rate) * 100), 0) / 100
+    : null;
+  const result = {
+    ...scenario,
+    hourlyBase: base,
+    pacePremium: scenario.pacePremium == null
+      ? null
+      : scenario.pacePremium === 0 ? 0 : percentage(base, terms.paceBonusPercent)
+  };
+  const critical = calculateScenario({
+    hours: complete ? hours.toFixed(2) : '',
+    orders: complete ? orders : ''
+  }, { ...terms, basePace: terms.criticalPace ?? terms.basePace });
+  const lowerOrders = rows.every(row => row.lower != null)
+    ? rows.reduce((sum, row) => sum + row.lower, 0)
+    : null;
+  const upperOrders = rows.every(row => row.upper != null)
+    ? rows.reduce((sum, row) => sum + row.upper, 0)
+    : null;
+
+  return {
+    ...result,
+    from,
+    to,
+    rows,
+    complete,
+    hasPrediction,
+    terms,
+    minimumHours,
+    lowerOrders,
+    upperOrders,
+    belowCritical: complete ? critical.missingNorm > 0 : null,
+    missingHours: complete ? Math.max(0, minimumHours - hours) : null,
+    risk: !complete
+      ? 'unknown'
+      : hours < minimumHours || result.missingNorm > 0
+        ? 'high'
+        : hasPrediction && lowerOrders < result.normOrders
+          ? 'medium'
+          : hasPrediction ? 'conditional' : 'met',
+    conditionalIncome: complete ? result.hourlyBase : null
+  };
+}
+
+export function forecastFinances(state, start, overrides = {}, clockDate = today()) {
+  const week = weekPlan(state.forecast, start, overrides);
+  // A day is predicted once per evaluation, shared by the week and fortnight.
+  const projected = new Map(week.days.map(day => [day.date, day]));
+  const plannedDay = date => {
+    if (!projected.has(date)) projected.set(date, forecastDay(state.forecast, date, overrides));
+    return projected.get(date);
+  };
+
+  const weekFinancial = calculateFinancialRange(state, start, 7, clockDate, plannedDay);
+  const fortnight = calculateFinancialRange(state, periodFor(start).start, 14, clockDate, plannedDay);
+  const projectedDays = week.days.map((day, index) => {
+    const row = weekFinancial.rows[index];
+    return {
+      ...day,
+      workingMin: row.workingMin,
+      accountedMin: row.accountedMin,
+      status: row.source,
+      forecast: { ...day.forecast, central: row.orders, lower: row.lower, upper: row.upper }
+    };
+  });
+  const sum = key => weekFinancial.rows.every(row => row[key] != null)
+    ? weekFinancial.rows.reduce((total, row) => total + row[key], 0)
+    : null;
+
+  return {
+    week: {
+      ...week,
+      days: projectedDays,
+      central: sum('orders'),
+      lower: sum('lower'),
+      upper: sum('upper'),
+      workingMin: sum('workingMin'),
+      accountedMin: sum('accountedMin')
+    },
+    weekFinancial,
+    fortnight
+  };
+}
+
+export function calculatePremiumCycle(state, date = today()) {
+  const anchor = state.settings?.premiumCycleStart;
+  if (!anchor) return { status: 'unconfigured', start: null, end: null, premium: null, totalIncome: null, hourlyBase: null, hours: null, entries: [], missingHours: 0, elapsedDays: 0, cycleNumber: null, boundaryEntries: [], boundaryNote: '', breakdown:[], opening:null, openingPercent:null, excludedCount:0 };
+  const stamp = dateMillis(date), first = dateMillis(anchor);
+  const cycleNumber = Math.max(0, Math.floor((stamp - first) / (84 * DAY)));
+  const startStamp = first + cycleNumber * 84 * DAY;
+  const start = isoDate(startStamp), end = isoDate(startStamp + 83 * DAY);
+  const beforeStart = stamp < first;
+  const entries = state.entries.filter(e => e.date >= start && e.date <= end).slice().sort(entryOrder);
+  // The opening balance already includes every date through its cutoff.
+  // Keep original entries untouched, exclude them from the premium only.
+  const opening = state.settings?.cycleOpening?.cycleStart === start && !beforeStart ? state.settings.cycleOpening : null;
+  const openingPercent = opening ? paymentTermsFor(state,opening.through).cycleBonusPercent : null;
+  const eligible = opening ? entries.filter(e=>e.date > opening.through) : entries;
+  const excludedCount = entries.length - eligible.length;
+  const known = eligible.filter(e => e.dailyHours != null);
+  const hours = known.length ? known.reduce((acc, e) => acc + Math.round(e.dailyHours * 100), 0) / 100 : null;
+  // Only eligible hourly pay contributes; tips and separate bonuses stay outside this premium.
+  const breakdown = cyclePremiumBreakdown(state, known);
+  const hourlyBase = hours == null ? null : breakdown.reduce((sum,b)=>sum+Math.round(b.hourlyBase*100),0)/100;
+  const totalIncome = !opening && hours == null ? null : (
+    (opening ? Math.round(opening.grossIncome*100) : 0) + breakdown.reduce((sum,b)=>sum+Math.round(b.totalIncome*100),0)
+  )/100;
+  const premium = !opening && hours == null ? null : (
+    (opening ? Math.round(percentage(opening.grossIncome,openingPercent)*100) : 0) +
+    breakdown.reduce((sum,b)=>sum+Math.round(b.premium*100),0)
+  )/100;
+  const boundaryEntries = cycleBoundaryEntries(state, opening, start, end);
   const boundaryNote = boundaryEntries.length ? 'Старые накопительные интервалы пересекают границу цикла или перенесены на другую дату. Часы отнесены по датам записей; точно разделить их по границе невозможно. Премия за 12 недель — оценка.' : '';
   return {
-    status: beforeStart ? 'not-started' : 'estimate', start, end, entries, hours, hourlyBase,
-    premium: beforeStart ? null : premium, breakdown, missingHours: entries.length - known.length,
+    status: beforeStart ? 'not-started' : 'estimate', start, end, entries, hours, hourlyBase, opening, openingPercent, excludedCount, totalIncome:beforeStart?null:totalIncome,
+    premium: beforeStart ? null : premium, breakdown, missingHours: eligible.length - known.length,
     elapsedDays: Math.min(84, Math.max(0, Math.floor((stamp - startStamp) / DAY) + 1)), cycleNumber: cycleNumber + 1,
     boundaryEntries, boundaryNote
   };
@@ -290,28 +534,7 @@ export function entriesFor(state, id) {
 export function pendingLegacy(state, id) {
   return entriesFor(state, id).filter(e => e.legacyReading?.interpretation === 'pending');
 }
-export function calculate(state, id) {
-  const entries = entriesFor(state, id);
-  const terms = paymentTermsFor(state,id);
-  const latest = entries.at(-1);
-  const sum = key => entries.reduce((acc, row) => acc + Math.round(row[key] * 100), 0) / 100;
-  const hoursRecorded = entries.filter(e => e.dailyHours != null).length;
-  const ordersRecorded = entries.filter(e => e.dailyOrders != null).length;
-  const pendingCount = pendingLegacy(state, id).length;
-  const hoursHundredths = entries.reduce((acc, e) => acc + Math.round((e.dailyHours ?? 0) * 100), 0);
-  const hours = pendingCount || !hoursRecorded ? null : hoursHundredths / 100;
-  const orders = pendingCount || !ordersRecorded ? null : entries.reduce((acc, e) => acc + (e.dailyOrders ?? 0), 0);
-  const base = hours == null ? null : baseForHours(hoursHundredths,terms.hourlyRate);
-  const paidReward = latest ? sum('reward') : null;
-  const tips = latest ? sum('tips') : null;
-  const separateBonus = latest ? sum('separateBonus') : null;
-  const matchedCounters = entries.every(e => (e.dailyHours == null) === (e.dailyOrders == null));
-  // Independent optional counters contribute to period totals. Missing cells stay
-  // unknown in storage; they do not suppress a ratio of the recorded totals.
-  const pace = hours > 0 && orders != null ? orders / hours : null;
-  // Compare integer counters, not the rounded pace displayed in the interface.
-  const pacePremium = pace == null ? null : reachesPace(hoursHundredths,orders,terms.premiumPace) ? percentage(base,terms.paceBonusPercent) : 0;
-  const hiddenMinutes = entries.some(e => e.legacyReading?.interpretation === 'cumulative' && !e.legacyReading.hoursEdited) ? 59 : 0;
+function calculatePaymentConditions({entries,hoursRecorded,ordersRecorded,pendingCount,hiddenMinutes,hoursHundredths,hours,orders,pace,terms}) {
   const minimumHours = terms.minimumHours ?? MIN_PAYMENT_HOURS;
   const hoursMet = hours == null ? null : hoursHundredths >= minimumHours * 100;
   const paceMet = pace == null ? null : reachesPace(hoursHundredths,orders,terms.basePace);
@@ -322,20 +545,90 @@ export function calculate(state, id) {
     missingHours: hours == null ? null : Math.max(0,Math.round(minimumHours * 100)-hoursHundredths)/100,
     missingOrders: hours == null || orders == null ? null : Math.max(0,requiredOrderCount(hoursHundredths,terms.basePace)-orders), complete
   };
+  return paymentConditions;
+}
+
+export function calculate(state, id, asOf = null) {
+  const entries = entriesFor(state, id);
+  const period = periodFor(id);
+  const terms = paymentTermsFor(state,asOf ?? (period.end < today() ? period.end : today() < period.start ? period.start : today()));
+  const latest = entries.at(-1);
+  const sum = key => entries.reduce((acc, row) => acc + Math.round(row[key] * 100), 0) / 100;
+  const hoursRecorded = entries.filter(e => e.dailyHours != null).length;
+  const ordersRecorded = entries.filter(e => e.dailyOrders != null).length;
+  const pendingCount = pendingLegacy(state, id).length;
+  const hoursHundredths = entries.reduce((acc, e) => acc + Math.round((e.dailyHours ?? 0) * 100), 0);
+  const hours = pendingCount || !hoursRecorded ? null : hoursHundredths / 100;
+  const orders = pendingCount || !ordersRecorded ? null : entries.reduce((acc, e) => acc + (e.dailyOrders ?? 0), 0);
+  const rateBreakdown = hours == null ? [] : ratedHours(state, entries)
+    .map(part => ({ hourlyRate: part.hourlyRate, hours: part.hundredths / 100, base: part.base }));
+  const base = hours == null ? null : Math.round(rateBreakdown.reduce((sum, part) => sum + Math.round(part.base * 100), 0)) / 100;
+  const paidReward = latest ? sum('reward') : null;
+  const tips = latest ? sum('tips') : null;
+  const separateBonus = latest ? sum('separateBonus') : null;
+  const matchedCounters = entries.every(e => (e.dailyHours == null) === (e.dailyOrders == null));
+  // Independent optional counters contribute to period totals. Missing cells stay
+  // unknown in storage; they do not suppress a ratio of the recorded totals.
+  const pace = hours > 0 && orders != null ? orders / hours : null;
+  // Compare integer counters, not the rounded pace displayed in the interface.
+  const pacePremium = pace == null ? null : reachesPace(hoursHundredths,orders,terms.premiumPace) ? percentage(base,terms.paceBonusPercent) : 0;
+  const hiddenMinutes = entries.some(e => e.legacyReading?.interpretation === 'cumulative' && !e.legacyReading.hoursEdited) ? 59 : 0;
+  const paymentConditions = calculatePaymentConditions({
+    entries, hoursRecorded, ordersRecorded, pendingCount, hiddenMinutes,
+    hoursHundredths, hours, orders, pace, terms
+  });
+  const tax = latest ? sum('tax') : null;
+  const parkCommission = latest ? sum('parkCommission') : null;
+  const deductions = tax == null && parkCommission == null ? null : Math.round(((tax ?? 0) + (parkCommission ?? 0)) * 100) / 100;
+  const accrued = base == null ? null : accruedIncome(base, tips ?? 0, tax ?? 0, parkCommission ?? 0);
+  const remaining = accrued == null ? null : accruedIncome(accrued, -(paidReward ?? 0));
   return {
     paymentConditions,
     entries, latest, hours, orders, pace, terms, requiredOrders: hours == null ? null : requiredOrderCount(hoursHundredths,terms.basePace), hoursRecorded, ordersRecorded, pendingCount, matchedCounters, hiddenMinutes,
     dayCount: new Set(entries.map(e => e.date)).size,
     reserve: pace != null ? reserveMinutes(hours, orders, hiddenMinutes,terms.basePace) : null,
-    hourlyBase: base, paidReward, tips, separateBonus, pacePremium,
-    tax: latest ? sum('tax') : null, parkCommission: latest ? sum('parkCommission') : null,
-    grossUserIncome: base != null ? Math.round((base + tips + separateBonus) * 100) / 100 : null,
-    estimatedYandexOwed: base != null ? Math.round((base - paidReward) * 100) / 100 : null,
+    hourlyBase: base, rateBreakdown, paidReward, tips, separateBonus, pacePremium,
+    tax, parkCommission, deductions, accruedIncome: accrued,
+    grossUserIncome: accrued == null ? null : accruedIncome(accrued, separateBonus ?? 0),
+    estimatedYandexOwed: remaining,
     closure: state.closures[id] ?? null
   };
 }
+export function calculatePeriodPayout(state, id, asOf = today()) {
+  const window = periodFor(id);
+  const result = calculate(state, id);
+  const periodHasEnded = dateMillis(asOf) > dateMillis(window.end);
+  let pacePremium = 0, cyclePremium = 0;
+
+  // Keep the bonus estimates out of an unfinished fortnight. A closed period
+  // already has a user-entered final adjustment, which may include those bonuses.
+  if (periodHasEnded && !result.closure) {
+    if (result.paymentConditions.complete && result.pacePremium != null && result.pacePremium > 0) {
+      pacePremium = result.pacePremium;
+    }
+    const cycle = calculatePremiumCycle(state, window.end);
+    const cyclePaysInWindow = cycle.start && cycle.end >= window.start && cycle.end <= window.end;
+    if (cyclePaysInWindow && cycle.premium != null && cycle.missingHours === 0 && cycle.boundaryEntries.length === 0) {
+      cyclePremium = cycle.premium;
+    }
+  }
+
+  const premiumCents = Math.round(pacePremium * 100) + Math.round(cyclePremium * 100);
+  const premiumTotal = premiumCents / 100;
+  const amount = result.estimatedYandexOwed == null
+    ? null
+    : (Math.round(result.estimatedYandexOwed * 100) + premiumCents) / 100;
+  return {
+    amount,
+    baseOwed: result.estimatedYandexOwed,
+    pacePremium,
+    cyclePremium,
+    premiumTotal,
+    periodEnd: window.end
+  };
+}
 export function calculateDay(state, date) {
-  return calculate({ ...state, entries: state.entries.filter(e => e.date === date) }, periodFor(date).id);
+  return calculate({ ...state, entries: state.entries.filter(e => e.date === date) }, periodFor(date).id, date);
 }
 export function normalizeEntry(input, now = new Date().toISOString()) {
   if (!input || typeof input !== 'object') throw new Error('Проверьте запись дня.');
@@ -482,11 +775,20 @@ export function mergeImport(state, incoming) {
     for (const rule of parsed.settings.paymentRules) {
       const existing = rules.get(rule.effectivePeriodStart);
       const effective=r=>({...r,minimumHours:r.minimumHours??MIN_PAYMENT_HOURS,criticalPace:r.criticalPace??r.basePace});
-      if (existing && JSON.stringify(effective(existing)) !== JSON.stringify(effective(rule))) throw new Error(`В копии другие условия оплаты с периода ${periodLabel(rule.effectivePeriodStart)}. Сначала выберите нужные условия в настройках. Данные не изменены.`);
+      if (existing && JSON.stringify(effective(existing)) !== JSON.stringify(effective(rule))) throw new Error(`В копии другие условия оплаты с ${formatDate(rule.effectivePeriodStart)}. Сначала выберите нужные условия в настройках. Данные не изменены.`);
       rules.set(rule.effectivePeriodStart,existing??rule);
     }
   }
-  const settings = normalizeSettings({ ...state.settings, ...(incoming.settings ?? {}), paymentRules:[...rules.values()], premiumCycleStart: currentStart ?? incomingStart });
+  const currentOpening = state.settings?.cycleOpening ?? null;
+  const incomingOpening = incoming.settings?.cycleOpening != null ? parsed.settings.cycleOpening : null;
+  if (currentOpening && incomingOpening && (
+    currentOpening.cycleStart !== incomingOpening.cycleStart ||
+    currentOpening.through !== incomingOpening.through ||
+    Math.round(currentOpening.grossIncome*100) !== Math.round(incomingOpening.grossIncome*100)
+  )) throw new Error('В копии другая накопленная сумма за 12 недель. Исправьте её вручную перед импортом. Записи не изменены.');
+  const settings = normalizeSettings({ ...state.settings, ...(incoming.settings ?? {}),
+    paymentRules:[...rules.values()], premiumCycleStart: currentStart ?? incomingStart,
+    cycleOpening:currentOpening ?? incomingOpening });
   const byId = new Map(state.entries.map(e => [e.id, e]));
   const oldInput = incoming.schemaVersion !== SCHEMA_VERSION && !(Array.isArray(incoming) ? incoming : incoming.entries).some(e => e?.id != null);
   for (const row of parsed.entries) {
@@ -514,11 +816,11 @@ export function markdownReport(state, id, exportDate = today()) {
     slotCounts.set(e.date, number);
     const legacy = e.legacyReading;
     const origin = legacy ? `${legacy.edited ? 'Исправлено вручную' : legacy.interpretation === 'daily' ? 'Ввод за день' : `Накопительные показания${legacy.fromDate ? ` после ${legacy.fromDate}` : ' с начала периода'}`}; исходные показания на ${legacy.date}: ${legacy.hours} ч, ${legacy.orders} заказов` : 'Ввод за слот / день';
-    return `| ${e.date} | ${hoursText(e.dailyHours)} | ${e.dailyOrders ?? '—'} | ${money(e.reward)} | ${money(e.tips)} | ${money(e.separateBonus)} | ${money(e.displayedNet)} | ${mdSafe(origin)} | ${mdSafe(e.note)} | ${number} |`;
+    return `| ${e.date} | ${hoursText(e.dailyHours)} | ${e.dailyOrders ?? '—'} | ${money(e.reward)} | ${money(e.tips)} | ${money(e.tax)} | ${money(e.parkCommission)} | ${money(e.separateBonus)} | ${money(e.displayedNet)} | ${mdSafe(origin)} | ${mdSafe(e.note)} | ${number} |`;
   });
   const days = [...new Set(s.entries.map(e => e.date))].map(date => {
     const d = calculateDay(state, date);
-    return `| ${date} | ${hoursText(d.hours)} | ${d.orders ?? '—'} | ${money(d.paidReward)} | ${money(d.tips)} | ${money(d.separateBonus)} |`;
+    return `| ${date} | ${hoursText(d.hours)} | ${d.orders ?? '—'} | ${money(d.paidReward)} | ${money(d.tips)} | ${money(d.tax)} | ${money(d.parkCommission)} | ${money(d.separateBonus)} | ${money(d.accruedIncome)} |`;
   });
   const p = periodFor(id);
   return [
@@ -536,30 +838,31 @@ export function markdownReport(state, id, exportDate = today()) {
     `- Условия выплаты: ${{risk:'не выполнены',met:'выполнены по введённым данным',unknown:'недостаточно полных данных'}[s.paymentConditions.status]}.`,
     `- Не хватает часов: ${hoursText(s.paymentConditions.missingHours)}; заказов при введённых часах: ${s.paymentConditions.missingOrders ?? '—'}.`,
     ...(s.paymentConditions.status !== 'met' ? ['- Почасовая доплата не гарантирована: условия ещё не подтверждены. Финансовые суммы ниже остаются оценкой; фактические выплаты не меняются.'] : []), '',
-    '## Финансы периода', `- Почасовая база: ${money(s.hourlyBase)}`, `- Вознаграждение уже выплачено: ${money(s.paidReward)}`,
-    `- Осталось получить от Яндекса: ${money(s.estimatedYandexOwed)}`, `- Чаевые: ${money(s.tips)}`,
-    `- Отдельные бонусы: ${money(s.separateBonus)}`, `- Общий доход по пользовательской формуле: ${money(s.grossUserIncome)}`, '',
+    '## Финансы периода', `- Почасовая база: ${money(s.hourlyBase)}`, `- Чаевые: ${money(s.tips)}`, `- Удержания (налог и комиссия парка): ${money(s.deductions)}`,
+    `- Начислено по формуле база + чаевые − удержания: ${money(s.accruedIncome)}`, `- Выплачено: ${money(s.paidReward)}`,
+    `- Осталось выплатить: ${money(s.estimatedYandexOwed)}`, `- Отдельные бонусы: ${money(s.separateBonus)}`, `- Общий доход с отдельными бонусами: ${money(s.grossUserIncome)}`, '',
     '## Расчётные премии',
-    `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база выбранного двухнедельного периода, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
+    `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база по ставкам дат записей, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
     `- Начало 12-недельного отсчёта: ${state.settings?.premiumCycleStart ?? 'не настроено'}.`,
     `- Цикл 12 недель: ${cycle.start ? `${cycle.start} — ${cycle.end}` : 'не настроен'}.`,
-    `- База за 12 недель по введённым часам: ${money(cycle.hourlyBase)}. Премия по условиям периодов: ${money(cycle.premium)}.`,
-    '- Обе премии — оценка от почасовой базы, без чаевых, введённых бонусов и процента на другую премию. Не включены в фактически выплачено, основной доход и остаток; могут уже входить в введённые бонусы или финальную доплату.',
+    `- Почасовая база введённых слотов за 12 недель: ${money(cycle.hourlyBase)}. Общий доход цикла (включая стартовую накопленную сумму): ${money(cycle.totalIncome)}. Расчётная премия по ставкам периодов: ${money(cycle.premium)}. Выплата премии не подтверждена.`,
+    `- Накопленный доход из ${cycle.opening?.source === 'chatgpt' ? 'отчёта ChatGPT' : 'ручного ввода'}: ${cycle.opening ? money(cycle.opening.grossIncome) : 'не задан'}. Включительно по: ${cycle.opening?.through ?? '—'}. Старых слотов, исключённых во избежание двойного счёта: ${cycle.excludedCount}.`,
+    '- Премия за темп считается от почасовой базы. Премия за 12 недель — от общего дохода (база + чаевые + отдельные бонусы) по условиям дат записей. Обе премии не прибавляются повторно к общему доходу и не подтверждают фактическую выплату.',
     `- Записей цикла без часов: ${cycle.missingHours}; сумма известна только по введённым часам.`, '',
     ...(cycle.boundaryNote ? [`- Внимание: ${cycle.boundaryNote}`, `- Проверьте интервалы записей: ${cycle.boundaryEntries.map(e => `${e.id} (дата записи ${e.date}, прежний интервал ${e.legacyReading.fromDate ?? 'с начала двухнедельного периода'} — ${e.legacyReading.date})`).map(mdSafe).join('; ')}.`, ''] : []),
     '### Вклад периодов в премию за 12 недель',
-    '| Период | Часы в цикле | Ставка | База | Процент | Премия |', '| --- | ---: | ---: | ---: | ---: | ---: |',
-    ...cycle.breakdown.map(b=>`| ${b.periodId} | ${hoursText(b.hours)} | ${money(b.hourlyRate)} | ${money(b.hourlyBase)} | ${percentText(b.cycleBonusPercent)}% | ${money(b.premium)} |`),
-    '- База и премия округляются до копеек для каждого входящего периода, затем складываются. Ставка относится к датам записей; старые накопительные интервалы не распределяются по неизвестным дням.', '',
+    '| Период и тарифная часть | Часы в цикле | Ставка | Общий доход | Процент | Премия |', '| --- | ---: | ---: | ---: | ---: | ---: |',
+    ...cycle.breakdown.map(b=>`| ${b.periodId} | ${hoursText(b.hours)} | ${money(b.hourlyRate)} | ${money(b.totalIncome)} | ${percentText(b.cycleBonusPercent)}% | ${money(b.premium)} |`),
+    '- Почасовая база и премия округляются до копеек по тарифным группам, общий доход складывается в копейках. Ставка относится к датам записей; старые накопительные интервалы не распределяются по неизвестным дням.', '',
     '### Записи 12-недельного цикла',
     '| Дата | ID записи | Часы |', '| --- | --- | ---: |',
     ...cycle.entries.map(e => `| ${e.date} | ${mdSafe(e.id)} | ${hoursText(e.dailyHours)} |`), '',
     '## Итоги по дням', 'Суммы записей за дату. Они уже включены в итог периода и не прибавляются повторно.',
-    '| Дата | Часы | Заказы | Вознаграждение | Чаевые | Отдельные бонусы |',
-    '| --- | ---: | ---: | ---: | ---: | ---: |', ...days, '',
+    '| Дата | Часы | Заказы | Выплачено | Чаевые | Налог | Комиссия парка | Бонусы отдельно | Начислено |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |', ...days, '',
     '## Слоты и записи', 'Каждая строка — отдельный слот или прежняя дневная запись.',
-    '| Дата | Часы за слот / перенесённый вклад | Заказы за слот / перенесённый вклад | Вознаграждение | Чаевые | Бонусы | Итог на экране | Источник часов | Примечание | Слот / запись |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: |', ...rows,
+    '| Дата | Часы за слот / перенесённый вклад | Заказы за слот / перенесённый вклад | Выплачено | Чаевые | Налог | Комиссия парка | Бонусы отдельно | Итог на экране | Источник часов | Примечание | Слот / запись |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: |', ...rows,
     ...(s.entries.length ? [] : ['Записей за период пока нет.']), '',
     '## Идентификаторы для поиска ошибок',
     '| ID | Дата | Создано | Изменено |', '| --- | --- | --- | --- |',
@@ -567,17 +870,17 @@ export function markdownReport(state, id, exportDate = today()) {
     ...(s.closure ? ['## Закрытие периода', `- Фактическая финальная доплата: ${money(s.closure.finalAdjustment)}`, `- Примечание: ${mdSafe(s.closure.note) || '—'}`, '- Финальная доплата сохранена отдельно и не прибавляется повторно к почасовой базе.', ''] : []),
     '## Условия оплаты',
     `- Выбранный период: ${money(s.terms.hourlyRate)}/ч; темп оплаты ${goalText(s.terms.basePace)}; темп премии ${goalText(s.terms.premiumPace)}; премия за темп ${percentText(s.terms.paceBonusPercent)}%; за 12 недель ${percentText(s.terms.cycleBonusPercent)}%.`,
-    '| Начиная с периода | Ставка | Темп оплаты | Темп премии | За темп | За 12 недель |', '| --- | ---: | ---: | ---: | ---: | ---: |',
+    '| Начиная с даты | Ставка | Темп оплаты | Темп премии | За темп | За 12 недель |', '| --- | ---: | ---: | ---: | ---: | ---: |',
     `| До первой настройки | ${money(RATE)} | ${goalText(THRESHOLD)} | ${goalText(PREMIUM_PACE)} | ${PREMIUM_PERCENT}% | ${PREMIUM_PERCENT}% |`,
     ...(state.settings?.paymentRules ?? []).map(r=>`| ${r.effectivePeriodStart} | ${money(r.hourlyRate)} | ${goalText(r.basePace)} | ${goalText(r.premiumPace)} | ${percentText(r.paceBonusPercent)}% | ${percentText(r.cycleBonusPercent)}% |`), '',
     '## Правила расчёта', '- Период — 14 дней с пятницы; календарный якорь — 18.09.2026.',
     `- Ставка: ${money(s.terms.hourlyRate)}/ч. Почасовая выплата зависит от минимума ${s.terms.minimumHours ?? MIN_PAYMENT_HOURS} часов и итогового темпа не ниже ${goalText(s.terms.basePace)} заказа/ч.`,
     '- Часы за период = сумма dailyHours всех записей периода; заказы = сумма dailyOrders.',
     '- Несколько слотов за одну дату складываются за день и период. Исправление заменяет только выбранную запись; удаление убирает только её вклад.',
-    '- Почасовая база = сумма часов × ставка выбранного периода; при незавершённом периоде это оценка.',
-    '- Общий доход = почасовая база + чаевые + отдельные бонусы.',
-    '- Осталось получить = почасовая база − сумма reward; чаевые и отдельные бонусы не уменьшают эту сумму.',
-    '- Если вознаграждение превышает базу, разница остаётся отрицательной, без обнуления.',
+    '- Почасовая база = сумма по ставкам, действовавшим в даты записей; при незавершённом периоде это оценка.',
+    '- Начислено = почасовая база + чаевые − налог − комиссия парка; все денежные слагаемые округлены до копеек.',
+    '- Осталось выплатить = начислено − сумма reward, где reward хранит фактически выплаченное. Отдельные бонусы учитываются отдельно в общем доходе.',
+    '- Остаток после выплаты может быть отрицательным, если уже выплачено больше начисленного.',
     `- Запас = max(0, заказы / ${goalText(s.terms.basePace)} − часы). Минуты округляются вниз. Только для перенесённых накопительных показаний дополнительно вычитаются 59 минут.`,
     '- При нулевых часах или отсутствии всех введённых часов либо всех введённых заказов темп и запас не определяются.',
     '- Часы и заказы необязательны независимо друг от друга; пропуски обозначены прочерком и не превращаются в нули.',
