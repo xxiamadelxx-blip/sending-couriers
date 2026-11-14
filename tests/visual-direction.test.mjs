@@ -20,6 +20,19 @@ test('both themes and five bottom actions retain legible states',()=>{
   assert.match(js,/\['summary','Главная'/);
   assert.match(js,/\['forecast','Прогноз'/);
 });
+test('warm-gold accent is limited to secondary screens; Home and centered plus keep their roles',async()=>{
+  const html=await readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  const candidate=css.slice(css.lastIndexOf('/* 15 Nov review candidate'));
+  const palette=css.slice(css.lastIndexOf('/* SHIFT CONTROL · Unslop pass'),css.lastIndexOf('/* SHIFT CONTROL · Unslop finish'));
+  assert.match(candidate,/#app\.period-page,[\s\S]*?#app\.form-page,[\s\S]*?#app\.forecast-page\s*\{/);
+  assert.match(candidate,/--accent:var\(--gold\)/);
+  assert.match(palette,/--accent:#ff7952/);
+  assert.match(palette,/--income-surface:#ffbd57/);
+  assert.match(finish,/#homeDeck \.hero-pace strong[^\n]*color:var\(--accent\)/);
+  assert.match(css,/\.bottom-nav \.nav-add\{[^}]*background:var\(--accent\)/);
+  assert.ok(html.indexOf('id="app"')<html.indexOf('id="bottomNav"'),'Navigation stays a sibling of the screen root');
+  assert.match(css,/\.bottom-nav \.nav-add\{[^}]*width:56px[^}]*height:56px[^}]*transform:none/);
+});
 test('native 48dp control size and 200 percent font-safety retained',()=>{
   assert.match(css,/\.edit-day\{[^}]*min-height:48px/);
   assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.gauge canvas\{[\s\S]*?display:none/);

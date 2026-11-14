@@ -2684,3 +2684,21 @@ html,body {
   text-decoration:underline;
   text-underline-offset:3px;
 }
+
+/* 15 Nov review candidate: keep Home's coral pace + gold income card intact;
+   give the existing Period, Slot and Forecast screens the legacy warm-gold accent.
+   The shared bottom navigation lives outside #app, so its centered + is unchanged. */
+#app.period-page,
+#app.form-page,
+#app.forecast-page {
+  --accent:var(--gold);
+  --accent-wash:color-mix(in srgb,var(--gold) 12%,var(--surface));
+  --teal:var(--gold);
+  --primary-bg:var(--gold);
+}
+#app.period-page .period-day[open] {
+  border-color:color-mix(in srgb,var(--gold) 42%,var(--line));
+}
+#app.period-page .period-day[open]>summary {
+  background:color-mix(in srgb,var(--gold) 5%,var(--surface));
+}
