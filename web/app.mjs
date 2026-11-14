@@ -599,7 +599,7 @@ function form(id = null, returnTo = 'history') {
     <p class="hint slot-hint" id="slotHint" hidden></p>
     <h2 class="form-section-heading">Время и заказы</h2>
     ${field('dailyHours', carried ? 'Часы за интервал' : 'Часы за слот', val('dailyHours'), { unit: 'ч', labelClass: 'daily-label', note: carried ? 'Время между прежними записями' : '', validation: true })}
-    ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', val('dailyOrders'), { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : '', validation: true })}
+    ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', val('dailyOrders'), { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : 'Пусто — неизвестно; введите 0, если заказов не было', validation: true })}
     <h2 class="form-section-heading">Выплата, чаевые и удержания</h2>
     ${field('reward', 'Выплачено', val('reward'), { full: true, note: 'Фактическая сумма выплаты за слот', validation: true })}
     ${field('tax', 'Налог', val('tax'), { unit: '₽', note: `Ориентир ${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%`, validation: true })}
@@ -608,7 +608,7 @@ function form(id = null, returnTo = 'history') {
     <details class="additional slot-working"><summary>Рабочее время дня</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
   // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
-  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = input.id === 'dailyHours' ? '00:00' : input.id === 'dailyOrders' ? '0' : '0.0'; });
+  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = input.id === 'dailyHours' ? '00:00' : input.id === 'dailyOrders' ? '' : '0.0'; });
   installLargeTextFormLabelFocusGuard();
   $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });
   renderSlotWorkingEditor(e.date,ctx);
