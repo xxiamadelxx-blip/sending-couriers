@@ -8,6 +8,17 @@ function twoSlots() {
   return upsertEntry(upsertEntry(emptyState(), slot({ note: 'Утро' })), slot({ dailyOrders: 10, reward: 900, tax: 10, parkCommission: 130, tips: 5, separateBonus: 25, note: 'Вечер' }));
 }
 
+test('explicit zero orders in the first slot of a new period remain zero after reload', () => {
+  let state = upsertEntry(emptyState(), { date: '2026-10-30', dailyHours: 8, dailyOrders: 20 });
+  state = upsertEntry(state, { date: '2026-11-13', dailyHours: '12', dailyOrders: '0' });
+  state = normalizeState(JSON.parse(JSON.stringify(state)));
+
+  const summary = calculate(state, '2026-11-13');
+  assert.equal(summary.hours, 12);
+  assert.equal(summary.orders, 0);
+  assert.equal(summary.pace, 0);
+});
+
 test('two slots on one date save separately and add hours, orders and all money exactly once', () => {
   const state = twoSlots(), s = calculate(state, period);
   assert.equal(state.entries.length, 2);
