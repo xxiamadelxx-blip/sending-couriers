@@ -289,6 +289,23 @@ def main():
         capture('01-empty-forecast-360-dark')
     device.tap_node('Главная')
     device.wait_home(20)
+    if args.phase == 'after':
+        # The first slot in an empty period must persist its default zero order
+        # count through the native Android store and a process restart.
+        device.add_slot(hours=12, orders=None, reward=4320)
+        first_slot = capture('first-slot-zero-orders')
+        first_slot_text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in first_slot.iter('node')))
+        assert '12 ч' in first_slot_text and re.search(r'\b0 заказов\b', first_slot_text), first_slot_text
+        device.adb('shell', 'am', 'force-stop', device.PACKAGE)
+        device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+        device.wait_home(30)
+        after_restart = capture('first-slot-zero-orders-after-restart')
+        after_restart_text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in after_restart.iter('node')))
+        assert '12 ч' in after_restart_text and re.search(r'\b0 заказов\b', after_restart_text), after_restart_text
+        device.adb('shell', 'pm', 'clear', device.PACKAGE)
+        device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+        device.wait_home(30)
+        device.wait_node('Смена ещё не записана', 20)
     device.add_slot(hours=4, orders=8, reward=1200)
     device.add_slot(hours=5, orders=10, reward=2000)
     if args.phase == 'after' and args.focus == 'full':

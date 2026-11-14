@@ -594,12 +594,13 @@ function form(id = null, returnTo = 'history') {
   const inputHint = carried ? dayCaption(e) : ''; 
   // Earlier versions stored omitted deductions as 0; keep those fields optional on edit.
   const val = key => e[key] == null || (['tax', 'parkCommission'].includes(key) && e[key] === 0) ? '' : String(e[key]).replace('.', ',');
+  const orderValue = original ? val('dailyOrders') : '0';
   app.innerHTML = `${heading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll"><div class="form-grid"><div class="field full form-date-field"><label for="date">Дата слота</label><div class="date-box"><span id="dateVisible">${esc(formatDate(e.date, true))}</span>${icon.calendar}<input name="date" id="date" type="date" lang="ru" value="${esc(e.date)}" required></div><p class="form-period" id="formPeriod">Период: ${esc(periodLabel(periodFor(e.date)))}</p></div>
     ${inputHint ? `<p class="hint optional-reading">${esc(inputHint)}</p>` : ''}
     <p class="hint slot-hint" id="slotHint" hidden></p>
     <h2 class="form-section-heading">Время и заказы</h2>
     ${field('dailyHours', carried ? 'Часы за интервал' : 'Часы за слот', val('dailyHours'), { unit: 'ч', labelClass: 'daily-label', note: carried ? 'Время между прежними записями' : '', validation: true })}
-    ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', val('dailyOrders'), { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : 'Пусто — неизвестно; введите 0, если заказов не было', validation: true })}
+    ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', orderValue, { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : 'По умолчанию 0. Введите фактическое число; очистите поле, если количество неизвестно.', validation: true })}
     <h2 class="form-section-heading">Выплата, чаевые и удержания</h2>
     ${field('reward', 'Выплачено', val('reward'), { full: true, note: 'Фактическая сумма выплаты за слот', validation: true })}
     ${field('tax', 'Налог', val('tax'), { unit: '₽', note: `Ориентир ${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%`, validation: true })}
@@ -607,7 +608,7 @@ function form(id = null, returnTo = 'history') {
     ${field('tips', 'Чаевые', val('tips'), { validation: true })}${field('separateBonus', 'Отдельные бонусы', val('separateBonus'), { validation: true })}<section class="slot-live-summary full" aria-live="polite"><div><span>Удержания</span><strong id="slotDeductionTotal">— ₽</strong></div><div><span>Начислено</span><strong id="slotAccrued">— ₽</strong></div><p id="slotAccrualFormula">Часы × ставка + чаевые − удержания</p></section></div>
     <details class="additional slot-working"><summary>Рабочее время дня</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
-  // Empty numeric inputs remain unknown. A dash is a visual placeholder, not a saved zero.
+  // Unset optional values remain unknown; new order counters start at an editable zero.
   app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = input.id === 'dailyHours' ? '00:00' : input.id === 'dailyOrders' ? '' : '0.0'; });
   installLargeTextFormLabelFocusGuard();
   $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });

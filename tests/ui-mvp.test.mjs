@@ -309,12 +309,13 @@ test('Add Slot form uses accessible in-app work-mode choice rather than Android 
  assert.ok(page.includes('id="slotWorkMode" type="hidden" value="${mode}"'),'the mode is tracked as a real form control for save');
  assert.ok(page.includes('workingDirty=true'),'mode changes must be tracked as user edits');
 });
-test('Add Slot form distinguishes an explicit zero from an omitted order count',()=>{
+test('New slots persist editable zero order count without changing unknown entries',()=>{
  const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
- assert.doesNotMatch(page,/input\.placeholder = '—'/,'empty numeric inputs must remain empty without visual dashes');
- assert.match(page,/input\.id === 'dailyHours' \? '00:00'/);
-  assert.match(page,/input\.id === 'dailyOrders' \? ''/);
-  assert.ok(page.includes("note: carried ? 'Количество между записями' : 'Пусто — неизвестно; введите 0, если заказов не было'"));
+ assert.ok(page.includes("const orderValue = original ? val('dailyOrders') : '0';"));
+ assert.ok(page.includes("field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', orderValue"));
+ assert.ok(page.includes("note: carried ? 'Количество между записями' : 'По умолчанию 0. Введите фактическое число; очистите поле, если количество неизвестно.'"));
+ assert.ok(page.includes("input.id === 'dailyOrders' ? ''"));
+ assert.ok(core.includes("dailyOrders: ordersMissing ? null : parseInteger(input.dailyOrders, 'Заказы за день')"));
  assert.match(css,/\.form-page \.field-box\{[^}]*min-height:54px/);
  assert.match(css,/\.form-page \.form-grid\{[^}]*align-items:start/);
  assert.match(css,/\.form-page \.slot-mode-options \[role="radio"\]/);
