@@ -240,7 +240,7 @@ def main():
         snap(f'200-{mode}-working-expanded')
         device.tap_node('Рабочее время дня')
         if mode == '360-dark':
-            device.tap_node('Назад')
+            device.tap_node('Отмена')
             device.tap_node('Главная')
         else:
             device.tap_node('Сохранить слот')

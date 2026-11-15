@@ -114,7 +114,10 @@ def inspect_all_layouts(directory):
         else:
             surface = screen.rsplit('-', 2)[0]
             theme = screen.rsplit('-', 1)[-1]
-            required.extend((s, 'Button') for s in ('Назад',) if surface != 'home')
+            if surface == 'form':
+                required.append(('Отмена', 'Button'))
+            elif surface != 'home':
+                required.append(('Назад', 'Button'))
             required.append(('Включить дневную тему' if theme == 'dark'
                              else 'Включить ночную тему', 'Button'))
             if surface != 'form':

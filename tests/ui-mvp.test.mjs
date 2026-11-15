@@ -61,8 +61,8 @@ test('UI M2: empty-state navigation must wait for rendered home and history, not
  assert.match(section,/device\.wait_home\(30\)\s+device\.wait_node\('Смена ещё не записана', 20\)/);
 });
 
-test('UI M2: Android form cancel exercises the real visible Back and checks history/summary',()=>{
- assert.match(qa,/device\.tap_node\('Назад'\)/);
+test('UI M2: Android form cancel exercises the real visible Cancel and checks history/summary',()=>{
+ assert.match(qa,/device\.tap_node\('Отмена'\)/);
  assert.match(qa,/Canceling the form must restore history with bottom navigation/);
  assert.match(qa,/device\.tap_node\('Главная'\)/);
  assert.doesNotMatch(qa,/device\.adb\('shell', 'input', 'keyevent', '4'\)\s*device\.adb\('shell', 'input', 'keyevent', '4'\)/);

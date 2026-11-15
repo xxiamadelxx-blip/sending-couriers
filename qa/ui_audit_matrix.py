@@ -227,7 +227,7 @@ def main():
                 device.tap_node('Добавить первый слот')
                 device.wait_node('Сохранить слот')
                 capture(f'00-empty-form-{suffix}')
-                device.tap_node('Назад')
+                device.tap_node('Отмена')
                 # A cancelled form navigates to History, not directly Home.
                 # The Home button exists on both screens, so its presence alone
                 # was never proof that the navigation actually completed.
@@ -273,7 +273,7 @@ def main():
         assert device.find_node(empty_root, 'Добавить первый слот') is not None, 'First-shift CTA missing'
         device.tap_node('Добавить первый слот')
         device.wait_node('Сохранить слот')
-        device.tap_node('Назад')
+        device.tap_node('Отмена')
         device.tap_node('Главная')
         root_after_cancel = device.dump('first-slot-abandoned')
         assert device.find_node(root_after_cancel, 'Смена ещё не записана') is not None, 'Leaving an unsaved form changed empty state'
@@ -484,7 +484,7 @@ def main():
             device.adb('shell', 'input', 'keyevent', '4')
             # RED in #40173464789: a second hardware Back leaves the form open.
             # Dismiss IME, then exercise the actual visible in-app Back handler.
-            device.tap_node('Назад')
+            device.tap_node('Отмена')
             root = device.dump('form-abandoned-' + suffix)
             assert device.find_node(root, 'Главная') is not None, (
                 'Canceling the form must restore history with bottom navigation'
