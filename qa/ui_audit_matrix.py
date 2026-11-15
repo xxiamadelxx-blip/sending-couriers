@@ -330,22 +330,22 @@ def main():
         device.tap_node('Прогноз')
         root = capture('plan-6-5-after-process-restart')
         fields = [n.get('text', '') for n in root.iter('node') if n.get('class') == 'android.widget.EditText']
-        assert len(fields) == 2 and [float(v.replace(',', '.')) for v in fields] == [14, 6.5], fields
+        assert len(fields) == 2 and [float(v.replace(',', '.')) for v in fields] == [6.5, 14], fields
         for _ in range(3):
             device.tap_node(f'Активные часы: плюс {FORECAST_STEP_MINUTES} минут')
         root = device.dump('duration-gesture-before')
-        assert durations(root) == [14, 8], 'Restore before gesture checks failed'
+        assert durations(root) == [8, 14], 'Restore before gesture checks failed'
         slider = next(n for n in root.iter('node') if n.get('class') == 'android.widget.SeekBar'
                       and 'Активные часы' in n.get('text', ''))
         b = list(map(int, re.findall(r'\d+', slider.get('bounds', ''))))
         y = (b[1] + b[3]) // 2
         device.adb('shell', 'input', 'tap', str(b[2]-8), str(y))
         root = capture('duration-track-touch')
-        assert durations(root) == [14, 8], 'Track touch changed duration'
+        assert durations(root) == [8, 14], 'Track touch changed duration'
         thumb = b[0] + 51 + (b[2]-b[0]-102) // 3  # 34 dp thumb, value 8/24, density 3.
         device.adb('shell', 'input', 'swipe', str(thumb), str(y), str(thumb+120), str(y), '450')
         root = capture('duration-thumb-drag')
-        assert durations(root) == [14, 10], 'Thumb drag must use four 30-minute detents'
+        assert durations(root) == [10, 14], 'Thumb drag must use four 30-minute detents'
         for _ in range(4):
             device.tap_node(f'Активные часы: минус {FORECAST_STEP_MINUTES} минут')
         device.tap_node('Главная')
@@ -545,12 +545,12 @@ def main():
             # demanding them and the bottom import action in one viewport is
             # impossible on an 800dp display at 200% text size.
             root = scroll_forecast_to_top()
-            assert durations(root) == [14, 8], f'Unexpected 200% baseline: {durations(root)}'
+            assert durations(root) == [8, 14], f'Unexpected 200% baseline: {durations(root)}'
             interactions = (
-                (f'Полный слот: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-plus', [14.5, 8]),
-                (f'Полный слот: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-restored', [14, 8]),
-                (f'Активные часы: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-active-plus', [14, 8.5]),
-                (f'Активные часы: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-both-restored', [14, 8]),
+                (f'Полный слот: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-plus', [8, 14.5]),
+                (f'Полный слот: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-restored', [8, 14]),
+                (f'Активные часы: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-active-plus', [8.5, 14]),
+                (f'Активные часы: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-both-restored', [8, 14]),
             )
             for label, screenshot_name, expected in interactions:
                 scroll_forecast_action_into_view(label)
@@ -561,7 +561,7 @@ def main():
                 )
             scroll_forecast_action_into_view('Импортировать видео')
             root = capture('font-2.0-forecast-actions-restored')
-            assert durations(root) == [14, 8], (
+            assert durations(root) == [8, 14], (
                 f'200% action scroll changed planned hours: {durations(root)}'
             )
             action = device.find_node(root, 'Импортировать отчёт')
@@ -586,7 +586,7 @@ def main():
             device.wait_home(30)
             device.tap_node('Прогноз')
             reloaded = device.dump('font-2.0-both-after-process-death')
-            assert durations(reloaded) == [14, 8], (
+            assert durations(reloaded) == [8, 14], (
                 f'200% round-trip values changed after process death: {durations(reloaded)}'
             )
         if scale == '1.3' and args.phase == 'after' and args.focus == 'full':
