@@ -112,7 +112,12 @@ def wait_home(seconds=20):
 
 
 def tap_node(name):
-    _, node = wait_node(name)
+    root, first_match = wait_node(name)
+    matches = [n for n in root.iter("node")
+               if n.get("text", "") == name or n.get("content-desc", "") == name]
+    # A screen heading can share a label with a navigation button. Tap the
+    # actionable control rather than the first, non-clickable text occurrence.
+    node = next((n for n in matches if n.get("clickable") == "true"), first_match)
     coords = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
     if len(coords) != 4:
         raise AssertionError(f"No bounds for {name}: {node.attrib}")
