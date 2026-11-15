@@ -287,6 +287,19 @@ def main():
         device.tap_node('Прогноз')
         device.wait_node('Импортировать отчёт')
         capture('01-empty-forecast-360-dark')
+    if args.phase == 'after' and args.focus == 'full':
+        # Preserve the design-review screenshots even if a later form-entry
+        # smoke check fails in the Android IME interaction.
+        device.tap_node('Настройки')
+        device.wait_node('Ставка за час', 20)
+        settings_review = capture('design-review-settings-main-360-dark')
+        assert device.find_node(settings_review, 'Действует с даты') is not None
+        assert device.find_node(settings_review, 'Ставка за час') is not None
+        device.tap_node('Остальные условия')
+        details_review = capture('design-review-settings-more-360-dark')
+        assert device.find_node(details_review, 'Цель темпа для выплаты') is not None
+        device.tap_node('Главная')
+        device.wait_home(20)
     device.tap_node('Главная')
     device.wait_home(20)
     if args.phase == 'after':
