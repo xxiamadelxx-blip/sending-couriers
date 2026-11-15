@@ -42,14 +42,14 @@ test('No facts and malicious notes remain safe',()=>{
 });
 
 // Layout hierarchy is a product requirement: daily records must precede secondary information.
-test('Period screen shows editable days before conditions and 12-week settings',()=>{
+test('Period screen shows editable days, then payout conditions, then 12-week settings',()=>{
  const source=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
  const page=source.slice(source.indexOf('function periodDetails()'),source.indexOf('function settings()'));
  const days=page.indexOf('class="period-days"');
+ const conditions=page.indexOf('class="period-notice"');
  const cycle=page.indexOf('class="detail-card cycle-settings period-cycle-compact"');
- assert.ok(days>=0 && cycle>=0,'Daily cards and cycle are present');
- assert.ok(days<cycle,'Daily records must be first');
- assert.doesNotMatch(page,/\$\{paymentStatus\(s\)\}/,'Do not repeat the Home payout warning');
+ assert.ok(days>=0 && conditions>=0 && cycle>=0,'Daily cards, conditions and cycle are present');
+ assert.ok(days<conditions && conditions<cycle,'Daily records must be followed by conditions and the secondary cycle card');
  assert.doesNotMatch(page,/class="detail-card period-summary"|<h2>Итоги периода<\/h2>/,'Do not duplicate Home totals');
  assert.match(page,/form\(button\.dataset\.entry,'period'\)/,'Edit opens the exact selected slot ID');
 });

@@ -17,15 +17,23 @@ test('UI M1: slot edit form groups hours and money without discarding any existi
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));
- assert.doesNotMatch(section,/\$\{paymentStatus\(s\)\}/, 'Do not duplicate the Home warning');
- assert.ok(section.indexOf('class="period-days"') < section.indexOf('class="detail-card cycle-settings period-cycle-compact"'), 'Cycle settings belong below daily records');
+ const days=section.indexOf('class="period-days"');
+ const conditions=section.indexOf('class="period-notice"');
+ const cycle=section.indexOf('class="detail-card cycle-settings period-cycle-compact"');
+ assert.ok(days>=0 && conditions>days && cycle>conditions, 'Day records precede payout conditions and the secondary cycle card');
  assert.ok(section.includes('data-entry') || section.includes("querySelectorAll('.period-slot-edit')"));
  assert.doesNotMatch(section,/class="detail-card period-overview"/);
 });
 test('Period cycle disclosure uses one chevron, not the inline icon and pseudo arrow together',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.match(section,/id="configureCycle">Настройки премии и накопленного дохода\$\{icons\.down\}/);
+ assert.match(section,/class="cycle-title"><h2>12 недель<\/h2><button[^>]*id="cycleHelpButton"/);
  assert.match(css,/#configureCycle::after\s*\{\s*content:\s*none/);
+});
+test('Period cycle card stays compact beneath the editable ledger and payout conditions',()=>{
+ assert.match(css,/#app\.period-page \.period-cycle-compact \{ margin-top:8px; padding:12px/);
+ assert.match(css,/#app\.period-page \.period-cycle-compact \.cycle-bonus-metrics \{ margin:8px 0 4px; padding:8px 0/);
+ assert.match(css,/#app\.period-page \.period-cycle-compact progress \{ height:4px/);
 });
 test('Payout info opens an explanation and the completed payout exposes both premium components',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));

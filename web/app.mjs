@@ -381,12 +381,13 @@ function periodDetails() {
       <div class="period-days-heading"><h2 id="periodDaysHeading">Ведомость дней</h2><span>14 дней</span></div>
       <div class="period-days-list">${daily}</div>
     </section>
+    ${s.entries.length ? `<div class="period-notice">${paymentStatus(s)}</div>` : ''}
     <section class="detail-card cycle-settings period-cycle-compact" aria-label="Цикл премии">
-      <div class="cycle-header"><h2>12 недель</h2>${cycle.start ? `<span>Цикл ${cycle.cycleNumber} · День ${cycle.elapsedDays} из 84</span>` : ''}</div>
+      <div class="cycle-header"><div class="cycle-title"><h2>12 недель</h2><button type="button" class="inline-help" id="cycleHelpButton" aria-label="Как выплачивается премия за 12 недель" aria-haspopup="dialog" aria-controls="cycleHelpDialog">${icon['info-circle']}</button></div>${cycle.start ? `<span>День ${cycle.elapsedDays} из 84</span>` : ''}</div>
       ${cycle.start ? `<p class="cycle-bonus-dates">${esc(formatDate(cycle.start))} — ${esc(formatDate(cycle.end))}</p>` : ''}
       <div class="cycle-bonus-metrics" aria-label="Накопление премии">
         <div><span>Общий доход цикла</span><strong id="cycleTotalIncome">${esc(money(cycle.totalIncome))}</strong></div>
-        <div><span class="cycle-premium-label">${esc(cycleBonusLabel(cycle,s.terms))}<button type="button" class="inline-help" id="cycleHelpButton" aria-label="Как выплачивается премия за 12 недель" aria-haspopup="dialog" aria-controls="cycleHelpDialog">${icon['info-circle']}</button></span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
+        <div><span class="cycle-premium-label">${esc(cycleBonusLabel(cycle,s.terms))}</span><strong id="cyclePremium">${esc(money(cycle.premium))}</strong></div>
       </div>
       <p class="cycle-bonus-note">${!cycle.start ? 'Укажите дату начала цикла.' : cycle.status === 'not-started' ? 'Цикл ещё не начался.' : cycle.totalIncome == null ? 'Пока нет дохода по известным часам.' : 'Расчётная премия, выплата не подтверждена.'}${cycle.missingHours ? ` Записей без часов: ${cycle.missingHours}.` : ''}${cycle.boundaryNote ? ' Есть старые интервалы: расчёт приблизительный.' : ''}</p>
       ${cycle.start ? `<progress max="84" value="${cycle.elapsedDays}" aria-label="Прошло дней в 12-недельном цикле"></progress>` : ''}
