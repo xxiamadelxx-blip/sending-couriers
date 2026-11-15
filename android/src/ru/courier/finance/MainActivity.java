@@ -6,7 +6,7 @@ import android.app.UiModeManager;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -18,7 +18,6 @@ import android.view.WindowManager;
 import android.view.SoundEffectConstants;
 import android.view.HapticFeedbackConstants;
 import android.webkit.JavascriptInterface;
-import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -31,6 +30,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.util.Log;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -39,16 +40,20 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.Arrays;
+import java.util.Comparator;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
     private static final String ORIGIN = "https://appassets.androidplatform.net";
-    private static final int SAVE_FILE = 101, IMPORT_FILE = 102, IMPORT_FORECAST = 103;
+    private static final int SAVE_FILE = 101, IMPORT_FILE = 102, IMPORT_FORECAST = 103, IMPORT_VIDEO = 104;
     private static final int MAX_BYTES = 8_000_000;
     private WebView web;
     private FrameLayout root;
-    private View launch;
     private SharedPreferences preferences;
+    private CourierDatabase factMirrorDatabase;
+    private final ExecutorService factMirrorExecutor = Executors.newSingleThreadExecutor();
     private File pendingSave;
     private boolean darkTheme = true;
     private Boolean appliedNightMode;
@@ -57,7 +62,12 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         preferences = getSharedPreferences("courier_finance", MODE_PRIVATE);
-        try { darkTheme = !"light".equals(new JSONObject(preferences.getString("state", "{}")).optJSONObject("settings").optString("theme")); }
+        factMirrorDatabase = new CourierDatabase(this);
+        // Existing JSON remains authoritative until the complete XLSX and
+        // legacy JSON have both passed native SQLite parity. No forced cutover.
+        if (!preferences.getBoolean("m2_sqlite_primary",false))
+            mirrorFacts(preferences.getString("state", ""));
+        try { darkTheme = !"light".equals(new JSONObject(storedState().isEmpty()?"{}":storedState()).optJSONObject("settings").optString("theme")); }
         catch (Exception ignored) { darkTheme = true; }
         setTheme(darkTheme ? R.style.AppThemeDark : R.style.AppThemeLight);
         if (saved != null && saved.getString("pendingSave") != null) {
@@ -104,10 +114,6 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33) settings.setAlgorithmicDarkeningAllowed(false);
         web.addJavascriptInterface(new NativeBridge(), "CourierNative");
         web.setWebChromeClient(new WebChromeClient() {
-            @Override public boolean onConsoleMessage(ConsoleMessage message) {
-                Log.e("CourierWeb", message.message() + " at " + message.sourceId() + ":" + message.lineNumber());
-                return true;
-            }
             @Override public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
                 new AlertDialog.Builder(MainActivity.this).setMessage(message)
                     .setPositiveButton("Удалить", (dialog, which) -> result.confirm())
@@ -119,12 +125,11 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
-                if (uri.getPath() != null && uri.getPath().contains("forecast-worker")) Log.i("CourierAsset", "Worker request " + uri);
                 if ("https".equals(uri.getScheme()) && "appassets.androidplatform.net".equals(uri.getHost()) && uri.getPath() != null && uri.getPath().startsWith("/assets/")) {
                     String path = uri.getPath().substring(8);
                     if (path.contains("..") || !request.getMethod().equals("GET")) return blocked();
                     try {
-                        String type = path.endsWith(".html") ? "text/html" : path.endsWith(".css") ? "text/css" : path.endsWith(".mjs") || path.endsWith(".js") ? "application/javascript" : "application/octet-stream";
+                        String type = path.endsWith(".html") ? "text/html" : path.endsWith(".css") ? "text/css" : path.endsWith(".mjs") || path.endsWith(".js") ? "application/javascript" : path.endsWith(".jpg") ? "image/jpeg" : path.endsWith(".png") ? "image/png" : "application/octet-stream";
                         return new WebResourceResponse(type, "UTF-8", getAssets().open("www/" + path));
                     } catch (Exception ignored) { return blocked(); }
                 }
@@ -135,12 +140,14 @@ public final class MainActivity extends Activity {
             }
         });
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        launch = createLaunch(bg);
-        root.addView(launch, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
         applyAppearance(darkTheme);
         root.requestApplyInsets();
         web.loadUrl(ORIGIN + "/assets/index.html");
+        // WorkManager persists this schedule across force-stop/reboot. Its
+        // morning execution is best-effort; Web startup repairs stale dates.
+        ForecastAutomation.scheduleDaily(this,storedState());
+        ForecastAutomation.enqueueEvaluation(this);
         if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> handleBack());
     }
 
@@ -148,25 +155,6 @@ public final class MainActivity extends Activity {
         return new WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", null, new ByteArrayInputStream(new byte[0]));
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private View createLaunch(int bg) {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setGravity(Gravity.CENTER);
-        layout.setBackgroundColor(bg);
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_receipt);
-        layout.addView(icon, new LinearLayout.LayoutParams(dp(86), dp(108)));
-        TextView label = new TextView(this);
-        label.setText("Доход курьера");
-        label.setTextColor(AppAppearance.foreground(darkTheme));
-        label.setTextSize(28);
-        label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-        lp.topMargin = dp(24);
-        layout.addView(label, lp);
-        return layout;
-    }
-
     private void applyAppearance(boolean dark) {
         darkTheme = dark;
         setTheme(dark ? R.style.AppThemeDark : R.style.AppThemeLight);
@@ -182,7 +170,6 @@ public final class MainActivity extends Activity {
         }
         if (root != null) root.setBackgroundColor(bg);
         if (web != null) web.setBackgroundColor(bg);
-        if (launch != null) launch.setBackgroundColor(bg);
         // Android 12+ remembers this for the next system launch screen.
         if (Build.VERSION.SDK_INT >= 31 && (appliedNightMode == null || appliedNightMode != dark)) {
             appliedNightMode = dark;
@@ -194,7 +181,44 @@ public final class MainActivity extends Activity {
     private void error(String message) {
         runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
     }
+
+    /** Read the verified primary SQLite state, keeping the old JSON as fallback. */
+    private String storedState() {
+        String backup=preferences.getString("state","");
+        if(factMirrorDatabase==null||!preferences.getBoolean("m2_sqlite_primary",false))
+            return backup;
+        try {
+            String primary=factMirrorDatabase.readVerifiedState();
+            return primary==null?backup:primary;
+        }catch(Exception error){
+            Log.e("CourierSQLite","M2 verified read failed: "+error.getClass().getSimpleName());
+            return backup;
+        }
+    }
+
+    private void mirrorFacts(String serialized) {
+        if (serialized == null || serialized.isEmpty()) return;
+        // During recovery or a legacy JVM probe, the mirror might not yet be
+        // initialized. Saving the existing primary store must never fail here.
+        if (factMirrorExecutor == null || factMirrorDatabase == null) return;
+        try {
+            factMirrorExecutor.execute(() -> {
+                try {
+                    if (!preferences.getBoolean("m2_sqlite_primary",false))
+                        factMirrorDatabase.mirrorLegacy(preferences.getString("state",""));
+                }
+                catch (Exception error) {
+                    // Never log private financial content or reject a valid save.
+                    Log.e("CourierSQLite", "M2 shadow copy failed: " + error.getClass().getSimpleName());
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // Activity is closing. The next launch replays the committed JSON.
+        }
+    }
+
     public final class NativeBridge {
+        @JavascriptInterface public double fontScale() { return getResources().getConfiguration().fontScale; }
         @JavascriptInterface public void applyTheme(String mode) {
             if (!"dark".equals(mode) && !"light".equals(mode)) return;
             runOnUiThread(() -> applyAppearance("dark".equals(mode)));
@@ -211,38 +235,110 @@ public final class MainActivity extends Activity {
                 }
             });
         }
-        @JavascriptInterface public String readState() { return preferences.getString("state", ""); }
+        @JavascriptInterface public String readState() { return storedState(); }
+        @JavascriptInterface public String readSlotDraft() { return preferences.getString("slot_form_draft", ""); }
+        @JavascriptInterface public void saveSlotDraft(String draft) {
+            if (draft == null || draft.length() > 16384) return;
+            preferences.edit().putString("slot_form_draft", draft).apply();
+        }
+        @JavascriptInterface public void clearSlotDraft() { preferences.edit().remove("slot_form_draft").apply(); }
+        @JavascriptInterface public String readVideoOrderEvidence(String sourceSha256) {
+            try { return VideoForecastRecovery.reconcileAndRead(MainActivity.this,factMirrorDatabase,sourceSha256); }
+            catch(Exception failure) {
+                Log.e("CourierM4","Video forecast recovery read failed: "+failure.getClass().getSimpleName());
+                return "{\"ok\":false,\"orders\":[],\"error\":\""+failure.getClass().getSimpleName()+"\"}";
+            }
+        }
         @JavascriptInterface public boolean writeState(String value) {
             try {
                 if (value == null || value.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) return false;
                 JSONObject parsed = new JSONObject(value);
                 int schemaVersion = parsed.getInt("schemaVersion");
                 if ((schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 && schemaVersion != 6) || parsed.getJSONArray("entries").length() > 10000) return false;
-                return preferences.edit().putString("state", value).commit();
+                if(factMirrorDatabase!=null&&preferences.getBoolean("m2_sqlite_primary",false)){
+                    // SQLite is the authoritative commit. Backup failures must
+                    // not cause the UI to roll back data that SQLite did save.
+                    factMirrorDatabase.mirrorLegacy(value);
+                    if(!factMirrorDatabase.matchesLegacy(value))return false;
+                    if(!preferences.edit().putString("state",value).commit())
+                        Log.w("CourierSQLite","Legacy backup update failed; SQLite commit retained");
+                    ForecastAutomation.scheduleDaily(MainActivity.this,value);
+                    ForecastAutomation.enqueueEvaluation(MainActivity.this);
+                    return true;
+                }
+                boolean saved = preferences.edit().putString("state", value).commit();
+                if (saved) {
+                    mirrorFacts(value);
+                    ForecastAutomation.scheduleDaily(MainActivity.this,value);
+                    ForecastAutomation.enqueueEvaluation(MainActivity.this);
+                }
+                return saved;
             } catch (Exception ignored) { return false; }
         }
-        @JavascriptInterface public void ready() { runOnUiThread(() -> { if (launch != null) { root.removeView(launch); launch = null; } }); }
-        @JavascriptInterface public void importData() {
+        @JavascriptInterface public String pendingNativeForecasts() {
+            try { return AutonomousForecastStore.automationSnapshots(factMirrorDatabase); }
+            catch(Exception error) {
+                Log.e("CourierForecast","Native snapshot handoff failed: "+error.getClass().getSimpleName());
+                return "{\"snapshots\":[],\"models\":[]}";
+            }
+        }
+        @JavascriptInterface public String pendingVideoResults() {
+            JSONArray pending=new JSONArray();long total=0;
+            try {
+                File directory=new File(getFilesDir(),"video-import-results").getCanonicalFile();
+                File[] files=directory.listFiles((dir,name)->name.matches("[0-9a-f]{64}\\.json"));
+                if(files==null)return pending.toString();
+                Arrays.sort(files,Comparator.comparingLong(File::lastModified));
+                for(File file:files) {
+                    if(pending.length()>=10||!file.isFile()||file.length()<=0||file.length()>1_500_000L
+                            ||total+file.length()>5_000_000L)continue;
+                    File checked=file.getCanonicalFile();
+                    if(!checked.getPath().startsWith(directory.getPath()+File.separator))continue;
+                    byte[] bytes=java.nio.file.Files.readAllBytes(checked.toPath());
+                    JSONObject result=new JSONObject(new String(bytes,StandardCharsets.UTF_8));
+                    JSONObject item=new JSONObject().put("sourceSha256",file.getName().substring(0,64))
+                        .put("response",result.optString("response","")).put("message",result.optString("message",""));
+                    if(item.optString("response").isEmpty())continue;
+                    pending.put(item);total+=file.length();
+                }
+            }catch(Exception error){Log.e("CourierM4","Pending video result read failed: "+error.getClass().getSimpleName());}
+            return pending.toString();
+        }
+        @JavascriptInterface public boolean acknowledgeVideoImport(String sourceSha256) {
+            if(sourceSha256==null||!sourceSha256.matches("[0-9a-f]{64}"))return false;
+            try {
+                File root=new File(getFilesDir(),"video-import-results").getCanonicalFile();
+                File result=new File(root,sourceSha256+".json").getCanonicalFile();
+                return result.getPath().startsWith(root.getPath()+File.separator)&&(!result.exists()||result.delete());
+            }catch(Exception ignored){return false;}
+        }
+        @JavascriptInterface public void ready() { }
+        @JavascriptInterface public void importVideo() {
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent();
+                    intent.setClassName(MainActivity.this, "ru.courier.finance.M4VideoImportActivity");
+                    intent.putExtra("m4.returnResult", true);
+                    startActivityForResult(intent, IMPORT_VIDEO);
+                } catch (Exception e) { error("Импорт видео появится после обновления приложения."); }
+            });
+        }
+        private void openImportPicker(String[] mimeTypes, int requestCode) {
             runOnUiThread(() -> {
                 try {
                     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     intent.setType("*/*");
-                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
-                    startActivityForResult(intent, IMPORT_FILE);
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+                    startActivityForResult(intent, requestCode);
                 } catch (Exception e) { error("Не удалось открыть выбор файла."); }
             });
         }
+        @JavascriptInterface public void importData() {
+            openImportPicker(new String[]{"application/json", "text/plain", "application/octet-stream"}, IMPORT_FILE);
+        }
         @JavascriptInterface public void importForecast() {
-            runOnUiThread(() -> {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("*/*");
-                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/json", "application/octet-stream"});
-                    startActivityForResult(intent, IMPORT_FORECAST);
-                } catch (Exception e) { error("Не удалось открыть выбор файла."); }
-            });
+            openImportPicker(new String[]{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/json", "application/octet-stream"}, IMPORT_FORECAST);
         }
         @JavascriptInterface public void fetchWeather(String city, String timezone) {
             synchronized (MainActivity.this) { if (weatherLoading) return; weatherLoading=true; }
@@ -251,6 +347,9 @@ public final class MainActivity extends Activity {
                     String result=WeatherClient.fetch(city,timezone);
                     runOnUiThread(() -> { if (!isFinishing()) web.evaluateJavascript("window.receiveWeather("+JSONObject.quote(result)+")",null); });
                 } catch (Exception e) {
+                    String failure = e instanceof WeatherClient.HttpStatusException
+                        ? "HTTP " + ((WeatherClient.HttpStatusException)e).status + " (" + ((WeatherClient.HttpStatusException)e).category + ")" : e.getClass().getSimpleName();
+                    android.util.Log.w("CourierWeather", "Weather request failed: " + failure);
                     runOnUiThread(() -> { if (!isFinishing()) web.evaluateJavascript("window.weatherFailed && window.weatherFailed()",null); });
                 } finally { weatherLoading=false; }
             }).start();
@@ -297,6 +396,14 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == IMPORT_VIDEO) {
+            if (resultCode == RESULT_OK && data != null) {
+                String payload = data.getStringExtra("m4.video.result");
+                if (payload != null && web != null) web.evaluateJavascript(
+                    "window.receiveVideoImport && window.receiveVideoImport(" + JSONObject.quote(payload) + ")", null);
+            }
+            return;
+        }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         if (requestCode == SAVE_FILE && pendingSave != null) {
@@ -317,8 +424,35 @@ public final class MainActivity extends Activity {
                     byte[] buffer = new byte[8192]; int count;
                     while ((count = in.read(buffer)) != -1) { out.write(buffer, 0, count); if (out.size() > MAX_BYTES) throw new IllegalArgumentException(); }
                     byte[] bytes = out.toByteArray();
-                    String text = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K'
-                        ? WorkbookReader.read(new ByteArrayInputStream(bytes)) : new String(bytes, StandardCharsets.UTF_8);
+                    boolean xlsx = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K';
+                    String text = xlsx ? WorkbookReader.read(new ByteArrayInputStream(bytes))
+                        : new String(bytes, StandardCharsets.UTF_8);
+                    if (xlsx) {
+                        try {
+                            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+                            StringBuilder digest=new StringBuilder(64);
+                            for (byte h : hash) digest.append(String.format(java.util.Locale.ROOT,"%02x",h & 0xff));
+                            String sha=digest.toString();
+                            factMirrorDatabase.mirrorWorkbook(text,sha);
+                            // Promote only after both source history and legacy
+                            // JSON are verified. Preserve the old JSON as backup.
+                            if(factMirrorDatabase.isApprovedPrimarySource(sha)
+                               && !preferences.getBoolean("m2_sqlite_primary",false)){
+                                String backup=preferences.getString("state","");
+                                if(!backup.isEmpty()){
+                                    // Do not race the asynchronous startup mirror.
+                                    // First commit the freshest legacy JSON exactly.
+                                    factMirrorDatabase.mirrorLegacy(backup);
+                                    if(factMirrorDatabase.matchesLegacy(backup))
+                                        preferences.edit().putBoolean("m2_sqlite_primary",true).commit();
+                                }
+                            }
+                        } catch(Exception archiveError) {
+                            // Old, user-visible import must continue. Source-parity
+                            // migration is NOT marked successful on a shadow error.
+                            Log.e("CourierSQLite","M2 workbook archival failed: "+archiveError.getClass().getSimpleName());
+                        }
+                    }
                     String callback = requestCode == IMPORT_FORECAST ? "window.receiveForecastImport" : "window.receiveImport";
                     runOnUiThread(() -> web.evaluateJavascript(callback + "(" + JSONObject.quote(text) + ")", null));
                 } catch (Exception e) { error("Не удалось прочитать файл. Допустимы JSON и XLSX до 8 МБ без пароля."); }
@@ -339,6 +473,7 @@ public final class MainActivity extends Activity {
         if (pendingSave != null) out.putString("pendingSave", "exports/" + pendingSave.getParentFile().getName() + "/" + pendingSave.getName());
     }
     @Override protected void onDestroy() {
+        factMirrorExecutor.shutdown(); // Queued writes finish; next launch also repairs interruption.
         if (web != null) { web.removeJavascriptInterface("CourierNative"); web.destroy(); }
         super.onDestroy();
     }

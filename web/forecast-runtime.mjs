@@ -2,7 +2,7 @@ import {setCountTraining,cachedCountModel,countModelKey,installCountModels} from
 import {forecastClock,planDay,profileFor,FORECAST_VERSION} from './forecast.mjs';
 setCountTraining(false); // The UI is inference-only; preparation belongs to the worker.
 let worker=null,sequence=0;const jobs=new Map(),pending=new Map();
-function getWorker(){if(worker)return worker;worker=new Worker(new URL('./forecast-worker.mjs',import.meta.url),{type:'module'});
+function getWorker(){if(worker)return worker;worker=new Worker(new URL('./forecast-worker-bundle.js',import.meta.url));
  worker.onmessage=event=>{const {id,artifact,error}=event.data,job=jobs.get(id);if(!job)return;jobs.delete(id);if(error)job.reject(new Error(error));else{installCountModels([artifact]);job.resolve(artifact);}};
  worker.onerror=event=>{console.error('Forecast worker',event.message,event.filename,event.lineno,event.colno);for(const job of jobs.values())job.reject(new Error('Не удалось подготовить прогноз. Откройте приложение повторно.'));jobs.clear();worker.terminate();worker=null;};return worker;}
 export function prepareForecast(data){

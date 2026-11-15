@@ -7,6 +7,12 @@ const copy = value => JSON.parse(JSON.stringify(value));
 const fail = message => { throw new Error(message); };
 const number = (value, max = 1000000) => value == null || typeof value==='string'&&!value.trim() ? null : ['string','number'].includes(typeof value)&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=max ? Number(value) : fail('Проверьте числовые данные прогноза.');
 const integer = (value, max = 1000000) => { const n = number(value,max); return n == null || Number.isInteger(n) ? n : fail('Нужно целое число.'); };
+function orderNumber(value) {
+  if(value==null||value==='') return null;
+  if(typeof value==='number'&&Number.isSafeInteger(value)&&value>=0) return value;
+  if(typeof value==='string'&&/^\d{1,40}(?:-\d{4,40})?$/.test(value)) return value;
+  fail('Проверьте номер заказа.');
+}
 const knownZones=new Set();
 function validZone(timezone){if(!knownZones.has(timezone)){try{localClock(timezone);}catch{fail('Проверьте часовой пояс факта.');}knownZones.add(timezone);}return timezone;}
 export function dayStamp(date) {
@@ -115,53 +121,112 @@ export function saveForecastHours(data,date,slotMin,workingMin) {
   const simple={slotMin:value.slotMin,workingMin:value.workingMin,intervals:[],precision:'total',mode:'simple'};
   return {...data,weekConfig:simple,plans:{...data.plans,[date]:simple}};
 }
-function evidence(input=[]) {
+function normalizeOrderEvidence(input=[]) {
   if(!Array.isArray(input)||input.length>2000) fail('Слишком много заказов за день.');
   const ids=new Set();
   return input.map(o=>{
     const id=String(o.id??'').slice(0,160); if(!id||ids.has(id)) fail('Повторяется идентификатор заказа.'); ids.add(id);
     const acceptedMin=number(o.acceptedMin,2880),deliveredMin=number(o.deliveredMin,2880),visibleMin=number(o.visibleMin,1440);
     if(acceptedMin!=null && deliveredMin!=null && deliveredMin<acceptedMin) fail('Завершение заказа раньше принятия.');
-    return {id,visibleMin,acceptedMin,deliveredMin,orderNumber:integer(o.orderNumber),source:String(o.source??'manual').slice(0,200),confidence:String(o.confidence??'').slice(0,100),note:String(o.note??'').slice(0,1000),workingInterval:String(o.workingInterval??'').slice(0,100),fieldSources:Object.fromEntries(['visibleMin','acceptedMin','deliveredMin'].map(k=>{const status=o.fieldSources?.[k]?.status??(o[k]==null?'UNKNOWN':o.confirmed?'CONFIRMED':'RECONSTRUCTED');if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте источник времени заказа.');return [k,{status,source:String(o.fieldSources?.[k]?.source??o.source??'').slice(0,200)}];})),completeness:acceptedMin!=null&&deliveredMin!=null?'FULL':'PARTIAL',confirmed:o.confirmed===true};
+    return {id,visibleMin,acceptedMin,deliveredMin,orderNumber:orderNumber(o.orderNumber),source:String(o.source??'manual').slice(0,200),confidence:String(o.confidence??'').slice(0,100),note:String(o.note??'').slice(0,1000),workingInterval:String(o.workingInterval??'').slice(0,100),fieldSources:Object.fromEntries(['visibleMin','acceptedMin','deliveredMin'].map(k=>{const status=o.fieldSources?.[k]?.status??(o[k]==null?'UNKNOWN':o.confirmed?'CONFIRMED':'RECONSTRUCTED');if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте источник времени заказа.');return [k,{status,source:String(o.fieldSources?.[k]?.source??o.source??'').slice(0,200)}];})),completeness:acceptedMin!=null&&deliveredMin!=null?'FULL':'PARTIAL',confirmed:o.confirmed===true};
   });
 }
-function day(input) {
+function normalizeVideoSlots(input=[]) {
+  if(!Array.isArray(input)||input.length>100)fail('Слишком много видео-слотов за день.');
+  const seen=new Set();
+  return input.map(slot=>{
+    const slotId=String(slot.slotId??'').trim().slice(0,120),orderCount=integer(slot.orderCount,1000000);
+    if(!slotId||orderCount==null||seen.has(slotId))fail('Повторяется или повреждён идентификатор видео-слота.');
+    seen.add(slotId);
+    const conflicts=Array.isArray(slot.conflicts)?slot.conflicts.slice(0,10).map(row=>({
+      orderCount:integer(row.orderCount,1000000),sourceHash:String(row.sourceHash??'').slice(0,64),
+      source:String(row.source??'').slice(0,200)
+    })).filter(row=>row.orderCount!=null):[];
+    return {slotId,orderCount,sourceHash:String(slot.sourceHash??'').slice(0,64),
+      source:String(slot.source??'').slice(0,200),startedAt:String(slot.startedAt??'').slice(0,40),
+      completedAt:String(slot.completedAt??'').slice(0,40),conflicts};
+  });
+}
+function orderEvidenceFacts(orders, orderRows, isComplete) {
+  const orderRanges=orderRows
+    .filter(order=>order.confirmed&&order.acceptedMin!=null&&order.deliveredMin!=null)
+    .map(order=>[Math.max(0,order.acceptedMin),Math.min(1440,order.deliveredMin)])
+    .filter(([start,end])=>start<end);
+  const hasUnknownDeliveryDuration=orderRows.some(order=>
+    order.confirmed&&order.acceptedMin!=null&&order.acceptedMin===order.deliveredMin
+  );
+  const complete=isComplete===true&&orders!=null&&orderRows.length===orders
+    &&orderRows.every(order=>order.confirmed&&order.acceptedMin!=null&&order.deliveredMin!=null);
+  return {
+    orderRanges,
+    hasUnknownDeliveryDuration,
+    onOrderMin:!hasUnknownDeliveryDuration&&orderRanges.length?duration(orderRanges):null,
+    complete
+  };
+}
+function normalizeFieldSources(input, source, orders, workingMin) {
+  const fields=[
+    ['orders',input.ordersConfirmed===true,orders],
+    ['workingMin',input.workConfirmed===true,workingMin],
+    ['appAccountedMin',input.accountedConfirmed===true,input.appAccountedMin]
+  ];
+  const normalized={};
+  for(const [key,confirmed,value] of fields) {
+    const given=input.fieldSources?.[key];
+    const kind=given?.kind??(value==null?'UNKNOWN':confirmed?'FACT':'ASSUMPTION');
+    if(!['FACT','ASSUMPTION','UNKNOWN'].includes(kind))fail('Проверьте происхождение поля.');
+    const status=given?.status??(value==null?'UNKNOWN':confirmed?'CONFIRMED':'RECONSTRUCTED');
+    if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте статус источника.');
+    normalized[key]={source:String(given?.source??source).slice(0,200),kind,status,note:String(given?.note??'').slice(0,3000)};
+  }
+  return normalized;
+}
+function reconcileDayOrderEvidence(input,list,orders,orderEvidence,precision,workConfirmed) {
+  const orderFacts=orderEvidenceFacts(orders,orderEvidence,input.evidenceComplete);
+  // Equal displayed minutes preserve the timestamps, but the hidden seconds
+  // leave the duration unknown; they are not proof of zero time on delivery.
+  const pause=list.filter(i=>i.state==='UNAVAILABLE').map(i=>[i.start,i.end]);
+  const conflicts=[...(input.sourceConflicts??[]).map(String).slice(0,50)];
+  if(orders!=null&&orderEvidence.length>orders) conflicts.push('Список содержит больше заказов, чем подтверждённый итог. Проверьте возможные дубликаты.');
+  if(orderFacts.orderRanges.some(a=>pause.some(b=>overlap(a,b)>0))) conflicts.push('Личная пауза пересекается с выполняемой доставкой. Уточните время.');
+  const workRanges=list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end]);
+  const busyInside=duration(orderFacts.orderRanges.flatMap(orderRange=>workRanges
+    .map(workRange=>[Math.max(orderRange[0],workRange[0]),Math.min(orderRange[1],workRange[1])])
+    .filter(([start,end])=>start<end)));
+  if(workConfirmed&&precision==='intervals'&&orderFacts.onOrderMin!=null&&busyInside<orderFacts.onOrderMin&&!conflicts.length)
+    conflicts.push('Доставка выходит за подтверждённые рабочие окна. Уточните рабочее время.');
+  return {orderFacts,pause,conflicts,busyInside};
+}
+function normalizeDay(input) {
   dayStamp(input.date);
   const list=intervals(input.intervals??[]);
-  for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++) if(list[i].state!==list[j].state && overlap([list[i].start,list[i].end],[list[j].start,list[j].end])) fail('Рабочий интервал пересекается с паузой.');
-  const orders=integer(input.orders),orderEvidence=evidence(input.orderEvidence);
-  const precision=input.precision??'unknown'; if(!['unknown','total','intervals'].includes(precision)) fail('Проверьте точность времени.');
+  for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++) {
+    if(list[i].state!==list[j].state&&overlap([list[i].start,list[i].end],[list[j].start,list[j].end]))
+      fail('Рабочий интервал пересекается с паузой.');
+  }
+  const orders=integer(input.orders),orderEvidence=normalizeOrderEvidence(input.orderEvidence);
+  const precision=input.precision??'unknown';
+  if(!['unknown','total','intervals'].includes(precision))fail('Проверьте точность времени.');
   const workConfirmed=input.workConfirmed===true;
   const timezone=validZone(String(input.timezone??'Europe/Moscow'));
   const workingMin=precision==='intervals' ? duration(list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end])) : number(input.workingMin,1440);
   if(precision==='total' && workingMin==null) fail('Укажите суммарное время работы.');
-  const orderRanges=orderEvidence.filter(o=>o.confirmed&&o.acceptedMin!=null&&o.deliveredMin!=null).map(o=>[Math.max(0,o.acceptedMin),Math.min(1440,o.deliveredMin)]).filter(([a,b])=>a<b);
-  const pause=list.filter(i=>i.state==='UNAVAILABLE').map(i=>[i.start,i.end]);
-  const conflicts=[...(input.sourceConflicts??[]).map(String).slice(0,50)];
-  if(orders!=null&&orderEvidence.length>orders) conflicts.push('Список содержит больше заказов, чем подтверждённый итог. Проверьте возможные дубликаты.');
-  if(orderRanges.some(a=>pause.some(b=>overlap(a,b)>0))) conflicts.push('Личная пауза пересекается с выполняемой доставкой. Уточните время.');
-  const onOrderMin=orderRanges.length?duration(orderRanges):null;
-  const completeEvidence=input.evidenceComplete===true && orders!=null && orderEvidence.length===orders && orderEvidence.every(o=>o.confirmed&&o.acceptedMin!=null&&o.deliveredMin!=null);
-  const workRanges=list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end]);
-  const busyInside=duration(orderRanges.flatMap(a=>workRanges.map(b=>[Math.max(a[0],b[0]),Math.min(a[1],b[1])]).filter(([a,b])=>a<b)));
-  if(workConfirmed&&precision==='intervals'&&onOrderMin!=null&&busyInside<onOrderMin&&!conflicts.length) conflicts.push('Доставка выходит за подтверждённые рабочие окна. Уточните рабочее время.');
+  const {orderFacts,pause,conflicts,busyInside}=reconcileDayOrderEvidence(input,list,orders,orderEvidence,precision,workConfirmed);
   const source=String(input.source??'manual').slice(0,200);
-  const fieldSources={};
-  for(const [key,confirmed,value] of [['orders',input.ordersConfirmed===true,orders],['workingMin',workConfirmed,workingMin],['appAccountedMin',input.accountedConfirmed===true,input.appAccountedMin]]) {
-    const given=input.fieldSources?.[key];fieldSources[key]={source:String(given?.source??source).slice(0,200),kind:given?.kind??(value==null?'UNKNOWN':confirmed?'FACT':'ASSUMPTION')};
-    if(!['FACT','ASSUMPTION','UNKNOWN'].includes(fieldSources[key].kind))fail('Проверьте происхождение поля.');
-    const status=given?.status??(value==null?'UNKNOWN':confirmed?'CONFIRMED':'RECONSTRUCTED');
-    if(!['CONFIRMED','RECONSTRUCTED','UNKNOWN','CONFLICT'].includes(status))fail('Проверьте статус источника.');
-    fieldSources[key]={...fieldSources[key],status,note:String(given?.note??'').slice(0,3000)};
-  }
+  const fieldSources=normalizeFieldSources(input,source,orders,workingMin);
+  const suppliedOrderSource=String(input.fieldSources?.orders?.source??'');
+  const defaultOrdersScope=source.startsWith('video:')&&(!suppliedOrderSource||suppliedOrderSource.startsWith('video:'))?'video_slots':'daily';
+  const ordersScope=input.ordersScope??defaultOrdersScope;
+  if(!['daily','video_slots'].includes(ordersScope))fail('Проверьте область итога заказов.');
+  const videoSlots=normalizeVideoSlots(input.videoSlots??[]);
   return {date:input.date,timezone,zone:String(input.zone??'').slice(0,120),profileVersion:integer(input.profileVersion,100000),fieldSources,
     orders,ordersConfirmed:input.ordersConfirmed===true,completed:input.completed!==false,asOfMinute:integer(input.asOfMinute,1440),appAccountedMin:number(input.appAccountedMin,1440),accountedConfirmed:input.accountedConfirmed===true,
     intervals:list,precision,workingMin,workConfirmed,unavailableMin:workConfirmed&&precision==='intervals'?duration(pause):null,
-    onOrderMin,availableNoOrderMin:workConfirmed&&precision==='intervals'&&completeEvidence&&!conflicts.length?Math.max(0,workingMin-busyInside):null,
+    onOrderMin:orderFacts.onOrderMin,availableNoOrderMin:workConfirmed&&precision==='intervals'&&orderFacts.complete&&!orderFacts.hasUnknownDeliveryDuration&&!conflicts.length?Math.max(0,workingMin-busyInside):null,
     countedNonWorkingMin:workConfirmed?duration(list.filter(i=>i.state==='UNAVAILABLE'&&i.paymentCounted==='YES').map(i=>[i.start,i.end])):null,
     unknownMin:precision==='intervals'?1440-duration(list.filter(i=>i.state!=='UNKNOWN').map(i=>[i.start,i.end])):null,
-    orderEvidence,evidenceComplete:completeEvidence,rawComplete:orders!=null&&orderEvidence.length===orders,sourceNotes:Array.isArray(input.sourceNotes)?input.sourceNotes.slice(0,20).map(v=>String(v).slice(0,3000)):[],estimatedIntervals:intervals(input.estimatedIntervals??[]),estimatedExposureJustified:input.estimatedExposureJustified===true,exposureBlocks:(input.exposureBlocks??[]).slice(0,100).map(b=>({...intervals([b])[0],orders:integer(b.orders),status:String(b.status),source:String(b.source??'').slice(0,300)})),conflicts,sourceConflicts:(input.sourceConflicts??[]).map(String).slice(0,50),
-    source,sourceHash:String(input.sourceHash??'').slice(0,160),revision:integer(input.revision,100000)??1,
+    orderEvidence,evidenceComplete:orderFacts.complete,rawComplete:orders!=null&&orderEvidence.length===orders,sourceNotes:Array.isArray(input.sourceNotes)?input.sourceNotes.slice(0,20).map(v=>String(v).slice(0,3000)):[],estimatedIntervals:intervals(input.estimatedIntervals??[]),estimatedExposureJustified:input.estimatedExposureJustified===true,exposureBlocks:(input.exposureBlocks??[]).slice(0,100).map(b=>({...intervals([b])[0],orders:integer(b.orders),status:String(b.status),source:String(b.source??'').slice(0,300)})),conflicts,sourceConflicts:(input.sourceConflicts??[]).map(String).slice(0,50),
+    source,sourceHash:String(input.sourceHash??'').slice(0,160),ordersScope,videoSlots,revision:integer(input.revision,100000)??1,
     importedAt:String(input.importedAt??''),confirmedAt:String(input.confirmedAt??''),manualTime:input.manualTime===true,
     revisions:Array.isArray(input.revisions)?input.revisions.slice(-100).map(r=>({revision:integer(r.revision,100000),at:String(r.at),precision:String(r.precision),workingMin:number(r.workingMin,1440),intervals:intervals(r.intervals??[]),source:String(r.source??''),manual:r.manual===true})):[]};
 }
@@ -197,6 +262,26 @@ function snapshot(s) {
   }
   return {...copy(s),...(parts?{intervalForecasts:parts}:{}),central:c,lower:l,upper:u,comparableN:integer(s.comparableN,100000)??0,reasons:s.reasons.map(v=>String(v).slice(0,500)),baseline:number(s.baseline),workingMin:number(s.workingMin,1440),timezone:validZone(String(s.timezone??'Europe/Moscow'))};
 }
+function normalizeForecastArchive(input) {
+  const archive = {};
+  for (const key of ['forecasts', 'accuracy', 'models', 'financialRules']) {
+    archive[key] = safeRecords(input?.[key] ?? [], 5000, 'архив ' + key).map(record => {
+      recordId(record.id);
+      if (key === 'forecasts') {
+        if (record.date != null) dayStamp(record.date);
+        for (const field of ['central', 'lower', 'upper', 'factAddedLater', 'absoluteError', 'percentageError']) {
+          record[field] = number(record[field]);
+        }
+      }
+      return record;
+    });
+    if (new Set(archive[key].map(record => record.id)).size !== archive[key].length) {
+      fail('Повторяется запись архива.');
+    }
+  }
+  return archive;
+}
+
 export function normalizeForecast(input) {
   if(input==null) return emptyForecast();
   if(input.version!==1) fail('Версия прогноза пока не поддерживается.');
@@ -204,7 +289,7 @@ export function normalizeForecast(input) {
   result.profiles=safeRecords(input.profiles??[],500,'профили').map(profile);
   if(new Set(result.profiles.map(p=>p.version)).size!==result.profiles.length) fail('Повторяется версия рабочего профиля.');
   if(!input.days||typeof input.days!=='object'||Array.isArray(input.days)||Object.keys(input.days).length>5000) fail('Проверьте историю прогноза.');
-  for(const [key,value] of Object.entries(input.days)) { dayStamp(key); if(value.date!==key) fail('Дата факта не совпадает.'); result.days[key]=day(value); }
+  for(const [key,value] of Object.entries(input.days)) { dayStamp(key); if(value.date!==key) fail('Дата факта не совпадает.'); result.days[key]=normalizeDay(value); }
   result.snapshots=safeRecords(input.snapshots??[],10000,'прогнозы').map(snapshot);
   if(new Set(result.snapshots.map(s=>s.id)).size!==result.snapshots.length) fail('Повторяется выпуск прогноза.');
   result.evaluations=safeRecords(input.evaluations??[],20000,'оценки').map(evaluation);
@@ -218,7 +303,7 @@ export function normalizeForecast(input) {
   result.weather=input.weather==null?null:copy(input.weather);
   result.location=input.location==null?null:{weatherCity:String(input.location.weatherCity??'').slice(0,120),timezone:validZone(String(input.location.timezone??'Europe/Moscow')),source:String(input.location.source??'settings').slice(0,200)};
   if(input.typicalPlan)result.typicalPlan={intervals:intervals(input.typicalPlan.intervals??[]),timezone:validZone(String(input.typicalPlan.timezone??'Europe/Moscow')),zone:String(input.typicalPlan.zone??'').slice(0,120),source:String(input.typicalPlan.source??'history').slice(0,200),status:'RECONSTRUCTED'};
-  for(const k of ['forecasts','accuracy','models','financialRules']){result.archive[k]=safeRecords(input.archive?.[k]??[],5000,'архив '+k).map(r=>{recordId(r.id);if(k==='forecasts'){if(r.date!=null)dayStamp(r.date);for(const f of ['central','lower','upper','factAddedLater','absoluteError','percentageError'])r[f]=number(r[f]);}return r;});if(new Set(result.archive[k].map(r=>r.id)).size!==result.archive[k].length)fail('Повторяется запись архива.');}
+  result.archive = normalizeForecastArchive(input.archive);
   // Legacy imports already contain source-tagged reconstructed totals. They stay reconstructed.
   for(const d of Object.values(result.days))if(d.source.startsWith('sheets_import:')&&!d.manualTime&&!d.workConfirmed&&d.workingMin>0&&!d.estimatedIntervals.length&&!input.days[d.date].fieldSources?.workingMin?.status)d.estimatedExposureJustified=true;
   return result;
@@ -230,13 +315,29 @@ export function mergeForecast(current,incoming) {
   const days={...a.days}; for(const incoming of Object.values(b.days)) {
     const old=days[incoming.date];let d=incoming;if(!old){days[d.date]=d;continue;}
     const sourceConflicts=[...new Set([...old.sourceConflicts,...d.sourceConflicts])];
+    const slots=mergeVideoSlots(old.videoSlots,d.videoSlots);
+    const oldDaily=old.ordersConfirmed&&old.ordersScope!=='video_slots';
+    const incomingDaily=d.ordersConfirmed&&d.ordersScope!=='video_slots';
+    const dailyConflict=oldDaily&&incomingDaily&&old.orders!==d.orders;
+    if(oldDaily||incomingDaily) {
+      for(let i=sourceConflicts.length-1;i>=0;i--)if(sourceConflicts[i].startsWith('Видео-слот '))sourceConflicts.splice(i,1);
+    }
     if(old.manualTime) {
       if(JSON.stringify([old.intervals,old.workingMin,old.precision])!==JSON.stringify([d.intervals,d.workingMin,d.precision]))sourceConflicts.push('В копии другие рабочие часы. Сохранено ручное уточнение; подтвердите время дня.');
       d={...d,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions};
     }
     if(old.accountedConfirmed&&d.accountedConfirmed&&old.appAccountedMin!==d.appAccountedMin) {sourceConflicts.push('В копии другие часы Яндекса. Сохранён подтверждённый знаменатель; уточните день.');d={...d,appAccountedMin:old.appAccountedMin};}
-    if(old.ordersConfirmed&&d.ordersConfirmed&&old.orders!==d.orders) {sourceConflicts.push('В копии другой итог заказов. Сохранён подтверждённый итог; уточните день.');d={...d,orders:old.orders};}
-    days[d.date]=day({...d,sourceConflicts:[...new Set(sourceConflicts)]});
+    if(dailyConflict) {sourceConflicts.push('В копии другой итог заказов. Сохранён подтверждённый итог; уточните день.');d={...d,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...d.fieldSources,orders:old.fieldSources.orders}};}
+    else if(oldDaily) d={...d,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...d.fieldSources,orders:old.fieldSources.orders}};
+    else if(incomingDaily) d={...d,orders:incoming.orders,ordersConfirmed:true,ordersScope:'daily'};
+    else if(slots.length) {
+      const slotConflict=slots.some(slot=>slot.conflicts.length>0);
+      d={...d,orders:slots.reduce((sum,slot)=>sum+slot.orderCount,0),ordersConfirmed:true,ordersScope:'video_slots',
+        fieldSources:{...d.fieldSources,orders:{source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',note:'Сумма отдельных подтверждённых видео-слотов за дату.'}}};
+      if(slotConflict)sourceConflicts.push('Видео-слоты содержат разные итоги для одного идентификатора; проверьте источник.');
+    }
+    d={...d,videoSlots:slots,orderEvidence:mergeVideoEvidence(old.orderEvidence,d.orderEvidence),sourceConflicts:[...new Set(sourceConflicts)]};
+    days[d.date]=normalizeDay(d);
   }
   return normalizeForecast({...a,days,profiles:keyed(a.profiles,b.profiles,'version',true),snapshots:keyed(a.snapshots,b.snapshots,'id',true),evaluations:keyed(a.evaluations,b.evaluations,'id',true),models:keyed(a.models,b.models,'id',true),scenarios:keyed(a.scenarios,b.scenarios,'id'),imports:keyed(a.imports,b.imports,'id',true),weather:a.weather??b.weather,trainedModel:a.trainedModel??b.trainedModel,plans:{...b.plans,...a.plans},weekConfig:b.weekConfig??a.weekConfig,location:a.location??b.location,typicalPlan:a.typicalPlan??b.typicalPlan,archive:Object.fromEntries(['forecasts','accuracy','models','financialRules'].map(k=>[k,keyed(a.archive[k],b.archive[k],'id',true)]))});
 }
@@ -246,7 +347,7 @@ export function saveDay(data,input,now=new Date().toISOString()) {
   if(old) revisions.push({revision:old.revision,at:now,precision:old.precision,workingMin:old.workingMin,intervals:old.intervals,source:old.source,manual:old.manualTime});
   const fieldSources={...(old?.fieldSources??{})};
   for(const key of ['orders','workingMin','appAccountedMin'])if(Object.hasOwn(input,key)||key==='workingMin'&&Object.hasOwn(input,'intervals'))delete fieldSources[key];
-  const next=day({...old,source:'manual',timezone:p?.timezone??old?.timezone,zone:p?.zone??old?.zone,profileVersion:p?.version,fieldSources,...input,revision:(old?.revision??0)+1,revisions,confirmedAt:now,manualTime:true});
+  const next=normalizeDay({...old,source:'manual',timezone:p?.timezone??old?.timezone,zone:p?.zone??old?.zone,profileVersion:p?.version,fieldSources,...input,revision:(old?.revision??0)+1,revisions,confirmedAt:now,manualTime:true});
   return {...data,days:{...data.days,[next.date]:next}};
 }
 export function saveTimeline(data,input,now=new Date().toISOString()) {
@@ -260,35 +361,240 @@ export function saveTimeline(data,input,now=new Date().toISOString()) {
   }
   return result;
 }
+function mergeVideoEvidence(existing=[],incoming=[]) {
+  const rows=existing.slice();
+  for(const order of incoming) {
+    const index=order.orderNumber?rows.findIndex(row=>row.orderNumber===order.orderNumber):rows.findIndex(row=>row.id===order.id);
+    if(index<0){rows.push(order);continue;}
+    const richness=row=>Number(row.visibleMin!=null)+Number(row.acceptedMin!=null)+Number(row.deliveredMin!=null)+Number(row.confirmed)*2;
+    if(richness(order)>richness(rows[index]))rows[index]=order;
+  }
+  return rows;
+}
+function mergeVideoSlots(existing=[],incoming=[]) {
+  const rows=normalizeVideoSlots(existing),seen=new Map(rows.map((slot,index)=>[slot.slotId,index]));
+  for(const slot of normalizeVideoSlots(incoming)) {
+    const index=seen.get(slot.slotId);
+    if(index==null){seen.set(slot.slotId,rows.length);rows.push(slot);continue;}
+    const prior=rows[index],conflicts=[...(prior.conflicts??[]),...(slot.conflicts??[])];
+    if(prior.orderCount!==slot.orderCount)conflicts.push({orderCount:slot.orderCount,sourceHash:slot.sourceHash,source:slot.source});
+    const unique=[];
+    for(const row of conflicts)if(!unique.some(value=>value.orderCount===row.orderCount&&value.sourceHash===row.sourceHash))unique.push(row);
+    rows[index]={...prior,conflicts:unique.slice(-10)};
+  }
+  return rows;
+}
+function mergeVideoSlotRecord(old,input,inputSource,suppliedSlotId) {
+  const orderCount=integer(input.slotOrderCount??input.orders,1000000);
+  if(orderCount==null)fail('Видео-слот не содержит подтверждённого количества заказов.');
+  const slotId=suppliedSlotId||`legacy:${String(input.sourceHash??inputSource).slice(-120)}`;
+  const slot={slotId,orderCount,sourceHash:String(input.sourceHash??'').slice(0,64),source:String(inputSource).slice(0,200),
+    startedAt:String(input.startedAt??'').slice(0,40),completedAt:String(input.completedAt??'').slice(0,40),conflicts:[]};
+  const slots=(old?.videoSlots??[]).slice(),slotIndex=slots.findIndex(item=>item.slotId===slotId);
+  let slotAdded=false,slotConflictAdded=false,slotConflict=false;
+  if(slotIndex<0){slots.push(slot);slotAdded=true;}
+  else if(slots[slotIndex].orderCount!==orderCount) {
+    slotConflict=true;
+    const existing=slots[slotIndex],rows=[...(existing.conflicts??[])];
+    if(!rows.some(row=>row.orderCount===orderCount&&row.sourceHash===slot.sourceHash)) {
+      rows.push({orderCount,sourceHash:slot.sourceHash,source:slot.source});
+      slots[slotIndex]={...existing,conflicts:rows.slice(-10)};slotConflictAdded=true;
+    }
+  }
+  return {orderCount,slotId,slots,slotAdded,slotConflictAdded,slotConflict};
+}
+function mergeVideoSlotSources(old,parsed,slotState) {
+  const {orderCount,slotId,slots,slotConflict}=slotState;
+  const hasDailyTotal=Boolean(old?.ordersConfirmed&&old.ordersScope!=='video_slots');
+  const staleMismatch=`Заказы: сохранено ${old?.orders}, новый источник ${orderCount}. Подтвердите итог дня.`;
+  const repairedLegacyConflict=Boolean(hasDailyTotal&&old?.source?.startsWith('video:')&&old.sourceConflicts?.includes(staleMismatch));
+  let sourceConflicts=[...new Set([...(old?.sourceConflicts??[]),...parsed.sourceConflicts])];
+  if(repairedLegacyConflict)sourceConflicts=sourceConflicts.filter(item=>item!==staleMismatch);
+  if(slotConflict&&!hasDailyTotal)sourceConflicts.push(`Видео-слот ${slotId}: источники расходятся по числу заказов.`);
+  sourceConflicts=[...new Set(sourceConflicts)];
+  const fieldSources={...parsed.fieldSources,...(old?.fieldSources??{})};
+  if(hasDailyTotal) {
+    if(repairedLegacyConflict&&!sourceConflicts.some(item=>item.startsWith('Заказы:'))
+        &&old.fieldSources?.orders?.source&&!old.fieldSources.orders.source.startsWith('video:'))
+      fieldSources.orders={...old.fieldSources.orders,status:'CONFIRMED'};
+  } else {
+    fieldSources.orders={source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',
+      note:'Сумма отдельных подтверждённых видео-слотов за дату.'};
+  }
+  return {hasDailyTotal,repairedLegacyConflict,sourceConflicts,fieldSources,
+    dailyOrders:hasDailyTotal?old.orders:slots.reduce((sum,item)=>sum+item.orderCount,0)};
+}
+function mergeVideoSlotEvidence(old,parsed,hasDailyTotal,slotAdded) {
+  const oldEvidence=old?.orderEvidence??[],incomingEvidence=parsed.orderEvidence;
+  const videoOnlyOrEmpty=oldEvidence.every(row=>row.source?.startsWith('video:'));
+  const mergedEvidence=videoOnlyOrEmpty?mergeVideoEvidence(oldEvidence,incomingEvidence):oldEvidence;
+  const evidenceAdded=mergedEvidence.length>oldEvidence.length
+    ||videoOnlyOrEmpty&&mergedEvidence.some((row,i)=>row!==oldEvidence[i]);
+  const orderEvidence=hasDailyTotal
+    ?mergedEvidence
+    :mergeVideoEvidence(old?.ordersScope==='video_slots'?oldEvidence:[],slotAdded||evidenceAdded?incomingEvidence:[]);
+  return {orderEvidence,evidenceAdded};
+}
+function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
+  const slotState=mergeVideoSlotRecord(old,input,inputSource,suppliedSlotId);
+  const sourceState=mergeVideoSlotSources(old,parsed,slotState);
+  const evidenceState=mergeVideoSlotEvidence(old,parsed,sourceState.hasDailyTotal,slotState.slotAdded);
+  const {hasDailyTotal,repairedLegacyConflict,sourceConflicts,fieldSources,dailyOrders}=sourceState;
+  const {slots}=slotState,{orderEvidence}=evidenceState;
+  const merged={...(old??parsed),...parsed,
+    source:hasDailyTotal?old.source:'video_slots',sourceHash:hasDailyTotal?old.sourceHash:fingerprint(slots.map(item=>[item.slotId,item.orderCount,item.sourceHash])),
+    zone:old?.zone||parsed.zone,timezone:old?.timezone||parsed.timezone,
+    orders:dailyOrders,ordersConfirmed:hasDailyTotal?old.ordersConfirmed:slots.length>0,
+    ordersScope:hasDailyTotal?'daily':'video_slots',videoSlots:slots,fieldSources,orderEvidence,
+    completed:old?.completed??parsed.completed,workingMin:old?.workingMin??parsed.workingMin,
+    workConfirmed:old?.workConfirmed??parsed.workConfirmed,precision:old?.precision??parsed.precision,
+    intervals:old?.intervals??parsed.intervals,estimatedIntervals:old?.estimatedIntervals??parsed.estimatedIntervals,
+    estimatedExposureJustified:old?.estimatedExposureJustified||parsed.estimatedExposureJustified,
+    exposureBlocks:old?.exposureBlocks?.length?old.exposureBlocks:parsed.exposureBlocks,
+    appAccountedMin:old?.appAccountedMin??parsed.appAccountedMin,
+    accountedConfirmed:old?.accountedConfirmed??parsed.accountedConfirmed,
+    evidenceComplete:hasDailyTotal?Boolean((old.evidenceComplete||parsed.evidenceComplete)
+      &&orderEvidence.length===dailyOrders):Boolean(orderEvidence.length===dailyOrders&&parsed.evidenceComplete),
+    rawComplete:hasDailyTotal?old.rawComplete:orderEvidence.length===dailyOrders,
+    sourceNotes:[...new Set([...(old?.sourceNotes??[]),...parsed.sourceNotes])].slice(0,20),
+    manualTime:old?.manualTime??parsed.manualTime,confirmedAt:old?.confirmedAt??parsed.confirmedAt,
+    importedAt:now,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
+  if(!slotState.slotAdded&&!slotState.slotConflictAdded&&!repairedLegacyConflict&&!evidenceState.evidenceAdded)return null;
+  return normalizeDay(merged);
+}
+
+function resolveHistoryImportState(old,parsed,input) {
+  const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
+  let sourceConflicts=[...parsed.sourceConflicts,...(reconcilesVideoSlots
+    ?(old.sourceConflicts??[]).filter(item=>!item.startsWith('Видео-слот '))
+    :(old?.sourceConflicts??[]))];
+  const oldOrderSource=String(old?.fieldSources?.orders?.source??'');
+  const oldVideoDayConflict=Boolean(old?.source?.startsWith('video:')&&old.ordersConfirmed
+    &&old.fieldSources?.orders?.status==='CONFLICT'&&oldOrderSource&&!oldOrderSource.startsWith('video:')
+    &&parsed.ordersConfirmed&&parsed.orders===old.orders);
+  if(oldVideoDayConflict) {
+    const mismatch=new RegExp('^Заказы: сохранено '+old.orders+', новый источник \\d+\\. Подтвердите итог дня\\.$');
+    sourceConflicts=sourceConflicts.filter(item=>!mismatch.test(item));
+  }
+  const geographyConflict=old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
+  if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
+  if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders&&!reconcilesVideoSlots)
+    sourceConflicts.push('Заказы: сохранено '+old.orders+', новый источник '+parsed.orders+'. Подтвердите итог дня.');
+  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin)
+    sourceConflicts.push('Часы Яндекса: сохранено '+old.appAccountedMin+' мин, новый источник '+parsed.appAccountedMin+' мин. Подтвердите итог дня.');
+  return {reconcilesVideoSlots,geographyConflict,sourceConflicts};
+}
+function preserveHistoryWork(old,parsed,merged) {
+  if(old?.manualTime)return {...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,
+    workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions,confirmedAt:old.confirmedAt,
+    fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
+  if(old?.workConfirmed&&!parsed.workConfirmed&&!(old.source===parsed.source&&old.source.startsWith('sheets_import:')))
+    return {...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:true,
+      fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
+  return merged;
+}
+function reconcileHistoryFacts(old,parsed,merged,reconcilesVideoSlots) {
+  let result=merged;
+  if(reconcilesVideoSlots)
+    result={...result,ordersScope:'daily',sourceConflicts:[...new Set(result.sourceConflicts)],orderEvidence:parsed.orderEvidence};
+  else if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders)
+    result={...result,orders:old.orders,ordersConfirmed:old.ordersConfirmed,ordersScope:old.ordersScope,
+      fieldSources:{...result.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
+  if(old?.ordersConfirmed&&!parsed.ordersConfirmed)
+    result={...result,orders:old.orders,ordersConfirmed:true,ordersScope:old.ordersScope,
+      fieldSources:{...result.fieldSources,orders:old.fieldSources.orders}};
+  if(old?.accountedConfirmed&&!parsed.accountedConfirmed)
+    result={...result,appAccountedMin:old.appAccountedMin,accountedConfirmed:true,
+      fieldSources:{...result.fieldSources,appAccountedMin:old.fieldSources.appAccountedMin}};
+  if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin)
+    result={...result,appAccountedMin:old.appAccountedMin,
+      fieldSources:{...result.fieldSources,appAccountedMin:{...old.fieldSources.appAccountedMin,status:'CONFLICT'}}};
+  if(!reconcilesVideoSlots) {
+    const orders=new Map((old?.orderEvidence??[]).map(row=>[row.id,row]));
+    for(const row of parsed.orderEvidence)orders.set(row.id,row);
+    result={...result,orderEvidence:[...orders.values()]};
+  }
+  result.evidenceComplete=(old?.evidenceComplete||parsed.evidenceComplete)&&result.orderEvidence.length===result.orders;
+  return result;
+}
+function mergeHistoryDay(data,old,parsed,input,incomingHash) {
+  const state=resolveHistoryImportState(old,parsed,input);
+  let merged={...parsed,zone:state.geographyConflict?old.zone:input.zone?parsed.zone:old?.zone??parsed.zone,
+    timezone:state.geographyConflict?old.timezone:input.timezone?parsed.timezone:old?.timezone??profileFor(data,parsed.date)?.timezone??parsed.timezone,
+    sourceHash:incomingHash,ordersScope:state.reconcilesVideoSlots?'daily':parsed.ordersConfirmed?'daily':old?.ordersScope??parsed.ordersScope,
+    videoSlots:old?.videoSlots?.length?old.videoSlots:parsed.videoSlots,
+    revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts:state.sourceConflicts};
+  merged=preserveHistoryWork(old,parsed,merged);
+  merged=reconcileHistoryFacts(old,parsed,merged,state.reconcilesVideoSlots);
+  return normalizeDay(merged);
+}
+
+
 export function importDays(data,rows,source='history',now=new Date().toISOString()) {
   if(!Array.isArray(rows)||rows.length>5000) fail('Проверьте список дней.');
   const days={...data.days}; let changed=0,conflicts=0;
   for(const input of rows) {
-    const parsed=day({...input,source:input.source??source,importedAt:now});
+    const inputSource=input.source??source;
+    const suppliedSlotId=String(input.slotId??input.videoSlotId??'').trim();
+    const isVideoSlot=Boolean(suppliedSlotId)||String(inputSource).startsWith('video:')&&input.ordersConfirmed===true;
+    const parsed=normalizeDay({...input,source:inputSource,importedAt:now,...(isVideoSlot?{ordersScope:'video_slots'}:{})});
     const old=days[parsed.date];
-    const incomingHash=fingerprint({...input,source:input.source??source});
-    if(old?.sourceHash===incomingHash) continue;
-    const sourceConflicts=[...parsed.sourceConflicts];
-    const geographyConflict=old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
-    if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
-    if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) sourceConflicts.push(`Заказы: сохранено ${old.orders}, новый источник ${parsed.orders}. Подтвердите итог дня.`);
-    if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin) sourceConflicts.push(`Часы Яндекса: сохранено ${old.appAccountedMin} мин, новый источник ${parsed.appAccountedMin} мин. Подтвердите итог дня.`);
-    let merged={...parsed,zone:geographyConflict?old.zone:input.zone?parsed.zone:old?.zone??parsed.zone,timezone:geographyConflict?old.timezone:input.timezone?parsed.timezone:old?.timezone??profileFor(data,parsed.date)?.timezone??parsed.timezone,sourceHash:incomingHash,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};
-    if(old?.manualTime) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions,confirmedAt:old.confirmedAt,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
-    else if(old?.workConfirmed&&!parsed.workConfirmed&&!(old.source===parsed.source&&old.source.startsWith('sheets_import:'))) merged={...merged,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:true,fieldSources:{...merged.fieldSources,workingMin:old.fieldSources.workingMin}};
-    if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders) merged={...merged,orders:old.orders,ordersConfirmed:old.ordersConfirmed,fieldSources:{...merged.fieldSources,orders:{...old.fieldSources.orders,status:'CONFLICT'}}};
-    // A partial capture cannot erase a confirmed total or a fuller order list.
-    if(old?.ordersConfirmed&&!parsed.ordersConfirmed) {merged.orders=old.orders;merged.ordersConfirmed=true;merged.fieldSources.orders=old.fieldSources.orders;}
-    if(old?.accountedConfirmed&&!parsed.accountedConfirmed) {merged.appAccountedMin=old.appAccountedMin;merged.accountedConfirmed=true;merged.fieldSources.appAccountedMin=old.fieldSources.appAccountedMin;}
-    if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin){merged.appAccountedMin=old.appAccountedMin;merged.fieldSources.appAccountedMin={...old.fieldSources.appAccountedMin,status:'CONFLICT'};}
-    const orders=new Map((old?.orderEvidence??[]).map(o=>[o.id,o])); for(const o of parsed.orderEvidence) orders.set(o.id,o);
-    merged.orderEvidence=[...orders.values()];
-    merged.evidenceComplete=(old?.evidenceComplete||parsed.evidenceComplete) && merged.orderEvidence.length===merged.orders;
-    days[parsed.date]=day(merged); changed++; conflicts+=days[parsed.date].conflicts.length;
+    const incomingHash=fingerprint({...input,source:inputSource});
+    if(!isVideoSlot&&old?.sourceHash===incomingHash) continue;
+    if(isVideoSlot) {
+      const merged=mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now);
+      if(!merged)continue;
+      days[parsed.date]=merged;changed++;conflicts+=merged.conflicts.length;
+      continue;
+    }
+    const merged=mergeHistoryDay(data,old,parsed,input,incomingHash);
+    days[parsed.date]=merged; changed++; conflicts+=merged.conflicts.length;
   }
   const id=`import-${fingerprint({rows,source})}`;
   if(!changed && data.imports.some(i=>i.id===id)) return data;
   return {...data,days,imports:[...data.imports.filter(i=>i.id!==id),{id,source,at:now,days:rows.length,changed,conflicts,parserVersion:'history-2',status:conflicts?'REVIEW':'IMPORTED'}]};
+}
+/** Read a video receipt from the persisted forecast day, never from an OCR dialog. */
+export function videoImportReceipt(data,sourceHash=null,slotId=null) {
+  const receipts=[];
+  for(const d of Object.values(data?.days??{})) for(const slot of d.videoSlots??[]) {
+    if(sourceHash!=null&&slot.sourceHash!==sourceHash||slotId!=null&&slot.slotId!==slotId)continue;
+    const source=`video:${slot.sourceHash}`;
+    const matchingEvidence=(d.orderEvidence??[]).filter(row=>row.source===source);
+    const rows=matchingEvidence.length;
+    const paired=matchingEvidence.filter(row=>row.acceptedMin!=null&&row.deliveredMin!=null&&row.confirmed).length;
+    receipts.push({date:d.date,slotId:slot.slotId,sourceHash:slot.sourceHash,orders:slot.orderCount,
+      rows,paired,dayOrders:d.orders,workConfirmed:d.workConfirmed===true,
+      conflict:!!(d.conflicts?.length||d.sourceConflicts?.length||slot.conflicts?.length)});
+  }
+  receipts.sort((a,b)=>b.date.localeCompare(a.date)||b.slotId.localeCompare(a.slotId));
+  return receipts[0]??null;
+}
+/** Rebuild forecast RAW from video orders already committed to Android SQLite. */
+export function restoreVideoOrderEvidence(data,sourceHash,storedOrders,now=new Date().toISOString()) {
+  if(!/^[0-9a-f]{64}$/.test(sourceHash)||!Array.isArray(storedOrders)||storedOrders.length>2000)
+    fail('Неверный источник сохранённых заказов видео.');
+  const source=`video:${sourceHash}`;
+  let result=data;
+  for(const d of Object.values(data.days)) {
+    const slots=(d.videoSlots??[]).filter(slot=>slot.sourceHash===sourceHash);
+    for(const slot of slots) {
+      const start=slot.startedAt?.match(/T(\d{2}):(\d{2})/),end=slot.completedAt?.match(/T(\d{2}):(\d{2})/);
+      const first=start?Number(start[1])*60+Number(start[2]):null;
+      const last=end?Number(end[1])*60+Number(end[2]):null;
+      const rows=storedOrders.filter(row=>row.date===d.date&&row.source===source
+        &&(slots.length===1||first!=null&&last!=null&&row.visibleMin!=null
+          &&row.visibleMin>=first&&row.visibleMin<=last));
+      if(!rows.length)continue;
+      result=importDays(result,[{date:d.date,slotId:slot.slotId,slotOrderCount:slot.orderCount,
+        orders:slot.orderCount,ordersConfirmed:true,completed:true,source,sourceHash,
+        startedAt:slot.startedAt,completedAt:slot.completedAt,orderEvidence:rows,
+        evidenceComplete:rows.length===slot.orderCount
+          &&rows.every(row=>row.confirmed&&row.acceptedMin!=null&&row.deliveredMin!=null),
+        timezone:d.timezone,zone:d.zone,precision:'unknown',workConfirmed:false}],source,now);
+    }
+  }
+  return result;
 }
 export function syncSlots(data,entries) {
   // Only offer slot totals as unconfirmed observations. No inference of availability.
@@ -307,13 +613,13 @@ export function syncSlots(data,entries) {
     const fieldSources={...old?.fieldSources};
     delete fieldSources.orders;delete fieldSources.appAccountedMin;
     const profile=old?.zone&&old?.timezone?null:profileFor(data,date);
-    days[date]=day({...old,date,zone:old?.zone??profile?.zone??'',timezone:old?.timezone??profile?.timezone??'Europe/Moscow',orders,appAccountedMin,ordersConfirmed:orders!=null,accountedConfirmed:appAccountedMin!=null&&reliable,fieldSources,completed:complete,asOfMinute:date===clock.date?clock.minute:null,source:'finance-slots',sourceHash,revision:(old?.revision??0)+1});
+    days[date]=normalizeDay({...old,date,zone:old?.zone??profile?.zone??'',timezone:old?.timezone??profile?.timezone??'Europe/Moscow',orders,appAccountedMin,ordersConfirmed:orders!=null,accountedConfirmed:appAccountedMin!=null&&reliable,fieldSources,completed:complete,asOfMinute:date===clock.date?clock.minute:null,source:'finance-slots',sourceHash,revision:(old?.revision??0)+1});
   }
   for(const [date,d] of Object.entries(days)) if(d.source==='finance-slots'&&!byDate.has(date)){
     if(!d.manualTime){delete days[date];continue;}
     if(d.orders!=null||d.appAccountedMin!=null||d.ordersConfirmed||d.accountedConfirmed){
       const fieldSources={...d.fieldSources};delete fieldSources.orders;delete fieldSources.appAccountedMin;
-      days[date]=day({...d,orders:null,ordersConfirmed:false,appAccountedMin:null,accountedConfirmed:false,fieldSources,revision:d.revision+1,sourceHash:null});
+      days[date]=normalizeDay({...d,orders:null,ordersConfirmed:false,appAccountedMin:null,accountedConfirmed:false,fieldSources,revision:d.revision+1,sourceHash:null});
     }
   }
   return {...data,days};
@@ -334,6 +640,17 @@ export function predict(data,date,plan=planDay(data,date)) {
   const p=profileFor(data,date);return countForecast(data.days,date,{...plan,zone:plan.zone??p?.zone??'',modelVersion:FORECAST_VERSION});
 }
 export function backtest(data,cutoff){return validateCounts(data.days,cutoff,FORECAST_VERSION,planDay(data,cutoff).zone??profileFor(data,cutoff)?.zone??'');}
+function forecastSnapshotRecord({estimate,id,date,kind,createdAt,signature,profile,fact,plan,clock,asOf,remainingMin}) {
+  return {...estimate,id,date,kind,createdAt,signature,profileVersion:profile?.version??null,timezone:profile?.timezone??plan.timezone??'Europe/Moscow',zone:profile?.zone??plan.zone??'',exposureDefinitionVersion:EXPOSURE_VERSION,
+    plannedIntervals:plan.intervals,atMinute:clock.minute,factAsOfMinute:asOf,remainingMin:kind==='NOWCAST'?remainingMin:null,factAtIssue:kind==='NOWCAST'&&fact?.ordersConfirmed?fact.orders:null,
+    partialDayIssue:kind==='MORNING'&&(clock.minute>(plan.intervals.filter(i=>i.state==='WORK')[0]?.start??0)||!!(fact?.ordersConfirmed||fact?.workConfirmed||fact?.accountedConfirmed))};
+}
+function forecastModelList(models,{modelId,estimate,profile,plan,createdAt,forecastData,date}) {
+  if(models.some(m=>m.id===modelId)) return models;
+  const {results,...validation}=backtest(forecastData,date);
+  return [...models.slice(-199),{id:modelId,modelVersion:FORECAST_VERSION,profileVersion:profile?.version??null,zone:profile?.zone??plan.zone??'',trainedAt:createdAt,trainingDataCutoff:estimate.trainingCutoff,
+    exposureDefinitionVersion:EXPOSURE_VERSION,features:estimate.features??['working exposure','weekday','recency 35 days'],type:estimate.selectedModel??'weighted-count-baseline',fit:estimate.fit??null,selection:estimate.selection??null,trainingN:estimate.comparableN,validation,sourceHash:estimate.sourceHash}];
+}
 export function ensureForecast(data,now=new Date(),kind='MORNING') {
   const p=currentProfile(data,now),clock=forecastClock(data,now);
   const existing=data.snapshots.filter(s=>s.date===clock.date&&s.kind===kind);
@@ -347,16 +664,9 @@ export function ensureForecast(data,now=new Date(),kind='MORNING') {
   const signature=fingerprint({estimate,profile:p?.version??null,fact:fact?.revision,asOf:kind==='NOWCAST'?asOf:null});
   if(kind==='NOWCAST'&&existing.at(-1)?.signature===signature) return data;
   const createdAt=now.toISOString(),id=`${kind}-${clock.date}-${fingerprint({createdAt,signature})}`;
-  const result={...estimate,id,date:clock.date,kind,createdAt,signature,profileVersion:p?.version??null,timezone:p?.timezone??plan.timezone??'Europe/Moscow',zone:p?.zone??plan.zone??'',exposureDefinitionVersion:EXPOSURE_VERSION,
-    plannedIntervals:plan.intervals,atMinute:clock.minute,factAsOfMinute:asOf,remainingMin:kind==='NOWCAST'?remainingMin:null,factAtIssue:kind==='NOWCAST'&&fact?.ordersConfirmed?fact.orders:null,
-    partialDayIssue:kind==='MORNING'&&(clock.minute>(plan.intervals.filter(i=>i.state==='WORK')[0]?.start??0)||!!(fact?.ordersConfirmed||fact?.workConfirmed||fact?.accountedConfirmed))};
+  const result=forecastSnapshotRecord({estimate,id,date:clock.date,kind,createdAt,signature,profile:p,fact,plan,clock,asOf,remainingMin});
   const modelId=`${FORECAST_VERSION}-${estimate.sourceHash}-${p?.zone??plan.zone??''}`;
-  let models=data.models;
-  if(!models.some(m=>m.id===modelId)) {
-    const {results,...validation}=backtest(data,clock.date);
-    models=[...models.slice(-199),{id:modelId,modelVersion:FORECAST_VERSION,profileVersion:p?.version??null,zone:p?.zone??plan.zone??'',trainedAt:createdAt,trainingDataCutoff:estimate.trainingCutoff,
-      exposureDefinitionVersion:EXPOSURE_VERSION,features:estimate.features??['working exposure','weekday','recency 35 days'],type:estimate.selectedModel??'weighted-count-baseline',fit:estimate.fit??null,selection:estimate.selection??null,trainingN:estimate.comparableN,validation,sourceHash:estimate.sourceHash}];
-  }
+  const models=forecastModelList(data.models,{modelId,estimate,profile:p,plan,createdAt,forecastData:data,date:clock.date});
   return {...data,snapshots:[...data.snapshots,result],models};
 }
 export function evaluateForecasts(data,now=new Date()) {

@@ -1,0 +1,232 @@
+name: M4 offline video OCR
+on:
+  pull_request:
+    branches: [ui/courier-geometry-20261103]
+    paths:
+      - '.github/workflows/m4-offline-video-ocr.yml'
+      - 'm4/**'
+      - 'tests/m4unit/**'
+      - 'tests/m4qa/**'
+      - 'app/**'
+  push:
+    branches: [release/forecast-video-upload-20261101, m4/offline-video-ocr-20261029, m4/forecast-video-result-screen-20261031, m4/continuous-video-multislot-20261031, m5/cross-source-reconciliation-20261031, m6/process-recovery-20261031, fix/android-ocr-recovery-20261102, release/forecast-shift-control-20261102, fix/payout-premium-inclusion-20261104]
+    paths:
+      - '.github/workflows/m4-offline-video-ocr.yml'
+      - '.github/scripts/m4-offline-video-probe.sh'
+      - 'android/**'
+      - 'app/**'
+      - 'm4/**'
+      - 'tests/**'
+      - 'web/**'
+      - 'build.gradle'
+      - 'gradle/**'
+      - 'build.py'
+      - 'package.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: courier-m4-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-build-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create one-time key for real-video QA
+        if: contains(github.event.head_commit.message, '[real-video]')
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
+            -out "$RUNNER_TEMP/m4-private.pem" 2>/dev/null
+          openssl pkey -in "$RUNNER_TEMP/m4-private.pem" -pubout \
+            -out "$RUNNER_TEMP/m4-public.pem"
+      - name: Publish one-time public key
+        if: contains(github.event.head_commit.message, '[real-video]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-real-video-public-key-${{ github.sha }}
+          path: ${{ runner.temp }}/m4-public.pem
+          retention-days: 1
+          if-no-files-found: error
+      - name: Fetch encrypted private video links
+        if: contains(github.event.head_commit.message, '[real-video]')
+        run: |
+          set -euo pipefail
+          branch="m4-real-payload-${GITHUB_SHA:0:12}"
+          for attempt in $(seq 1 120); do
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then break; fi
+            sleep 3
+          done
+          git fetch --quiet origin "refs/heads/$branch:refs/remotes/origin/$branch"
+          git show "origin/$branch:payload-key.enc" > "$RUNNER_TEMP/m4-key.enc"
+          git show "origin/$branch:payload-links.enc" > "$RUNNER_TEMP/m4-links.enc"
+          openssl pkeyutl -decrypt -inkey "$RUNNER_TEMP/m4-private.pem" \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in "$RUNNER_TEMP/m4-key.enc" -out "$RUNNER_TEMP/m4-key.bin"
+          openssl enc -d -aes-256-cbc -pbkdf2 -salt \
+            -pass file:"$RUNNER_TEMP/m4-key.bin" \
+            -in "$RUNNER_TEMP/m4-links.enc" -out "$RUNNER_TEMP/m4-links.json"
+          mkdir -p "$RUNNER_TEMP/m4-real"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil, urllib.request
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          urls=json.loads((root/'m4-links.json').read_text())
+          expected={
+              'one': ('fff402d7c2a1d7fe577080b3e73cd2a0bb7e72a8af32d27df8b8bc34ad9070b0',21965599),
+              'two': ('d0aa7a4e206891d4315f02a2e09b31058f73001bbbcad306bfeb0866de9ed82c',9039027),
+          }
+          for name,(digest,size) in expected.items():
+              target=root/'m4-real'/f'{name}.mp4'
+              with urllib.request.urlopen(urls[name],timeout=60) as source,target.open('wb') as output:
+                  shutil.copyfileobj(source,output)
+              if target.stat().st_size!=size or hashlib.sha256(target.read_bytes()).hexdigest()!=digest:
+                  raise SystemExit('Private video transfer verification failed')
+          (root/'m4-links.json').unlink()
+          PY
+          echo 'Two private MP4s fetched into runner temp storage'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Existing finance, count, and import regressions
+        run: |
+          npm test
+          node --test tests/hours-format.test.mjs
+      - name: Existing native count model regression
+        run: |
+          mkdir -p "$RUNNER_TEMP/m4-model-classes"
+          javac --release 8 -encoding UTF-8 -d "$RUNNER_TEMP/m4-model-classes" \
+            android/src/ru/courier/finance/NativeCountModel.java tests/NativeCountModelTest.java
+          java -cp "$RUNNER_TEMP/m4-model-classes" ru.courier.finance.NativeCountModelTest
+      - name: M2 and M3 SQLite contract checks
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m2_*.py' -v
+          python3 -m unittest discover -s tests -p 'test_m3_*.py' -v
+          python3 -m unittest discover -s tests -p 'test_m4_*.py' -v
+          python3 -m unittest discover -s tests -p 'test_m5_*.py' -v
+      - name: Install pinned Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK and fixture tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core ffmpeg
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android platform and build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Download pinned offline Russian and English OCR models
+        run: |
+          set -euo pipefail
+          mkdir -p m4-models/tessdata
+          base='https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd'
+          curl -fL "$base/rus.traineddata" -o m4-models/tessdata/rus.traineddata
+          curl -fL "$base/eng.traineddata" -o m4-models/tessdata/eng.traineddata
+          test "$(git hash-object m4-models/tessdata/rus.traineddata)" = b146cb2263acbc6383f8e92ea0ce759537687bb8
+          test "$(git hash-object m4-models/tessdata/eng.traineddata)" = bbef4675053b5b468cdb477053e28b1c698ba08e
+          test "$(wc -c < m4-models/tessdata/rus.traineddata)" -eq 3861738
+          test "$(wc -c < m4-models/tessdata/eng.traineddata)" -eq 4113088
+      - name: Publish pinned OCR models for short-lived QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-ocr-models-${{ github.sha }}
+          path: m4-models/tessdata/*.traineddata
+          retention-days: 1
+          if-no-files-found: error
+      - name: Generate clearly synthetic pixel and MP4 fixtures
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/m4-fixture-classes" m4-fixture
+          javac --release 17 -encoding UTF-8 -d "$RUNNER_TEMP/m4-fixture-classes" tests/M4FixtureRenderer.java
+          fixture_offset=$((GITHUB_RUN_ID % 365))
+          fixture_date=$(date -u -d "2026-01-01 + ${fixture_offset} days" +%Y.%m.%d)
+          fixture_slot=$(printf '%09d' "$((100000000 + GITHUB_RUN_ID % 900000000))")
+          java -Djava.awt.headless=true -cp "$RUNNER_TEMP/m4-fixture-classes" M4FixtureRenderer \
+            "$RUNNER_TEMP/m4-screen.png" "$fixture_date" "$fixture_slot"
+          ffmpeg -hide_banner -loglevel error -loop 1 -i "$RUNNER_TEMP/m4-screen.png" -t 3 -r 2 -pix_fmt yuv420p -c:v libx264 -movflags +faststart m4-fixture/screen.mp4
+          test -s m4-fixture/screen.mp4
+      - name: Run parser unit tests and build isolated Android probe
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Build signed app APK for manual video-import validation
+        run: gradle --no-daemon :app:assembleM4Qa
+      - name: Verify APK package and fingerprint
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.m4probe'"
+          unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
+          sha256sum "$APK"
+      - name: Verify installable M4 app APK
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/m4Qa/app-m4Qa.apk
+          QA_PACKAGE="ru.courier.finance.m4qa${GITHUB_SHA:0:8}"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='${QA_PACKAGE}'"
+          unzip -l "$APK" | grep -E 'assets/tessdata/(rus|eng)\.traineddata'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          sha256sum "$APK"
+      - name: Publish installable M4 APK for local Android import
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-user-testable-apk-${{ github.sha }}
+          path: app/build/outputs/apk/m4Qa/app-m4Qa.apk
+          retention-days: 1
+          if-no-files-found: error
+      - name: Build unsigned transfer APK for local owner signing
+        run: gradle --no-daemon :app:assembleTransfer
+      - name: Verify transfer APK package and version; prepare local signing input
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/transfer/app-transfer-unsigned.apk
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          OUT="$RUNNER_TEMP/courier-transfer-release"
+          test -s "$APK"
+          "$BT/aapt" dump badging "$APK" | grep "package: name='ru.courier.finance.transfer' versionCode='50' versionName='1.7.36'"
+          mkdir -p "$OUT"
+          "$BT/zipalign" -f -p 4 "$APK" "$OUT/Courier-Finance-Transfer-1.7.36-unsigned.apk"
+          cp "$BT/lib/apksigner.jar" "$OUT/apksigner.jar"
+          sha256sum "$OUT/Courier-Finance-Transfer-1.7.36-unsigned.apk"
+      - name: Publish APK and Android signer for local owner signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: courier-transfer-signing-input-${{ github.sha }}
+          path: ${{ runner.temp }}/courier-transfer-release/*
+          retention-days: 1
+          if-no-files-found: error
+      - name: Enable KVM group permissions for Android emulator
+        if: github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[android-probe]')
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run offline video OCR probe in Android emulator
+        if: github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[android-probe]')
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-boot-timeout: 600
+          script: bash .github/scripts/m4-offline-video-probe.sh
+      - name: Save synthetic Android screenshot evidence
+        if: always() && (github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[android-probe]'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-android-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/m4-artifacts/*.png
+          retention-days: 1
+          if-no-files-found: warn

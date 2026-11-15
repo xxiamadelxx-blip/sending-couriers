@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Exercise Android's document picker and native XLSX callback with synthetic data."""
+
+import json
+import re
+import time
+from pathlib import Path
+
+from emulator_smoke import (
+    OUT,
+    adb,
+    dump,
+    find_node,
+    screenshot,
+    tap_node,
+    wait_node,
+)
+from make_partial_xlsx import create
+
+NAME = "Courier-QA-partial.xlsx"
+DEVICE_PATH = f"/sdcard/Download/{NAME}"
+
+
+def tap(node):
+    bounds = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
+    assert len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1], node.attrib
+    adb("shell", "input", "tap", str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
+
+
+def scroll_to_import():
+    """The import CTA is below the fold on actual 360dp Android screenshots."""
+    for attempt in range(6):
+        root = dump(f"xlsx-import-action-{attempt}")
+        action = find_node(root, "Импортировать отчёт")
+        nav = find_node(root, "Главная")
+        ab = list(map(int, re.findall(r"\d+", action.get("bounds", "")))) if action is not None else []
+        nb = list(map(int, re.findall(r"\d+", nav.get("bounds", "")))) if nav is not None else []
+        if len(ab) == len(nb) == 4 and ab[2] > ab[0] and ab[3] > ab[1] and ab[1] >= 0 and ab[3] <= nb[1]:
+            return
+        adb("shell", "input", "swipe", "540", "1720", "540", "680", "350")
+    raise AssertionError("Native XLSX import action not reachable by vertical scroll")
+
+
+def choose_workbook():
+    scroll_to_import()
+    tap_node("Импортировать отчёт")
+    time.sleep(2)
+    screenshot("xlsx-picker")
+    root = dump("xlsx-picker")
+    file = find_node(root, NAME)
+    if file is None:
+        for word in ("Downloads", "Загрузки"):
+            node = find_node(root, word)
+            if node is not None:
+                tap(node)
+                break
+        else:
+            menu = next((n for n in root.iter("node") if n.get("content-desc", "") in ("Show roots", "Показать меню навигации")), None)
+            if menu is not None:
+                tap(menu)
+                root = dump("xlsx-picker-roots")
+                node = find_node(root, "Downloads") or find_node(root, "Загрузки")
+                assert node is not None, "Downloads root missing from document picker"
+                tap(node)
+    _, file = wait_node(NAME, 15)
+    tap(file)
+    # UiAutomator does not expose the transient import toast or a stable summary
+    # row. Wait for the forecast screen to return, then verify imported facts
+    # independently from the saved JSON backup below.
+    wait_node("Прогноз", 20)
+    time.sleep(2)
+    screenshot("xlsx-after-import")
+
+
+def exported_state():
+    """Read the same JSON backup a courier can save through Android's picker."""
+    tap_node("Главная")
+    tap_node("Экспорт для ChatGPT")
+    tap_node("Резервная копия JSON")
+    root = dump("backup-picker")
+    for word in ("Downloads", "Загрузки"):
+        node = find_node(root, word)
+        if node is not None:
+            tap(node)
+            break
+    root = dump("backup-destination")
+    save = next((node for node in root.iter("node") if
+                 (node.get("text", "") or node.get("content-desc", "")).casefold() in ("save", "сохранить")
+                 and node.get("enabled") == "true"), None)
+    assert save is not None, "Android backup destination has no Save button"
+    tap(save)
+    # Android DocumentsUI names the backup using the app's local date, while
+    # adb shell date can resolve another timezone near midnight. Read the
+    # actual filename shown by the native Save dialog instead of guessing.
+    filename = next((n.get("text", "") for n in root.iter("node")
+                     if re.fullmatch(r"courier-backup-\d{4}-\d{2}-\d{2}\.json", n.get("text", ""))), None)
+    assert filename is not None, "Native Save dialog did not expose the JSON backup filename"
+    path = "/sdcard/Download/" + filename
+    for _ in range(20):
+        raw = adb("exec-out", "cat", path, binary=True, check=False)
+        if raw:
+            try:
+                state = json.loads(raw)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                time.sleep(.5)  # Android may create the destination before the write finishes.
+                continue
+            adb("shell", "rm", path)
+            tap_node("Закрыть")
+            tap_node("Прогноз")
+            return state
+        time.sleep(.5)
+    raise AssertionError("Saved JSON backup is missing or incomplete in Downloads")
+
+
+def exported_forecast():
+    return exported_state()["forecast"]
+
+
+def assert_imported(forecast):
+    day = forecast["days"]["2026-10-20"]
+    events = day["orderEvidence"]
+    assert day["orders"] == 2 and len(events) == 2, "Import did not store both orders exactly once"
+    assert sum(event.get("acceptedMin") is not None for event in events) == 1
+    assert sum(event.get("deliveredMin") is not None for event in events) == 1
+    assert sum(event.get("acceptedMin") is not None and event.get("deliveredMin") is not None for event in events) == 1
+    assert day["workConfirmed"] is False, "Reconstructed hours became confirmed work"
+    return {"orders": day["orders"], "events": [(e["id"], e.get("acceptedMin"), e.get("deliveredMin")) for e in events],
+            "workingMin": day["workingMin"], "workConfirmed": day["workConfirmed"]}
+
+
+def main():
+    fixture = OUT / NAME
+    create(fixture)
+    adb("push", str(fixture), DEVICE_PATH)
+    adb("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", f"file://{DEVICE_PATH}")
+    tap_node("Прогноз")
+    choose_workbook()
+    first = assert_imported(exported_forecast())
+    choose_workbook()
+    second = assert_imported(exported_forecast())
+    assert first == second, "Repeated XLSX import changed order facts"
+    (OUT / "xlsx-import-result.json").write_text(json.dumps({"result": "PASS", "repeatedImports": 2,
+        "fixture": NAME, "synthetic": True, "stored": second}, ensure_ascii=False, indent=2))
+    print("XLSX picker PASS: saved backup confirms two events and repeat import is idempotent", flush=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        screenshot("xlsx-failure")
+        dump("xlsx-failure")
+        (OUT / "xlsx-import-result.json").write_text(json.dumps({"result": "FAIL", "error": str(error)}, ensure_ascii=False))
+        raise

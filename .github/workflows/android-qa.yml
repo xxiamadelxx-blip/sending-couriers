@@ -2,6 +2,8 @@ name: Android emulator QA
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -25,7 +27,7 @@ jobs:
           target: default
           arch: x86_64
           profile: pixel_6
-          script: python3 qa/worker_probe.py
+          script: python3 qa/emulator_smoke.py && python3 qa/xlsx_import_smoke.py && python3 qa/backup_restore_smoke.py
       - name: Screenshots and device logs
         if: always()
         uses: actions/upload-artifact@v4
