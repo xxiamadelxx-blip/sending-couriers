@@ -90,10 +90,10 @@ def inspect(directory):
             f'{screen}: missing 48dp labelled {kind} for {label!r}')
     for label in BOTTOM:
         required('home-390-dark', label)
-    for label in ('Полный слот', 'Из них буду работать'):
+    for label in ('Полный слот', 'Активные часы'):
         required('forecast-390-dark', label, 'SeekBar')
     for label in ('Полный слот: минус', 'Полный слот: плюс',
-                  'Из них буду работать: минус', 'Из них буду работать: плюс'):
+                  'Активные часы: минус', 'Активные часы: плюс'):
         required('forecast-390-dark', label)
     for label in ('Редактировать Слот 1', 'Редактировать Слот 2'):
         required('history-390-dark', label)
@@ -108,7 +108,7 @@ def inspect(directory):
         'form-390-dark': require_visible_field_labels(snapshots['form-390-dark'],
             form_labels, 'form-390-dark'),
         'forecast-390-dark': require_visible_field_labels(snapshots['forecast-390-dark'],
-            ('Полный слот', 'Из них буду работать'), 'forecast-390-dark'),
+            ('Полный слот', 'Активные часы'), 'forecast-390-dark'),
         'settings-main-390-dark': require_visible_field_labels(snapshots['settings-main-390-dark'],
             ('Ставка за час',), 'settings-main-390-dark'),
     }

@@ -2685,20 +2685,193 @@ html,body {
   text-underline-offset:3px;
 }
 
-/* 15 Nov review candidate: keep Home's coral pace + gold income card intact;
-   give the existing Period, Slot and Forecast screens the legacy warm-gold accent.
-   The shared bottom navigation lives outside #app, so its centered + is unchanged. */
+/* Secondary-screen redesign: warmer, quieter surfaces; the Home dashboard
+   and its coral pace signal remain on the original palette. */
 #app.period-page,
 #app.form-page,
-#app.forecast-page {
+#app.forecast-page,
+#app.settings-page {
   --accent:var(--gold);
   --accent-wash:color-mix(in srgb,var(--gold) 12%,var(--surface));
   --teal:var(--gold);
   --primary-bg:var(--gold);
 }
-#app.period-page .period-day[open] {
-  border-color:color-mix(in srgb,var(--gold) 42%,var(--line));
+:root[data-theme=light] #app.period-page,
+:root[data-theme=light] #app.form-page,
+:root[data-theme=light] #app.forecast-page,
+:root[data-theme=light] #app.settings-page { --primary-ink:#fffaf3; }
+
+#bottomNav[data-active=period] .nav-item.active,
+#bottomNav[data-active=forecast] .nav-item.active,
+#bottomNav[data-active=settings] .nav-item.active { color:var(--gold); }
+
+/* Period: date navigation, then a readable day ledger with editable slots. */
+#app.period-page .page-heading { margin-bottom:12px; }
+#app.period-page .period-navigation {
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr) 44px;
+  gap:8px;
+  margin:0 0 24px;
 }
-#app.period-page .period-day[open]>summary {
-  background:color-mix(in srgb,var(--gold) 5%,var(--surface));
+#app.period-page .period-arrow {
+  width:44px; height:44px; min-width:44px; min-height:44px;
+  border:1px solid var(--line); border-radius:12px!important;
+  background:transparent; color:var(--text-secondary);
+}
+#app.period-page .period-select {
+  height:44px; min-height:44px; padding:8px 12px;
+  border:1px solid var(--line); border-radius:12px;
+  background:var(--surface); color:var(--text-primary);
+  font-size:15px; font-weight:600; text-align:center;
+}
+#app.period-page .period-days { margin-top:0; }
+#app.period-page .period-days-heading {
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:12px; margin:0 0 12px;
+}
+#app.period-page .period-days-heading h2 { font-size:17px; }
+#app.period-page .period-days-heading>span { color:var(--text-secondary); font-size:13px; }
+#app.period-page .period-days-list { display:grid; gap:8px; }
+#app.period-page .period-day {
+  overflow:hidden; border:1px solid var(--line); border-radius:16px!important;
+  background:var(--surface); transition:border-color .16s var(--motion);
+}
+#app.period-page .period-day[open] { border-color:color-mix(in srgb,var(--gold) 48%,var(--line)); }
+#app.period-page .period-day>summary {
+  min-height:78px; display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(64px,auto) 18px;
+  align-items:center; gap:8px 12px; padding:12px;
+  list-style:none; cursor:pointer;
+}
+#app.period-page .period-day>summary::-webkit-details-marker { display:none; }
+#app.period-page .period-day-title {
+  min-width:0; display:grid; grid-template-columns:42px minmax(0,1fr);
+  align-items:center; gap:12px; text-align:left;
+}
+#app.period-page .period-day-stamp {
+  min-height:52px; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; border:1px solid var(--line); border-radius:12px;
+  background:var(--field); line-height:1.1;
+}
+#app.period-page .period-day-stamp small { color:var(--text-secondary); font-size:10px; text-transform:capitalize; }
+#app.period-page .period-day-stamp strong { color:var(--text-primary); font-size:17px; font-variant-numeric:tabular-nums; }
+#app.period-page .period-day-summary { min-width:0; display:grid; gap:4px; }
+#app.period-page .period-day-summary strong { color:var(--text-primary); font-size:14px; font-weight:600; }
+#app.period-page .period-day-summary small { color:var(--text-secondary); font-size:12px; line-height:1.35; overflow-wrap:anywhere; }
+#app.period-page .period-day-figures { min-width:0; display:grid; justify-items:end; gap:4px; text-align:right; }
+#app.period-page .period-day-figures strong { color:var(--text-primary); font-size:15px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+#app.period-page .period-day-figures small { color:var(--text-secondary); font-size:10px; }
+#app.period-page .period-day-chevron { display:grid; place-items:center; color:var(--text-secondary); }
+#app.period-page .period-day-chevron svg { transition:transform .16s var(--motion); }
+#app.period-page .period-day[open] .period-day-chevron svg { transform:rotate(180deg); }
+#app.period-page .period-day-slots {
+  display:grid; gap:8px; padding:12px;
+  border-top:1px solid var(--line); background:color-mix(in srgb,var(--gold) 3%,var(--surface));
+}
+#app.period-page .period-day-slot {
+  min-width:0; padding:12px; border:1px solid var(--line);
+  border-radius:12px!important; background:var(--field);
+}
+#app.period-page .period-slot-header { margin-bottom:12px; }
+#app.period-page .period-slot-header strong { color:var(--text-primary); font-size:13px; }
+#app.period-page .period-day-slot .period-slot-edit {
+  min-height:44px; padding:8px 0; color:var(--gold); font-size:13px;
+}
+#app.period-page .period-slot-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px 8px; margin-top:0; }
+#app.period-page .period-slot-facts dt { color:var(--text-secondary); font-size:10px; line-height:1.3; }
+#app.period-page .period-slot-facts dd { margin-top:4px; color:var(--text-primary); font-size:13px; line-height:1.3; }
+#app.period-page .period-cycle-compact { margin-top:16px; border:1px solid var(--line); border-radius:16px!important; background:var(--surface); }
+#app.period-page .period-cycle-compact .cycle-header h2 { font-size:16px; }
+#app.period-page .period-cycle-compact .cycle-bonus-metrics strong,
+#app.period-page .period-cycle-compact #cyclePremium { color:var(--gold); }
+
+/* Forecast: inputs first, then the estimate and the period facts behind it. */
+#app.forecast-page .forecast-intro { margin:-8px 0 16px; color:var(--text-secondary); font-size:13px; }
+#app.forecast-page .forecast-simple-plan,
+#app.forecast-page .forecast-simple-hero,
+#app.forecast-page .period-norm-card,
+#app.forecast-page .forecast-facts-card {
+  border:1px solid var(--line); border-radius:16px!important;
+  background:var(--surface);
+}
+#app.forecast-page .forecast-simple-plan { padding:16px; }
+#app.forecast-page .forecast-section-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:4px; }
+#app.forecast-page .forecast-section-heading h2 { font-size:17px; }
+#app.forecast-page .forecast-section-heading>span { color:var(--text-secondary); font-size:12px; }
+#app.forecast-page .forecast-simple-plan .duration-control { margin:12px 0 0; padding:12px 0 0; border-top:1px solid var(--line); }
+#app.forecast-page .forecast-simple-plan .duration-heading label { font-size:14px; }
+#app.forecast-page .forecast-simple-plan .duration-value input { width:72px; border-color:transparent; background:transparent; color:var(--text-primary); font-size:20px; font-weight:600; }
+#app.forecast-page .forecast-simple-plan .duration-value>span { color:var(--text-secondary); }
+#app.forecast-page .forecast-simple-plan .duration-slider::-webkit-slider-runnable-track { height:6px; border-radius:4px; background:linear-gradient(to right,var(--gold) 0,var(--gold) var(--duration-fill,0%),var(--line) var(--duration-fill,0%),var(--line) 100%); }
+#app.forecast-page .forecast-simple-plan .duration-slider::-webkit-slider-thumb { width:22px; height:22px; margin-top:-8px; border:3px solid var(--surface); background:var(--gold); }
+#app.forecast-page .forecast-simple-plan .duration-slider::-moz-range-track { height:6px; border-radius:4px; background:var(--line); }
+#app.forecast-page .forecast-simple-plan .duration-slider::-moz-range-progress { height:6px; border-radius:4px; background:var(--gold); }
+#app.forecast-page .forecast-simple-plan .duration-slider::-moz-range-thumb { width:17px; height:17px; border:3px solid var(--surface); background:var(--gold); }
+#app.forecast-page .forecast-work-note { margin:8px 0 0; color:var(--text-secondary); font-size:12px; }
+#app.forecast-page .forecast-simple-hero { margin:16px 0 0; padding:16px; border-top:1px solid var(--line); text-align:left; }
+#app.forecast-page .forecast-section-label { margin:0 0 4px; color:var(--text-secondary); font-size:12px; }
+#app.forecast-page .forecast-simple-hero h2 { margin:0; color:var(--text-primary); font-size:16px; }
+#app.forecast-page .forecast-result-basis { margin:4px 0 0; color:var(--text-secondary); font-size:12px; }
+#app.forecast-page .forecast-number { margin:8px 0 4px; color:var(--gold); font-size:clamp(42px,12vw,54px); line-height:1.05; }
+#app.forecast-page .forecast-band { min-height:30px; color:var(--text-secondary); font-size:12px; }
+#app.forecast-page .forecast-facts { margin-top:16px; }
+#app.forecast-page .forecast-facts-card { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:0 16px; }
+#app.forecast-page .forecast-facts-card>div { min-width:0; display:grid; gap:4px; padding:12px 0; }
+#app.forecast-page .forecast-facts-card>div+div { padding-left:16px; border-left:1px solid var(--line); }
+#app.forecast-page .forecast-facts-card span { color:var(--text-secondary); font-size:12px; }
+#app.forecast-page .forecast-facts-card strong { color:var(--text-primary); font-size:15px; overflow-wrap:anywhere; }
+#app.forecast-page .period-norm-card { margin-top:12px; border-left:4px solid var(--gold)!important; }
+#app.forecast-page .period-norm-stat strong { color:var(--gold); }
+#app.forecast-page .forecast-video-summary { margin-top:12px; padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+#app.forecast-page .forecast-import-actions { display:grid; grid-template-columns:1fr; gap:8px; margin-top:16px; }
+#app.forecast-page .forecast-import-button { min-height:48px; border-color:var(--line); color:var(--gold); }
+
+/* Slot editor: grouped facts, clear money inputs, fixed save action. */
+#app.form-page .slot-editor-heading { grid-template-columns:minmax(76px,1fr) minmax(0,auto) 44px; gap:8px; }
+#app.form-page .slot-editor-heading .back { width:auto; min-width:0; padding:0 4px; border:0; background:transparent; color:var(--gold); display:flex; gap:4px; justify-content:flex-start; font-size:14px; }
+#app.form-page .slot-editor-heading .back svg { width:18px!important; height:18px!important; }
+#app.form-page .slot-editor-heading .back span { white-space:nowrap; }
+#app.form-page .slot-editor-heading h1 { text-align:center; font-size:20px!important; letter-spacing:-.02em!important; }
+#app.form-page .slot-editor-heading .theme-toggle { width:44px; min-width:44px; height:44px; min-height:44px; }
+#app.form-page .form-scroll { display:grid; align-content:start; gap:12px; padding:4px 0 12px; }
+#app.form-page .slot-form-section { padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+#app.form-page .slot-form-section>h2 { margin:0 0 12px; font-size:15px; }
+#app.form-page .slot-form-section .form-grid { column-gap:12px; row-gap:12px; }
+#app.form-page .slot-date-section .form-grid { grid-template-columns:minmax(0,1fr); }
+#app.form-page .slot-date-section .field { gap:8px; }
+#app.form-page .slot-date-section .date-box { min-height:52px; border-radius:12px; background:var(--field); }
+#app.form-page .slot-form-section .field label { color:var(--text-secondary); font-size:12px; }
+#app.form-page .slot-form-section .field-box { min-height:50px; }
+#app.form-page .slot-form-section .field input[type=text] { min-height:50px; border:1px solid var(--line); border-radius:10px; background:var(--field); color:var(--text-primary); }
+#app.form-page .slot-form-section .field-note { color:var(--text-secondary); }
+#app.form-page .slot-money-section .slot-live-summary { border-radius:12px; background:color-mix(in srgb,var(--gold) 7%,var(--field)); }
+#app.form-page .slot-money-section .slot-live-summary strong { color:var(--gold); }
+#app.form-page .slot-working { margin:0; padding:0 16px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+#app.form-page .slot-working>summary { min-height:52px; font-size:14px; }
+#app.form-page .save-area { padding:12px 0 calc(4px + var(--safe-bottom)); background:var(--bg); }
+#app.form-page .save-area .button { min-height:56px; border-radius:14px!important; background:var(--gold); color:var(--primary-ink); font-size:17px; }
+#app.form-page .danger-button { border-color:var(--error-outline); color:var(--error); }
+
+/* Settings keeps every existing control, but groups tariff and preferences. */
+#app.settings-page>.detail-card,
+#app.settings-page>.appearance-card { padding:16px; border:1px solid var(--line); border-radius:16px!important; background:var(--surface); }
+#app.settings-page .payment-settings>h2,
+#app.settings-page .appearance-card>h2,
+#app.settings-page>.detail-card>h2 { margin-bottom:16px; font-size:16px; }
+#app.settings-page .tariff-rate { padding:12px; border:1px solid color-mix(in srgb,var(--gold) 30%,var(--line)); border-radius:12px; background:color-mix(in srgb,var(--gold) 6%,var(--surface)); }
+#app.settings-page .tariff-rate input { color:var(--gold); }
+#app.settings-page .payment-more { border-radius:12px; }
+#app.settings-page .payment-settings .button.primary { min-height:52px; border-radius:12px!important; background:var(--gold); color:var(--primary-ink); }
+#app.settings-page .switch-row { border-color:var(--line); }
+#app.settings-page .switch-row input { width:22px; height:22px; }
+#app.settings-page .version-label { color:var(--text-secondary); }
+
+@media(max-width:380px) {
+  #app.period-page .period-day>summary { grid-template-columns:minmax(0,1fr) 64px 16px; gap:8px; padding:12px; }
+  #app.period-page .period-day-title { grid-template-columns:38px minmax(0,1fr); gap:8px; }
+  #app.period-page .period-day-stamp { min-height:48px; }
+  #app.period-page .period-day-figures strong { font-size:13px; }
+  #app.period-page .period-slot-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #app.form-page .slot-editor-heading { grid-template-columns:76px minmax(0,1fr) 40px; }
+  #app.form-page .slot-editor-heading h1 { font-size:18px!important; }
 }

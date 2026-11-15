@@ -13,6 +13,9 @@ export function periodDayMarkup(entries, dayTotals, dateLabel, hoursText, money,
   const display=(value,formatter)=>esc(formatter(value));
   return dates.map(date=>{
     const day=dayTotals(date);
+    const stamp=new Date(`${date}T00:00:00Z`);
+    const weekday=new Intl.DateTimeFormat('ru-RU',{weekday:'short',timeZone:'UTC'}).format(stamp).replace(/\.$/,'');
+    const month=new Intl.DateTimeFormat('ru-RU',{month:'short',timeZone:'UTC'}).format(stamp).replace(/\.$/,'');
     const slots=entries.filter(e=>e.date===date).slice().sort((a,b)=>String(a.createdAt??'').localeCompare(String(b.createdAt??''))||String(a.id).localeCompare(String(b.id)));
     const count=slots.length;
     const slotHtml=slots.map((entry,index)=>{
@@ -23,11 +26,11 @@ export function periodDayMarkup(entries, dayTotals, dateLabel, hoursText, money,
           ${entry.note?`<p class="period-slot-note">${esc(entry.note)}</p>`:''}
         </article>`;
     }).join('');
-    return `<details class="period-day">
-      <summary><span class="period-day-title">${esc(dateLabel(date))}<small>${count} ${plural(count,['слот','слота','слотов'])}</small></span>
+    return `<details class="period-day" data-date="${esc(date)}">
+      <summary><span class="period-day-title"><span class="period-day-stamp"><small>${esc(weekday)}</small><strong>${esc(date.slice(8,10))}</strong><small>${esc(month)}</small></span><span class="period-day-summary"><strong>${count} ${plural(count,['слот','слота','слотов'])}</strong><small>${display(day.hours,hoursText)} ч · ${day.orders==null?'Заказы не указаны':`${esc(day.orders)} ${plural(day.orders,['заказ','заказа','заказов'])}`}</small></span></span>
         <span class="period-day-figures"><strong>${display(day.paidReward,money)}</strong><small>Выплачено</small></span>
         <span class="period-day-chevron" aria-hidden="true">${icon['chevron-down']}</span>
-        <span class="period-day-overview">${display(day.hours,hoursText)} ч · ${day.orders==null?'Заказы не указаны':`${esc(day.orders)} ${plural(day.orders,['заказ','заказа','заказов'])}`}</span></summary>
+        </summary>
       <div class="period-day-slots">${slotHtml}</div>
     </details>`;
   }).join('');

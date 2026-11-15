@@ -232,8 +232,12 @@ function leaveForecast() { return view!=='forecast'||forecastScreen?.flush()!==f
 function heading(title) {
   return `<div class="page-heading"><button class="back" type="button" aria-label="Назад" title="Назад" id="goBack">${icons.back}</button><h1>${title}</h1>${themeButton()}</div>`;
 }
+function editorHeading(title) {
+  return `<div class="page-heading slot-editor-heading"><button class="back" type="button" aria-label="Отмена" title="Отмена" id="goBack">${icons.back}<span>Отмена</span></button><h1>${title}</h1>${themeButton()}</div>`;
+}
 function bottomNav(active) {
   const host=$('#bottomNav');host.hidden=false;
+  host.dataset.active=active;
   const links=[['summary','Главная','home','navSummary'],['period','Период','calendar','navPeriod'],['add','Добавить слот','plus','navAddSlot'],['forecast','Прогноз','chart-bar','navForecast'],['settings','Настройки','settings','navSettings']];
   host.innerHTML=links.map(([key,label,image,id])=>key==='add'?`<button id="${id}" class="nav-add" type="button" aria-label="${label}" title="${label}">${icon.plus}</button>`:`<button id="${id}" class="nav-item ${active===key||(active==='history'&&key==='period')?'active':''}" type="button" aria-label="${label}" ${active===key||active==='history'&&key==='period'?'aria-current="page"':''}>${icon[image]}<span aria-hidden="true" data-short="${key==='settings'?'Настр.':label}">${label}</span></button>`).join('');
   $('#navSummary').onclick=summary;$('#navPeriod').onclick=periodDetails;$('#navAddSlot').onclick=()=>form();$('#navForecast').onclick=()=>openForecast();$('#navSettings').onclick=settings;
@@ -374,7 +378,7 @@ function periodDetails() {
     date=>formatDate(date,true),hoursText,money,esc);
   app.innerHTML = `${heading('Период')}${navigation()}
     <section class="period-days" aria-labelledby="periodDaysHeading">
-      <div class="period-days-heading"><h2 id="periodDaysHeading">Записи по дням</h2></div>
+      <div class="period-days-heading"><h2 id="periodDaysHeading">Ведомость дней</h2><span>14 дней</span></div>
       <div class="period-days-list">${daily}</div>
     </section>
     <section class="detail-card cycle-settings period-cycle-compact" aria-label="Цикл премии">
@@ -595,17 +599,21 @@ function form(id = null, returnTo = 'history') {
   // Earlier versions stored omitted deductions as 0; keep those fields optional on edit.
   const val = key => e[key] == null || (['tax', 'parkCommission'].includes(key) && e[key] === 0) ? '' : String(e[key]).replace('.', ',');
   const orderValue = original ? val('dailyOrders') : '0';
-  app.innerHTML = `${heading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll"><div class="form-grid"><div class="field full form-date-field"><label for="date">Дата слота</label><div class="date-box"><span id="dateVisible">${esc(formatDate(e.date, true))}</span>${icon.calendar}<input name="date" id="date" type="date" lang="ru" value="${esc(e.date)}" required></div><p class="form-period" id="formPeriod">Период: ${esc(periodLabel(periodFor(e.date)))}</p></div>
+  app.innerHTML = `${editorHeading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll">
+    <section class="slot-form-section slot-date-section"><h2>Дата и слот</h2><div class="form-grid"><div class="field full form-date-field"><label for="date">Дата</label><div class="date-box"><span id="dateVisible">${esc(formatDate(e.date, true))}</span>${icon.calendar}<input name="date" id="date" type="date" lang="ru" value="${esc(e.date)}" required></div><p class="form-period" id="formPeriod">Период: ${esc(periodLabel(periodFor(e.date)))}</p></div></div></section>
     ${inputHint ? `<p class="hint optional-reading">${esc(inputHint)}</p>` : ''}
     <p class="hint slot-hint" id="slotHint" hidden></p>
-    <h2 class="form-section-heading">Время и заказы</h2>
-    ${field('dailyHours', carried ? 'Часы за интервал' : 'Часы за слот', val('dailyHours'), { unit: 'ч', labelClass: 'daily-label', note: carried ? 'Время между прежними записями' : '', validation: true })}
-    ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', orderValue, { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : 'По умолчанию 0. Введите фактическое число; очистите поле, если количество неизвестно.', validation: true })}
-    <h2 class="form-section-heading">Выплата, чаевые и удержания</h2>
-    ${field('reward', 'Выплачено', val('reward'), { full: true, note: 'Фактическая сумма выплаты за слот', validation: true })}
-    ${field('tax', 'Налог', val('tax'), { unit: '₽', note: `Ориентир ${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%`, validation: true })}
-    ${field('parkCommission', 'Комиссия парка', val('parkCommission'), { unit: '₽', note: `Ориентир ${PARK_COMMISSION_PERCENT}%`, validation: true })}
-    ${field('tips', 'Чаевые', val('tips'), { validation: true })}${field('separateBonus', 'Отдельные бонусы', val('separateBonus'), { validation: true })}<section class="slot-live-summary full" aria-live="polite"><div><span>Удержания</span><strong id="slotDeductionTotal">— ₽</strong></div><div><span>Начислено</span><strong id="slotAccrued">— ₽</strong></div><p id="slotAccrualFormula">Часы × ставка + чаевые − удержания</p></section></div>
+    <section class="slot-form-section slot-hours-section"><h2>Часы и заказы</h2><div class="form-grid">
+      ${field('dailyHours', carried ? 'Часы за интервал' : 'Часы за слот', val('dailyHours'), { unit: 'ч', labelClass: 'daily-label', note: carried ? 'Время между прежними записями' : '', validation: true })}
+      ${field('dailyOrders', carried ? 'Заказы за интервал' : 'Заказы за слот', orderValue, { integer: true, unit: 'заказов', labelClass: 'daily-label', note: carried ? 'Количество между записями' : 'По умолчанию 0. Введите фактическое число; очистите поле, если количество неизвестно.', validation: true })}
+    </div></section>
+    <section class="slot-form-section slot-money-section"><h2>Деньги слота</h2><div class="form-grid">
+      ${field('reward', 'Выплачено', val('reward'), { full: true, note: 'Фактическая сумма выплаты за слот', validation: true })}
+      ${field('tax', 'Налог', val('tax'), { unit: '₽', note: `Ориентир ${TAX_PERCENT_MIN}–${TAX_PERCENT_MAX}%`, validation: true })}
+      ${field('parkCommission', 'Комиссия парка', val('parkCommission'), { unit: '₽', note: `Ориентир ${PARK_COMMISSION_PERCENT}%`, validation: true })}
+      ${field('tips', 'Чаевые', val('tips'), { validation: true })}${field('separateBonus', 'Отдельные бонусы', val('separateBonus'), { validation: true })}
+      <section class="slot-live-summary full" aria-live="polite"><div><span>Удержания</span><strong id="slotDeductionTotal">— ₽</strong></div><div><span>Начислено</span><strong id="slotAccrued">— ₽</strong></div><p id="slotAccrualFormula">Часы × ставка + чаевые − удержания</p></section>
+    </div></section>
     <details class="additional slot-working"><summary>Рабочее время дня</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
   // Unset optional values remain unknown; new order counters start at an editable zero.

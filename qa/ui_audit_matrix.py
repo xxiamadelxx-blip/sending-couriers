@@ -322,7 +322,7 @@ def main():
     if args.phase == 'after' and args.focus != 'content':
         device.tap_node('Прогноз')
         for _ in range(3):
-            device.tap_node(f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут')
+            device.tap_node(f'Активные часы: минус {FORECAST_STEP_MINUTES} минут')
         device.tap_node('Главная')
         device.adb('shell', 'am', 'force-stop', device.PACKAGE)
         device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
@@ -332,11 +332,11 @@ def main():
         fields = [n.get('text', '') for n in root.iter('node') if n.get('class') == 'android.widget.EditText']
         assert len(fields) == 2 and [float(v.replace(',', '.')) for v in fields] == [14, 6.5], fields
         for _ in range(3):
-            device.tap_node(f'Из них буду работать: плюс {FORECAST_STEP_MINUTES} минут')
+            device.tap_node(f'Активные часы: плюс {FORECAST_STEP_MINUTES} минут')
         root = device.dump('duration-gesture-before')
         assert durations(root) == [14, 8], 'Restore before gesture checks failed'
         slider = next(n for n in root.iter('node') if n.get('class') == 'android.widget.SeekBar'
-                      and 'Из них буду работать' in n.get('text', ''))
+                      and 'Активные часы' in n.get('text', ''))
         b = list(map(int, re.findall(r'\d+', slider.get('bounds', ''))))
         y = (b[1] + b[3]) // 2
         device.adb('shell', 'input', 'tap', str(b[2]-8), str(y))
@@ -347,7 +347,7 @@ def main():
         root = capture('duration-thumb-drag')
         assert durations(root) == [14, 10], 'Thumb drag must use four 30-minute detents'
         for _ in range(4):
-            device.tap_node(f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут')
+            device.tap_node(f'Активные часы: минус {FORECAST_STEP_MINUTES} минут')
         device.tap_node('Главная')
     for width, size in [(360, '1080x2400'), (390, '1170x2532'), (393, '1179x2532'), (412, '1236x2532')]:
         device.adb('shell', 'wm', 'size', size)
@@ -549,8 +549,8 @@ def main():
             interactions = (
                 (f'Полный слот: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-plus', [14.5, 8]),
                 (f'Полный слот: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-slot-restored', [14, 8]),
-                (f'Из них буду работать: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-active-plus', [14, 8.5]),
-                (f'Из них буду работать: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-both-restored', [14, 8]),
+                (f'Активные часы: плюс {FORECAST_STEP_MINUTES} минут', 'font-2.0-active-plus', [14, 8.5]),
+                (f'Активные часы: минус {FORECAST_STEP_MINUTES} минут', 'font-2.0-both-restored', [14, 8]),
             )
             for label, screenshot_name, expected in interactions:
                 scroll_forecast_action_into_view(label)

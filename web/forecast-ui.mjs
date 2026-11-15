@@ -117,6 +117,7 @@ function simpleView(ctx) {
  const {root,getState,Native,notify,data,current,write,showError,run,shell,readPair}=ctx,{$}=ctx;
     const f=data(),date=current().date,own=f.plans[date],receipt=videoImportReceipt(f);
     const periodProgress=calculate(getState(),periodFor(date).id,date);
+    const daysInHistory=periodProgress.dayCount??0;
     const missingNorm=periodProgress.paymentConditions.missingOrders;
     const periodNorm=missingNorm==null
       ?'<p class="period-norm-copy">Заполните часы и заказы в записях периода, чтобы рассчитать остаток.</p>'
@@ -124,9 +125,11 @@ function simpleView(ctx) {
     let plan;try{plan=planDay(f,date);}catch(error){if(!/Ночная работа пересекает следующий день/.test(error.message))throw error;plan={};}
     const slot=own?.slotMin??f.weekConfig?.slotMin??plan.slotMin??plan.accountedMin??840;
     const work=own?.workingMin??f.weekConfig?.workingMin??plan.workingMin??480;
-    shell('Прогноз',`<section class="forecast-simple-hero" aria-live="polite"><p class="forecast-eyebrow">${esc(formatDate(date,true))}</p><h2>Прогноз на сегодня</h2><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><div class="forecast-band forecast-insufficient" id="simpleRange" role="status"></div></section>
+    shell('Прогноз',`<p class="forecast-intro">Оценка по вашей истории смен · ${esc(formatDate(date,true))}</p>
+      <section class="detail-card forecast-simple-plan" aria-labelledby="forecastPlanTitle"><div class="forecast-section-heading"><h2 id="forecastPlanTitle">Настройки</h2><span>План смены</span></div>${durationField('todayWorkHours','Активные часы',work,'',30)}${durationField('todaySlotHours','Полный слот',slot,'',30)}<p class="forecast-work-note">Активное время — работа. Полный слот включает простой.</p><p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
+      <section class="forecast-simple-hero" aria-live="polite"><p class="forecast-section-label">Результат</p><h2>Прогноз заказов</h2><p class="forecast-result-basis">По активным часам</p><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><div class="forecast-band forecast-insufficient" id="simpleRange" role="status"></div></section>
       ${simpleVideoReceiptMarkup(f,receipt)}
-      <section class="detail-card forecast-simple-plan"><h2>Моё время</h2>${durationField('todaySlotHours','Полный слот',slot,'',30)}${durationField('todayWorkHours','Из них буду работать',work,'',30)}<p class="forecast-work-note">Время простоя не считается активной работой.</p><p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
+      <section class="forecast-facts" aria-label="Факты периода"><p class="forecast-section-label">Факты</p><div class="forecast-facts-card"><div><span>Темп активного времени</span><strong>${periodProgress.pace==null?'—':`${num(periodProgress.pace)} заказа/ч`}</strong></div><div><span>Дней с записями</span><strong>${daysInHistory}</strong></div></div></section>
       <section class="detail-card period-norm-card" aria-labelledby="periodNormTitle"><div><p class="forecast-eyebrow">${esc(periodLabel(periodFor(date)))}</p><h2 id="periodNormTitle">До нормы за период</h2></div>${periodNorm}</section>
       <div class="forecast-import-actions"><button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><button class="button outline forecast-import-button" id="importForecastVideo" type="button">Импортировать видео</button></div><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
     // Forecast sliders move in 30-minute increments; numeric inputs accept exact values.

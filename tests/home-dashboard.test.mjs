@@ -28,7 +28,7 @@ test('home dashboard presents the premium ledger once, outside the gold income s
 });
 test('two forecast duration controls and large text remain visible in the source',()=>{
   assert.match(forecast,/durationField\('todaySlotHours','Полный слот',slot,'',30\)/);
-  assert.match(forecast,/durationField\('todayWorkHours','Из них буду работать',work,'',30\)/);
+  assert.match(forecast,/durationField\('todayWorkHours','Активные часы',work,'',30\)/);
   assert.match(css,/:root\[data-text-scale="large"\] #homeDeck \.home-focus \.pace-hero/);
   assert.match(css,/button:focus-visible/);
 });

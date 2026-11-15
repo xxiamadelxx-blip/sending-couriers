@@ -9,10 +9,10 @@ const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
 
 test('UI M1: slot edit form groups hours and money without discarding any existing field',()=>{
  const section=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
- for(const name of ['Время и заказы','Выплата, чаевые и удержания'])assert.ok(section.includes(name));
+ for(const name of ['Дата и слот','Часы и заказы','Деньги слота'])assert.ok(section.includes(name));
  for(const key of ['dailyHours','dailyOrders','reward','tax','parkCommission','tips','separateBonus'])assert.match(section,new RegExp("field\\('"+key+"'"));
- assert.match(css,/\.form-section-heading\{grid-column:1\/-1/);
- assert.match(css,/\.form-page \.save-area \.button\.primary\{min-height:55px/);
+ assert.match(css,/#app\.form-page \.slot-form-section \{ padding:16px/);
+ assert.match(css,/#app\.form-page \.save-area \.button \{ min-height:56px/);
 });
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
@@ -119,7 +119,7 @@ test('UI M2: native Android file picker opens and cancel preserves both forecast
 test('UI M2 native 200% font: both time bases are reachable, independently operable and persisted',()=>{
   assert.match(qa,/FORECAST_STEP_MINUTES = 30/);
   for(const action of ['Полный слот: плюс','Полный слот: минус',
-                       'Из них буду работать: плюс','Из них буду работать: минус']){
+                       'Активные часы: плюс','Активные часы: минус']){
     assert.ok(qa.includes(`f'${action} {FORECAST_STEP_MINUTES} минут'`),
       'missing Android 200% interaction: '+action);
   }
@@ -127,7 +127,7 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
     assert.ok(qa.includes(capture),'missing real-device screenshot: '+capture);
   }
   assert.match(forecast,/durationField\('todaySlotHours','Полный слот',slot,'',30\)/);
-  assert.match(forecast,/durationField\('todayWorkHours','Из них буду работать',work,'',30\)/);
+  assert.match(forecast,/durationField\('todayWorkHours','Активные часы',work,'',30\)/);
   assert.match(qa,/assert durations\(current\) == expected/);
   assert.match(qa,/200% action scroll changed planned hours/);
   assert.match(qa,/Thumb drag must use four 30-minute detents/);
