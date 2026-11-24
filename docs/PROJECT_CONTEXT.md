@@ -25,7 +25,7 @@
 ## Verification and limits
 - Latest source change: `70d5b3db34eb` on the canonical branch. Local checks on that source: `npm test` 258/258 passed; Python suite 91/91 passed; `git diff --check` passed; differential check against the parent preserved exact serialized day objects in two import scenarios.
 - Complexity tools ran on the parent and current source: `mergeVideoSlotDay` fell from CC 50 to CC 24; the next production hotspot is `normalizeDay` at CC 46. This is a responsibility split, not a claim that total project complexity has fallen.
-- Android 35 build and emulator are available in GitHub Actions. The workflow run on parent `be5aef190464a302eeb515dea4252cb6f6d2b38c` passed code-quality and reached native UI checks; it does not verify the latest source change. Local Android emulator is unavailable in this nested VM. Transfer-upgrade automation uses a test signer; owner-signed production upgrade is not confirmed. No production APK is produced by this cleanup.
+- Android 35 build and emulator are available in GitHub Actions. At PR HEAD `7210f938d76b549e4e7a5a75ff601e2c749d2c4c`, code-quality and Android emulator QA passed; UI audit was still running when this checkpoint was updated. Check the PR for later results. Local Android emulator is unavailable in this nested VM. Transfer-upgrade automation uses a test signer; owner-signed production upgrade is not confirmed. No production APK is produced by this cleanup.
 
 ## Next cleanup target
 - After this commit's exact-SHA Android and CI checks finish, inspect and simplify `normalizeDay` (CC 46) without changing reconciliation behavior.
