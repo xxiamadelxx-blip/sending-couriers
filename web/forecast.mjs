@@ -435,6 +435,26 @@ function mergeVideoSlotEvidence(old,parsed,hasDailyTotal,slotAdded) {
     :mergeVideoEvidence(old?.ordersScope==='video_slots'?oldEvidence:[],slotAdded||evidenceAdded?incomingEvidence:[]);
   return {orderEvidence,evidenceAdded};
 }
+function preservedVideoSlotWorkFacts(old,parsed) {
+  return {
+    completed:old?.completed??parsed.completed,workingMin:old?.workingMin??parsed.workingMin,
+    workConfirmed:old?.workConfirmed??parsed.workConfirmed,precision:old?.precision??parsed.precision,
+    intervals:old?.intervals??parsed.intervals,estimatedIntervals:old?.estimatedIntervals??parsed.estimatedIntervals,
+    estimatedExposureJustified:old?.estimatedExposureJustified||parsed.estimatedExposureJustified,
+    exposureBlocks:old?.exposureBlocks?.length?old.exposureBlocks:parsed.exposureBlocks,
+    appAccountedMin:old?.appAccountedMin??parsed.appAccountedMin,
+    accountedConfirmed:old?.accountedConfirmed??parsed.accountedConfirmed
+  };
+}
+function videoSlotEvidenceStatus(old,parsed,orderEvidence,dailyOrders,hasDailyTotal) {
+  const evidenceMatchesTotal=orderEvidence.length===dailyOrders;
+  return {
+    evidenceComplete:hasDailyTotal
+      ?Boolean((old.evidenceComplete||parsed.evidenceComplete)&&evidenceMatchesTotal)
+      :Boolean(evidenceMatchesTotal&&parsed.evidenceComplete),
+    rawComplete:hasDailyTotal?old.rawComplete:evidenceMatchesTotal
+  };
+}
 function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
   const slotState=mergeVideoSlotRecord(old,input,inputSource,suppliedSlotId);
   const sourceState=mergeVideoSlotSources(old,parsed,slotState);
@@ -446,16 +466,8 @@ function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
     zone:old?.zone||parsed.zone,timezone:old?.timezone||parsed.timezone,
     orders:dailyOrders,ordersConfirmed:hasDailyTotal?old.ordersConfirmed:slots.length>0,
     ordersScope:hasDailyTotal?'daily':'video_slots',videoSlots:slots,fieldSources,orderEvidence,
-    completed:old?.completed??parsed.completed,workingMin:old?.workingMin??parsed.workingMin,
-    workConfirmed:old?.workConfirmed??parsed.workConfirmed,precision:old?.precision??parsed.precision,
-    intervals:old?.intervals??parsed.intervals,estimatedIntervals:old?.estimatedIntervals??parsed.estimatedIntervals,
-    estimatedExposureJustified:old?.estimatedExposureJustified||parsed.estimatedExposureJustified,
-    exposureBlocks:old?.exposureBlocks?.length?old.exposureBlocks:parsed.exposureBlocks,
-    appAccountedMin:old?.appAccountedMin??parsed.appAccountedMin,
-    accountedConfirmed:old?.accountedConfirmed??parsed.accountedConfirmed,
-    evidenceComplete:hasDailyTotal?Boolean((old.evidenceComplete||parsed.evidenceComplete)
-      &&orderEvidence.length===dailyOrders):Boolean(orderEvidence.length===dailyOrders&&parsed.evidenceComplete),
-    rawComplete:hasDailyTotal?old.rawComplete:orderEvidence.length===dailyOrders,
+    ...preservedVideoSlotWorkFacts(old,parsed),
+    ...videoSlotEvidenceStatus(old,parsed,orderEvidence,dailyOrders,hasDailyTotal),
     sourceNotes:[...new Set([...(old?.sourceNotes??[]),...parsed.sourceNotes])].slice(0,20),
     manualTime:old?.manualTime??parsed.manualTime,confirmedAt:old?.confirmedAt??parsed.confirmedAt,
     importedAt:now,revision:(old?.revision??0)+1,revisions:old?.revisions??[],sourceConflicts};

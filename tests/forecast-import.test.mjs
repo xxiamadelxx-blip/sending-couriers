@@ -151,6 +151,38 @@ test('history conflicts preserve confirmed totals and manual work geography',()=
  assert.match(conflicts,/Часы Яндекса: сохранено 600 мин, новый источник 620 мин/);
 });
 
+test('video slot import preserves manually confirmed day facts and the payment denominator',()=>{
+ const date='2026-10-22',hash='e'.repeat(64);
+ const importedDay=importDays(emptyForecast(),[{
+  date,orders:10,ordersConfirmed:true,appAccountedMin:600,accountedConfirmed:true,
+  zone:'north',timezone:'Europe/Moscow',source:'history:base'
+ }],'history:base','2026-10-31T12:00:00Z');
+ const manual=saveDay(importedDay,{
+  date,workingMin:300,precision:'intervals',intervals:[{start:600,end:900,state:'WORK'}],workConfirmed:true
+ },'2026-10-31T12:01:00Z');
+ const before=manual.days[date];
+ const withVideoSlot=importDays(manual,[{
+  date,orders:9,ordersConfirmed:true,slotId:'slot-22',source:`video:${hash}`,sourceHash:hash,
+  workingMin:null,precision:'unknown',intervals:[],workConfirmed:false,zone:'south',timezone:'Europe/London'
+ }],'video_import','2026-10-31T12:02:00Z');
+ const day=withVideoSlot.days[date];
+
+ assert.equal(day.orders,10);
+ assert.equal(day.ordersScope,'daily');
+ assert.equal(day.videoSlots[0].orderCount,9);
+ assert.equal(day.workingMin,300);
+ assert.equal(day.workConfirmed,true);
+ assert.equal(day.manualTime,true);
+ assert.equal(day.precision,'intervals');
+ assert.deepEqual(day.intervals.map(({start,end,state})=>[start,end,state]),[[600,900,'WORK']]);
+ assert.equal(day.appAccountedMin,600);
+ assert.equal(day.accountedConfirmed,true);
+ assert.equal(day.zone,'north');
+ assert.equal(day.timezone,'Europe/Moscow');
+ assert.equal(day.confirmedAt,before.confirmedAt);
+ assert.deepEqual(day.revisions,before.revisions);
+});
+
 test('partial history cannot unset a previously confirmed daily total',()=>{
  const date='2026-10-12',base=importDays(emptyForecast(),[{date,orders:12,ordersConfirmed:true,appAccountedMin:840,accountedConfirmed:true,source:'complete'}],'complete');
  const partial=importDays(base,[{date,orders:null,ordersConfirmed:false,appAccountedMin:null,accountedConfirmed:false,precision:'unknown',source:'partial'}],'partial');
