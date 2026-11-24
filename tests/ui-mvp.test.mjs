@@ -160,6 +160,8 @@ test('UI M2: forecast step buttons retain 48dp targets after page styles apply',
 });
 test('UI M2: sliders and header controls retain 48dp targets after page styles apply',()=>{
  assert.match(css,/#app \.back,#app \.export-icon,#app \.theme-toggle,#app \.period-arrow \{ width:48px; height:48px; min-width:48px; min-height:48px;/);
+ assert.match(css,/#app\.form-page \.slot-editor-heading \{ grid-template-columns:minmax\(76px,1fr\) minmax\(0,auto\) 48px;/);
+ assert.match(css,/#app\.form-page \.slot-editor-heading \.theme-toggle \{ width:48px; min-width:48px; height:48px; min-height:48px;/);
  assert.match(css,/#app\.forecast-page \.duration-slider \{ width:100%; height:48px; min-height:48px;/);
 });
 test('Android large-text top-scroll gate targets the current Forecast header',()=>{
