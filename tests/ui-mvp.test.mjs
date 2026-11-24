@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 6239)
-Total output lines: 346
-
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -139,7 +136,77 @@ test('UI M2 native 200% font: both time bases are reachable, independently opera
   }
   assert.match(forecast,/durationField\('todaySlotHours','Полный слот',slot,'',30\)/);
   assert.match(forecast,/durationField\('todayWorkHours','Активные часы',work,'',30\)/);
-  assert.match(qa…1239 tokens truncated…',import.meta.url),'utf8');
+  assert.match(qa,/assert durations\(current\) == expected/);
+  assert.match(qa,/200% action scroll changed planned hours/);
+  assert.match(qa,/Thumb drag must use four 30-minute detents/);
+  assert.match(qa,/200% round-trip values changed after process death/);
+  assert.match(qa,/def scroll_forecast_to_top\(/);
+  assert.match(qa,/def scroll_forecast_action_into_view\(label, attempts=8\):/);
+  assert.match(qa,/scroll_forecast_action_into_view\(label\)/);
+});
+
+test('UI M2: narrow and large-text forecast import actions use one readable column',()=>{
+ assert.match(css,/#app\.settings-page \.payment-settings form\s*\{\s*display:grid;\s*gap:16px;/);
+ assert.match(css,/#app\.settings-page \.payment-more>summary::after\s*\{\s*content:"";/,'decorative chevron must not become part of the summary accessible name');
+ assert.match(css,/#app\.forecast-page \.forecast-import-actions\s*\{\s*display:grid;\s*grid-template-columns:1fr;/);
+ assert.match(css,/@media\(max-width:380px\)\s*\{[\s\S]*?#app\.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
+ assert.match(css,/@media\(max-width:420px\)\s*\{\s*#app\.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
+ assert.match(css,/:root\[data-text-scale="large"\] #app\.forecast-page \.forecast-import-actions\s*\{\s*grid-template-columns:1fr;/);
+});
+
+test('UI M2: forecast step buttons retain 48dp targets after page styles apply',()=>{
+ assert.match(css,/#app\.forecast-page \.duration-track\s*\{[^}]*grid-template-columns:48px minmax\(0,1fr\) 48px;/);
+ assert.match(css,/#app\.forecast-page \.duration-track button\s*\{[^}]*width:48px; height:48px; min-height:48px;/);
+});
+test('UI M2: sliders and header controls retain 48dp targets after page styles apply',()=>{
+ assert.match(css,/#app \.back,#app \.export-icon,#app \.theme-toggle,#app \.period-arrow \{ width:48px; height:48px; min-width:48px; min-height:48px;/);
+ assert.match(css,/#app\.forecast-page \.duration-slider \{ width:100%; height:48px; min-height:48px;/);
+});
+test('Android large-text top-scroll gate targets the current Forecast header',()=>{
+ assert.match(forecast,/function simpleView[\s\S]*?shell\('Прогноз',/);
+ assert.match(qa,/heading = device\.find_node\(root, 'Прогноз'\)/);
+ assert.doesNotMatch(qa,/Прогноз на сегодня/);
+});
+test('UI M2: large-text form keeps the focused label visible without relying on IME resize detection',()=>{
+ const start=app.indexOf('function installLargeTextFormLabelFocusGuard()');
+ const end=app.indexOf('function form(',start);
+ const guard=app.slice(start,end);
+ assert.match(guard,/const offset = Math\.min\(missing, room\)/);
+ assert.match(guard,/if \(!label\) \{\s*scroll\.style\.paddingTop = ''/);
+ assert.match(guard,/if \(offset > 0\) \{\s*scroll\.style\.paddingTop = `\$\{offset\}px`/);
+ assert.match(guard,/scroll\.addEventListener\('focusout', reset\)/);
+ assert.match(guard,/settleTimer = setTimeout\(align, 420\)/);
+ assert.match(guard,/if \(offset > 0\) \{[\s\S]*?scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
+});
+
+test('Android smoke returns from XLSX picker and verifies saved facts and current payout label',async()=>{
+ const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
+ const form=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
+ const a11y=await readFile(new URL('../qa/a11y_xml_smoke.py',import.meta.url),'utf8');
+ const uiAudit=await readFile(new URL('../qa/ui_audit_matrix.py',import.meta.url),'utf8');
+ assert.match(xlsx,/wait_node\("Прогноз", 20\)/);
+ assert.match(xlsx,/assert_imported\(exported_forecast\(\)\)/);
+ assert.doesNotMatch(xlsx,/История загружена: 1 день/);
+ assert.ok(form.includes("LABELS = ('Часы за слот', 'Заказы за слот', 'Выплачено'"), 'Large-text smoke must use the current payout field label');
+ assert.match(form,/wait_node\('История', 25\)/);
+ assert.doesNotMatch(form,/wait_node\('ИСТОРИЯ'/);
+ assert.match(a11y,/form_labels = \('Часы за слот', 'Заказы за слот', 'Выплачено'\)/);
+ assert.match(a11y,/talkBackTested':False/);
+ assert.doesNotMatch(a11y,/Вознаграждение/);
+ assert.match(uiAudit,/action_above_navigation\(root, action\)/);
+ assert.match(uiAudit,/device\.tap_node\(action\)/);
+ assert.doesNotMatch(form,/Вознаграждение/);
+});
+
+
+test('UI M2: large text forecast reserves scroll room above the fixed navigation',()=>{
+ assert.match(css,/:root\[data-text-scale="large"\] #app\.forecast-page \{ padding-bottom:72px;/);
+ assert.match(qa,/action_bounds\[3\] <= nav_bounds\[1\]/);
+});
+
+test('MVP Android M2 positive XLSX: full workflow imports same report twice and verifies saved facts',async()=>{
+ const ci=await readFile(new URL('../.github/workflows/ui-audit.yml',import.meta.url),'utf8');
+ const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
  const runner=await readFile(new URL('../qa/run_ui_gates.py',import.meta.url),'utf8');
  assert.match(ci,/python3 qa\/run_ui_gates\.py --apk/);
  assert.match(runner,/\['python3', 'qa\/xlsx_import_smoke\.py'\]/);
