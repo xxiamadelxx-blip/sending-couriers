@@ -82,3 +82,14 @@ test('normalizeDay keeps order facts and derived exposure stable through reload'
  assert.deepEqual(day.conflicts,[]);
  assert.deepEqual(normalizeForecast({version:1,days:{[date]:day}}).days[date],day);
 });
+
+test('normalizeForecast keeps validation precedence across state sections',()=>{
+ const date='2026-11-20';
+ const profile={version:1,effectiveFrom:date,timezone:'Europe/Moscow',week:Array.from({length:7},()=>({intervals:[]}))};
+ assert.throws(()=>normalizeForecast({version:1,profiles:[profile,{...profile}],days:null}),error=>error.message==='Повторяется версия рабочего профиля.');
+ assert.throws(()=>normalizeForecast({version:1,days:{[date]:{date:'2026-11-21'}},snapshots:[{}]}),error=>error.message==='Дата факта не совпадает.');
+ const snapshot={kind:'MORNING',id:'same',date,createdAt:'2026-11-20T09:00:00.000Z',trainingCutoff:date,reasons:[]};
+ assert.throws(()=>normalizeForecast({version:1,days:{},snapshots:[snapshot,{...snapshot}],evaluations:[{}]}),error=>error.message==='Повторяется выпуск прогноза.');
+ assert.throws(()=>normalizeForecast({version:1,days:{},plans:{invalid:{workingMin:1}},archive:{forecasts:[{id:''}]}}),error=>error.message==='Выберите дату.');
+ assert.deepEqual(Object.keys(normalizeForecast(emptyForecast())),Object.keys(emptyForecast()));
+});

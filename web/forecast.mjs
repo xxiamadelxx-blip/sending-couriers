@@ -304,20 +304,21 @@ function normalizeForecastArchive(input) {
   return archive;
 }
 
-export function normalizeForecast(input) {
-  if(input==null) return emptyForecast();
-  if(input.version!==1) fail('Версия прогноза пока не поддерживается.');
-  const result=emptyForecast();
+function normalizeForecastFacts(input,result) {
   result.profiles=safeRecords(input.profiles??[],500,'профили').map(profile);
   if(new Set(result.profiles.map(p=>p.version)).size!==result.profiles.length) fail('Повторяется версия рабочего профиля.');
   if(!input.days||typeof input.days!=='object'||Array.isArray(input.days)||Object.keys(input.days).length>5000) fail('Проверьте историю прогноза.');
   for(const [key,value] of Object.entries(input.days)) { dayStamp(key); if(value.date!==key) fail('Дата факта не совпадает.'); result.days[key]=normalizeDay(value); }
+}
+function normalizeForecastRecords(input,result) {
   result.snapshots=safeRecords(input.snapshots??[],10000,'прогнозы').map(snapshot);
   if(new Set(result.snapshots.map(s=>s.id)).size!==result.snapshots.length) fail('Повторяется выпуск прогноза.');
   result.evaluations=safeRecords(input.evaluations??[],20000,'оценки').map(evaluation);
   result.models=safeRecords(input.models??[],1000,'модели').map(model);
   result.scenarios=safeRecords(input.scenarios??[],1000,'сценарии').map(scenario);
   result.imports=safeRecords(input.imports??[],1000,'импорт').map(s=>{recordId(s.id);timestamp(s.at);return {...s,days:integer(s.days,5000),changed:integer(s.changed,5000),conflicts:integer(s.conflicts,100000)};});
+}
+function normalizeForecastSettings(input,result) {
   if(Object.keys(input.plans??{}).length>5000)fail('Слишком много планов.');
   for(const [date,p] of Object.entries(input.plans??{})){dayStamp(date);const v=weekConfiguration(p);result.plans[date]={workingMin:v.workingMin,...(Object.hasOwn(p,'slotMin')?{slotMin:v.slotMin}:{}),...(v.intervals?{intervals:v.intervals,precision:v.precision}:{}),...(v.mode?{mode:v.mode}:{})};}
   result.weekConfig=weekConfiguration(input.weekConfig);
@@ -328,6 +329,14 @@ export function normalizeForecast(input) {
   result.archive = normalizeForecastArchive(input.archive);
   // Legacy imports already contain source-tagged reconstructed totals. They stay reconstructed.
   for(const d of Object.values(result.days))if(d.source.startsWith('sheets_import:')&&!d.manualTime&&!d.workConfirmed&&d.workingMin>0&&!d.estimatedIntervals.length&&!input.days[d.date].fieldSources?.workingMin?.status)d.estimatedExposureJustified=true;
+}
+export function normalizeForecast(input) {
+  if(input==null) return emptyForecast();
+  if(input.version!==1) fail('Версия прогноза пока не поддерживается.');
+  const result=emptyForecast();
+  normalizeForecastFacts(input,result);
+  normalizeForecastRecords(input,result);
+  normalizeForecastSettings(input,result);
   return result;
 }
 export function mergeForecast(current,incoming) {
