@@ -639,25 +639,33 @@ export function restoreVideoOrderEvidence(data,sourceHash,storedOrders,now=new D
   }
   return result;
 }
-export function syncSlots(data,entries) {
-  // Only offer slot totals as unconfirmed observations. No inference of availability.
+function groupFinanceSlotsByDate(entries) {
   const byDate=new Map();
-  for(const entry of entries){const list=byDate.get(entry.date)??[];list.push(entry);byDate.set(entry.date,list);}
-  const days={...data.days},clock=forecastClock(data);
-  for(const [date,list] of byDate) {
-    const old=days[date];
-    if(old && old.source!=='finance-slots') continue;
-    const orders=list.every(e=>e.dailyOrders!=null)?list.reduce((n,e)=>n+e.dailyOrders,0):null;
-    const appAccountedMin=list.every(e=>e.dailyHours!=null)?list.reduce((n,e)=>n+e.dailyHours*60,0):null;
-    if(appAccountedMin>1440) continue; // Legacy cumulative intervals are not a work day.
-    const sourceHash=fingerprint(list.map(e=>[e.id,e.date,e.dailyOrders,e.dailyHours]));
-    const complete=date<clock.date,reliable=list.every(e=>!e.legacyReading);
-    if(old?.sourceHash===sourceHash&&old.ordersConfirmed===(orders!=null)&&old.accountedConfirmed===(appAccountedMin!=null&&reliable)&&old.completed===complete)continue;
-    const fieldSources={...old?.fieldSources};
-    delete fieldSources.orders;delete fieldSources.appAccountedMin;
-    const profile=old?.zone&&old?.timezone?null:profileFor(data,date);
-    days[date]=normalizeDay({...old,date,zone:old?.zone??profile?.zone??'',timezone:old?.timezone??profile?.timezone??'Europe/Moscow',orders,appAccountedMin,ordersConfirmed:orders!=null,accountedConfirmed:appAccountedMin!=null&&reliable,fieldSources,completed:complete,asOfMinute:date===clock.date?clock.minute:null,source:'finance-slots',sourceHash,revision:(old?.revision??0)+1});
+  for(const entry of entries) {
+    const list=byDate.get(entry.date);
+    if(list) list.push(entry);
+    else byDate.set(entry.date,[entry]);
   }
+  return byDate;
+}
+function financeSlotTotals(list) {
+  const orders=list.every(e=>e.dailyOrders!=null)?list.reduce((n,e)=>n+e.dailyOrders,0):null;
+  const appAccountedMin=list.every(e=>e.dailyHours!=null)?list.reduce((n,e)=>n+e.dailyHours*60,0):null;
+  return {orders,appAccountedMin,reliable:list.every(e=>!e.legacyReading)};
+}
+function syncFinanceSlotDay(data,date,list,old,clock) {
+  if(old&&old.source!=='finance-slots') return old;
+  const {orders,appAccountedMin,reliable}=financeSlotTotals(list);
+  if(appAccountedMin>1440) return old; // Legacy cumulative intervals are not a work day.
+  const sourceHash=fingerprint(list.map(e=>[e.id,e.date,e.dailyOrders,e.dailyHours]));
+  const completed=date<clock.date;
+  if(old?.sourceHash===sourceHash&&old.ordersConfirmed===(orders!=null)&&old.accountedConfirmed===(appAccountedMin!=null&&reliable)&&old.completed===completed)return old;
+  const fieldSources={...old?.fieldSources};
+  delete fieldSources.orders;delete fieldSources.appAccountedMin;
+  const profile=old?.zone&&old?.timezone?null:profileFor(data,date);
+  return normalizeDay({...old,date,zone:old?.zone??profile?.zone??'',timezone:old?.timezone??profile?.timezone??'Europe/Moscow',orders,appAccountedMin,ordersConfirmed:orders!=null,accountedConfirmed:appAccountedMin!=null&&reliable,fieldSources,completed,asOfMinute:date===clock.date?clock.minute:null,source:'finance-slots',sourceHash,revision:(old?.revision??0)+1});
+}
+function clearStaleFinanceSlotDays(days,byDate) {
   for(const [date,d] of Object.entries(days)) if(d.source==='finance-slots'&&!byDate.has(date)){
     if(!d.manualTime){delete days[date];continue;}
     if(d.orders!=null||d.appAccountedMin!=null||d.ordersConfirmed||d.accountedConfirmed){
@@ -665,6 +673,15 @@ export function syncSlots(data,entries) {
       days[date]=normalizeDay({...d,orders:null,ordersConfirmed:false,appAccountedMin:null,accountedConfirmed:false,fieldSources,revision:d.revision+1,sourceHash:null});
     }
   }
+}
+export function syncSlots(data,entries) {
+  // Slot totals remain observations; they do not establish work intervals or availability.
+  const byDate=groupFinanceSlotsByDate(entries),days={...data.days},clock=forecastClock(data);
+  for(const [date,list] of byDate) {
+    const day=syncFinanceSlotDay(data,date,list,days[date],clock);
+    if(day) days[date]=day;
+  }
+  clearStaleFinanceSlotDays(days,byDate);
   return {...data,days};
 }
 export function inferredPlan(data,date) {

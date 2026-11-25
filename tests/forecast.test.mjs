@@ -84,6 +84,58 @@ test('manual slot totals are recognized automatically; same-date slots are not d
  let s=upsertEntry(emptyState(),{date:'2026-10-01',dailyHours:14,dailyOrders:27,reward:0});s.forecast=syncSlots(profile(),s.entries);assert.equal(s.forecast.days['2026-10-01'].workConfirmed,false);assert.equal(s.forecast.days['2026-10-01'].ordersConfirmed,true);
  s.forecast=saveDay(s.forecast,confirmed('2026-10-01'));const f=forecastFinances(s,'2026-10-01',{},'2026-10-02');assert.equal(f.weekFinancial.rows[0].orders,27);assert.equal(f.weekFinancial.rows[0].accountedMin,840);
 });
+test('slot sync sums complete dates, keeps partial totals unknown and marks legacy time unconfirmed',()=>{
+ const data=profile(),clock=forecastClock(data),past=addDays(clock.date,-1),unknown=addDays(clock.date,-2);
+ const synced=syncSlots(data,[
+  {id:'today-a',date:clock.date,dailyHours:3,dailyOrders:5},
+  {id:'today-b',date:clock.date,dailyHours:4,dailyOrders:7},
+  {id:'legacy-a',date:past,dailyHours:1.5,dailyOrders:4,legacyReading:true},
+  {id:'legacy-b',date:past,dailyHours:0.5,dailyOrders:3},
+  {id:'partial-a',date:unknown,dailyHours:1,dailyOrders:null},
+  {id:'partial-b',date:unknown,dailyHours:null,dailyOrders:3}
+ ]);
+ const today=synced.days[clock.date],legacy=synced.days[past],partial=synced.days[unknown];
+ assert.equal(today.orders,12);assert.equal(today.appAccountedMin,420);assert.equal(today.ordersConfirmed,true);assert.equal(today.accountedConfirmed,true);
+ assert.equal(today.completed,false);assert.ok(today.asOfMinute>=0&&today.asOfMinute<1440);assert.equal(today.workConfirmed,false);
+ assert.equal(legacy.orders,7);assert.equal(legacy.appAccountedMin,120);assert.equal(legacy.ordersConfirmed,true);assert.equal(legacy.accountedConfirmed,false);assert.equal(legacy.completed,true);
+ assert.equal(partial.orders,null);assert.equal(partial.appAccountedMin,null);assert.equal(partial.ordersConfirmed,false);assert.equal(partial.accountedConfirmed,false);
+});
+test('slot sync is idempotent for unchanged records and revises changed source facts',()=>{
+ const data=profile(),date=forecastClock(data).date,entries=[
+  {id:'first',date,dailyHours:3,dailyOrders:5},
+  {id:'second',date,dailyHours:4,dailyOrders:7}
+ ];
+ const first=syncSlots(data,entries),original=first.days[date],again=syncSlots(first,entries);
+ assert.deepEqual(again.days[date],original);
+ const revised=syncSlots(first,[{...entries[0],dailyOrders:6},entries[1]]);
+ assert.equal(revised.days[date].orders,13);assert.equal(revised.days[date].revision,original.revision+1);assert.notEqual(revised.days[date].sourceHash,original.sourceHash);
+});
+test('slot sync preserves other day sources and cleans stale finance facts without erasing manual time',()=>{
+ const date=addDays(forecastClock(profile()).date,-3),manual=saveDay(profile(),{...confirmed(date,9),source:'sheet-import'});
+ const protectedDay=syncSlots(manual,[{id:'slot',date,dailyHours:4,dailyOrders:8}]).days[date];
+ assert.deepEqual(protectedDay,manual.days[date]);
+ const seeded=syncSlots(profile(),[
+  {id:'remove',date:addDays(date,-1),dailyHours:2,dailyOrders:4},
+  {id:'keep',date,dailyHours:2,dailyOrders:4}
+ ]);
+ const keep={...seeded.days[date],manualTime:true,precision:'total',workingMin:360,workConfirmed:true};
+ const withManualTime={...seeded,days:{...seeded.days,[date]:keep}};
+ const refreshed=syncSlots(withManualTime,[{id:'keep',date,dailyHours:3,dailyOrders:5}]).days[date];
+ assert.equal(refreshed.workingMin,360);assert.equal(refreshed.workConfirmed,true);assert.equal(refreshed.manualTime,true);
+ const cleaned=syncSlots(withManualTime,[]),retained=cleaned.days[date];
+ assert.equal(cleaned.days[addDays(date,-1)],undefined);
+ assert.equal(retained.manualTime,true);assert.equal(retained.workingMin,360);assert.equal(retained.workConfirmed,true);
+ assert.equal(retained.orders,null);assert.equal(retained.appAccountedMin,null);assert.equal(retained.ordersConfirmed,false);assert.equal(retained.accountedConfirmed,false);
+ assert.equal(retained.sourceHash,'');assert.equal(retained.revision,keep.revision+1);
+ assert.equal(retained.fieldSources.orders.status,'UNKNOWN');assert.equal(retained.fieldSources.appAccountedMin.status,'UNKNOWN');
+});
+test('slot sync accepts 24 hours and ignores cumulative totals above one day',()=>{
+ const data=profile(),date=addDays(forecastClock(data).date,-5),atLimit=syncSlots(data,[{id:'limit',date,dailyHours:24,dailyOrders:0}]);
+ assert.equal(atLimit.days[date].appAccountedMin,1440);assert.equal(atLimit.days[date].accountedConfirmed,true);
+ const tooLong=[{id:'first',date,dailyHours:12,dailyOrders:4},{id:'second',date,dailyHours:13,dailyOrders:3}];
+ assert.equal(syncSlots(data,tooLong).days[date],undefined);
+ assert.deepEqual(syncSlots(atLimit,tooLong).days[date],atLimit.days[date]);
+});
 test('profile timezone is independent of VPN/device; minimum hours and critical pace version with existing terms',()=>{
  assert.equal(localClock('Asia/Vladivostok',new Date('2026-10-01T16:00:00Z')).date,'2026-10-02');
  let s=setPaymentTerms(emptyState(),{effectivePeriodStart:'2026-10-02',hourlyRate:400,basePace:1.85,premiumPace:2.8,paceBonusPercent:5,cycleBonusPercent:5,minimumHours:90,criticalPace:1.8});
