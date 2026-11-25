@@ -4,11 +4,13 @@
 This executes only in a disposable QA emulator preseeded with synthetic
 4h/8 and 5h/10 slots by ui_audit_matrix.py. No personal files or credentials.
 """
+from collections import Counter
 import json
 import re
 import time
 import xml.etree.ElementTree as ET
 import emulator_smoke as device
+import xlsx_import_smoke as backup
 
 OUT = device.ROOT / 'qa-results' / 'ui-form-200'
 OUT.mkdir(parents=True, exist_ok=True)
@@ -190,15 +192,46 @@ def open_visible_period_history():
     raise AssertionError('Period history action unreachable by scroll at 200%')
 
 
+def saved_entry_visible(root):
+    """Find the new slot's facts in one day card, independent of midnight."""
+    parents = {child: parent for parent in root.iter() for child in parent}
+    date_pattern = re.compile(r'\d{1,2}\s+\S+\s+\d{4}')
+    for node in root.iter('node'):
+        if not date_pattern.fullmatch(node.get('text', '').strip()):
+            continue
+        card = parents.get(node)
+        if card is None:
+            continue
+        texts = [' '.join(n.get('text', '').split()) for n in card.iter('node')]
+        if ('1 ч' in texts and 'Отработано' in texts and '2' in texts
+                and 'Заказов' in texts and 'Выплачено' in texts
+                and '300 ₽' in texts):
+            return True
+    return False
+
+
+def assert_synthetic_slots_persisted(state):
+    """Verify the seed slots and the new slot from the app's JSON backup."""
+    entries = state.get('entries')
+    assert isinstance(entries, list), 'JSON backup has no entries list'
+    assert len(entries) == 3 and all(isinstance(entry, dict) for entry in entries), (
+        f'Expected exactly three saved slot records, got {entries!r}')
+    actual = Counter((entry.get('dailyHours'), entry.get('dailyOrders'), entry.get('reward'))
+                     for entry in entries)
+    expected = Counter({(1, 2, 300): 1, (4, 8, 1200): 1, (5, 10, 2000): 1})
+    assert actual == expected, (
+        f'Saved slots changed or duplicated: expected {expected}, got {actual}')
+    return {'entryCount': len(entries), 'facts': sorted(actual.elements(), key=repr)}
+
+
 def assert_saved():
     device.wait_home(45)
     device.tap_node('Период')
     open_visible_period_history()
     root = snap('200-390-light-history-saved')
     text = re.sub(r'\s+', ' ', ' '.join(n.get('text', '') for n in root.iter('node')))
-    assert '10 ч · 20 заказов' in text and '3 500' in text, (
-        f'1h/2 orders/300 ₽ not persisted on top of 9h/18/3200 fixture: {text[:1400]}')
-    assert device.find_node(root, 'Редактировать Слот 3') is not None, 'New slot cannot be edited'
+    assert saved_entry_visible(root), (
+        f'1h/2 orders/300 ₽ not visible in one saved day card: {text[:1400]}')
     return text
 
 def main():
@@ -249,11 +282,18 @@ def main():
             device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
             assert_saved()
             snap('200-390-light-history-after-restart')
+            # Read the app's actual JSON backup at normal text scale. Records
+            # may span two calendar days if CI crosses local midnight.
+            device.adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
+            device.adb('shell', 'am', 'force-stop', device.PACKAGE)
+            device.adb('shell', 'am', 'start', '-n', device.ACTIVITY)
+            device.wait_home(45)
+            persisted = assert_synthetic_slots_persisted(backup.exported_state())
     (OUT / 'form-200-result.json').write_text(json.dumps({
         'result':'PASS', 'font_scale':2.0, 'synthetic':True,
         'width_theme':['360-dark', '390-light'], 'fields':list(LABELS),
         'saved':{'hours':1,'orders':2,'reward_rub':300},
-        'after_restart':{'hours':10,'orders':20,'reward_rub':3500}
+        'after_restart':persisted
     },ensure_ascii=False,indent=2))
     print('PASS: 200% forms scroll, IME/save and post-restart synthetic history',flush=True)
 

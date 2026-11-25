@@ -38,9 +38,6 @@ class FormLargeGeometry(unittest.TestCase):
     def test_next_fields_input_cannot_validate_previous_label(self):
         self.assertIsNone(audit.input_visible(fake(input_bounds='[0,0][0,0]'),'Часы за слот'))
 
-if __name__ == '__main__':
-    unittest.main()
-
 class PeriodHistoryAccessGeometry(unittest.TestCase):
     def fake_period(self, button):
         return ET.fromstring(f'''<hierarchy>
@@ -82,3 +79,69 @@ class FocusedFieldLabelGeometry(unittest.TestCase):
         self.assertFalse(audit.focused_field_completely_visible(
             self.focused('[48,864][1122,969]', '[48,987][1122,1258]'),
             'Выплачено'))
+
+
+class HistoryPersistence(unittest.TestCase):
+    def test_saved_slot_is_found_when_all_records_share_a_day(self):
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.view.View">
+            <node text="24 ноября 2026" />
+            <node text="10 ч · 20 заказов" /><node text="3 500 ₽" />
+            <node text="Слот 3" /><node text="1 ч" />
+            <node text="Отработано" /><node text="2" /><node text="Заказов" />
+            <node text="Выплачено" /><node text="300&#160;₽" />
+          </node>
+        </hierarchy>''')
+        self.assertTrue(audit.saved_entry_visible(root))
+
+    def test_saved_slot_is_found_when_emulator_crosses_midnight(self):
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.view.View">
+            <node text="25 ноября 2026" />
+            <node text="Редактировать 25 ноября 2026" />
+            <node text="1 ч" /><node text="Отработано" />
+            <node text="2" /><node text="Заказов" />
+            <node text="Выплачено" /><node text="300&#160;₽" />
+          </node>
+          <node class="android.view.View">
+            <node text="24 ноября 2026" />
+            <node text="9 ч · 18 заказов" /><node text="3 200 ₽" />
+          </node>
+        </hierarchy>''')
+        self.assertTrue(audit.saved_entry_visible(root))
+
+    def test_saved_slot_values_must_belong_to_the_same_day_card(self):
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.view.View">
+            <node text="25 ноября 2026" />
+            <node text="1 ч" /><node text="Отработано" />
+            <node text="2" /><node text="Заказов" />
+          </node>
+          <node class="android.view.View">
+            <node text="24 ноября 2026" />
+            <node text="Выплачено" /><node text="300 ₽" />
+          </node>
+        </hierarchy>''')
+        self.assertFalse(audit.saved_entry_visible(root))
+
+    def test_json_backup_keeps_seed_and_new_slot_facts_exactly_once(self):
+        state = {'entries': [
+            {'dailyHours': 4, 'dailyOrders': 8, 'reward': 1200},
+            {'dailyHours': 5, 'dailyOrders': 10, 'reward': 2000},
+            {'dailyHours': 1, 'dailyOrders': 2, 'reward': 300},
+        ]}
+        self.assertEqual(audit.assert_synthetic_slots_persisted(state)['entryCount'], 3)
+
+    def test_json_backup_rejects_missing_or_duplicated_slot(self):
+        state = {'entries': [
+            {'dailyHours': 4, 'dailyOrders': 8, 'reward': 1200},
+            {'dailyHours': 5, 'dailyOrders': 10, 'reward': 2000},
+            {'dailyHours': 1, 'dailyOrders': 2, 'reward': 300},
+            {'dailyHours': 1, 'dailyOrders': 2, 'reward': 300},
+        ]}
+        with self.assertRaises(AssertionError):
+            audit.assert_synthetic_slots_persisted(state)
+
+
+if __name__ == '__main__':
+    unittest.main()
