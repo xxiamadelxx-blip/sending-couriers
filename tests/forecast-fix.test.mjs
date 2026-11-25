@@ -47,3 +47,38 @@ test('validation compares the same integer central predictions for baseline and 
 test('weekly slot/active settings round-trip and do not change training facts or money',()=>{
  const base=hourlyHistory(),facts=JSON.stringify(base.days),morning=JSON.stringify(base.snapshots),p=predict(base,'2026-09-14',{workingMin:240});const changed=normalizeForecast({...base,weekConfig:{workingMin:390,slotMin:840}});assert.equal(changed.weekConfig.workingMin,390);assert.equal(changed.weekConfig.slotMin,840);assert.equal(JSON.stringify(changed.days),facts);assert.equal(JSON.stringify(changed.snapshots),morning);assert.deepEqual(predict(changed,'2026-09-14',{workingMin:240}),p);assert.deepEqual(mergeForecast(changed,base).weekConfig,changed.weekConfig);assert.throws(()=>normalizeForecast({...base,weekConfig:{workingMin:900,slotMin:540}}));assert.throws(()=>assertForecastCapacity({...base,weekConfig:{workingMin:900,slotMin:540}}));
 });
+
+test('normalizeDay keeps the established validation error precedence',()=>{
+ const date='2026-11-20';
+ const cases=[
+  ['date-first','',{date:''},'Выберите дату.'],
+  ['overlap-before-count',date,{date,orders:-1,intervals:[{start:0,end:120,state:'WORK'},{start:60,end:150,state:'UNAVAILABLE'}]},'Рабочий интервал пересекается с паузой.'],
+  ['evidence-before-precision',date,{date,orderEvidence:[{id:'dup'},{id:'dup'}],precision:'invalid'},'Повторяется идентификатор заказа.'],
+  ['precision-before-total',date,{date,precision:'invalid',workingMin:null},'Проверьте точность времени.'],
+  ['total-requires-hours',date,{date,precision:'total',workingMin:null},'Укажите суммарное время работы.'],
+  ['timezone-before-total',date,{date,precision:'total',workingMin:null,timezone:'Invalid/Zone'},'Проверьте часовой пояс факта.'],
+  ['scope-before-video-slots',date,{date,ordersScope:'invalid',videoSlots:[{slotId:'same',orderCount:1},{slotId:'same',orderCount:2}]},'Проверьте область итога заказов.']
+ ];
+ for(const [name,key,day,message] of cases)
+  assert.throws(()=>normalizeForecast({version:1,days:{[key]:day}}),error=>error.message===message,name);
+});
+test('normalizeDay keeps order facts and derived exposure stable through reload',()=>{
+ const date='2026-11-20';
+ const data=normalizeForecast({version:1,days:{[date]:{
+  date,orders:2,ordersConfirmed:true,evidenceComplete:true,workConfirmed:true,precision:'intervals',
+  intervals:[{start:540,end:720,state:'WORK'},{start:780,end:1020,state:'WORK'}],
+  orderEvidence:[
+   {id:'a',acceptedMin:550,deliveredMin:570,confirmed:true},
+   {id:'b',acceptedMin:810,deliveredMin:830,confirmed:true}
+  ]
+ }}});
+ const day=data.days[date];
+ assert.equal(day.workingMin,420);
+ assert.equal(day.onOrderMin,40);
+ assert.equal(day.availableNoOrderMin,380);
+ assert.equal(day.unknownMin,1020);
+ assert.equal(day.orders,2);
+ assert.equal(day.rawComplete,true);
+ assert.deepEqual(day.conflicts,[]);
+ assert.deepEqual(normalizeForecast({version:1,days:{[date]:day}}).days[date],day);
+});

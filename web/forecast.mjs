@@ -197,13 +197,14 @@ function reconcileDayOrderEvidence(input,list,orders,orderEvidence,precision,wor
     conflicts.push('Доставка выходит за подтверждённые рабочие окна. Уточните рабочее время.');
   return {orderFacts,pause,conflicts,busyInside};
 }
-function normalizeDay(input) {
-  dayStamp(input.date);
-  const list=intervals(input.intervals??[]);
+function assertDayIntervalsHaveNoConflicts(list) {
   for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++) {
-    if(list[i].state!==list[j].state&&overlap([list[i].start,list[i].end],[list[j].start,list[j].end]))
+    const a=list[i],b=list[j];
+    if(a.state!==b.state&&overlap([a.start,a.end],[b.start,b.end]))
       fail('Рабочий интервал пересекается с паузой.');
   }
+}
+function normalizeDayFacts(input,list) {
   const orders=integer(input.orders),orderEvidence=normalizeOrderEvidence(input.orderEvidence);
   const precision=input.precision??'unknown';
   if(!['unknown','total','intervals'].includes(precision))fail('Проверьте точность времени.');
@@ -212,6 +213,9 @@ function normalizeDay(input) {
   const workingMin=precision==='intervals' ? duration(list.filter(i=>i.state==='WORK').map(i=>[i.start,i.end])) : number(input.workingMin,1440);
   if(precision==='total' && workingMin==null) fail('Укажите суммарное время работы.');
   const {orderFacts,pause,conflicts,busyInside}=reconcileDayOrderEvidence(input,list,orders,orderEvidence,precision,workConfirmed);
+  return {orders,orderEvidence,precision,workConfirmed,timezone,workingMin,orderFacts,pause,conflicts,busyInside};
+}
+function normalizeDaySourceMetadata(input,orders,workingMin) {
   const source=String(input.source??'manual').slice(0,200);
   const fieldSources=normalizeFieldSources(input,source,orders,workingMin);
   const suppliedOrderSource=String(input.fieldSources?.orders?.source??'');
@@ -219,14 +223,32 @@ function normalizeDay(input) {
   const ordersScope=input.ordersScope??defaultOrdersScope;
   if(!['daily','video_slots'].includes(ordersScope))fail('Проверьте область итога заказов.');
   const videoSlots=normalizeVideoSlots(input.videoSlots??[]);
-  return {date:input.date,timezone,zone:String(input.zone??'').slice(0,120),profileVersion:integer(input.profileVersion,100000),fieldSources,
-    orders,ordersConfirmed:input.ordersConfirmed===true,completed:input.completed!==false,asOfMinute:integer(input.asOfMinute,1440),appAccountedMin:number(input.appAccountedMin,1440),accountedConfirmed:input.accountedConfirmed===true,
-    intervals:list,precision,workingMin,workConfirmed,unavailableMin:workConfirmed&&precision==='intervals'?duration(pause):null,
-    onOrderMin:orderFacts.onOrderMin,availableNoOrderMin:workConfirmed&&precision==='intervals'&&orderFacts.complete&&!orderFacts.hasUnknownDeliveryDuration&&!conflicts.length?Math.max(0,workingMin-busyInside):null,
+  return {source,fieldSources,ordersScope,videoSlots};
+}
+function dayExposureMetrics(list,facts) {
+  const {precision,workConfirmed,workingMin,orderFacts,pause,conflicts,busyInside}=facts;
+  return {
+    unavailableMin:workConfirmed&&precision==='intervals'?duration(pause):null,
+    availableNoOrderMin:workConfirmed&&precision==='intervals'&&orderFacts.complete&&!orderFacts.hasUnknownDeliveryDuration&&!conflicts.length?Math.max(0,workingMin-busyInside):null,
     countedNonWorkingMin:workConfirmed?duration(list.filter(i=>i.state==='UNAVAILABLE'&&i.paymentCounted==='YES').map(i=>[i.start,i.end])):null,
-    unknownMin:precision==='intervals'?1440-duration(list.filter(i=>i.state!=='UNKNOWN').map(i=>[i.start,i.end])):null,
-    orderEvidence,evidenceComplete:orderFacts.complete,rawComplete:orders!=null&&orderEvidence.length===orders,sourceNotes:Array.isArray(input.sourceNotes)?input.sourceNotes.slice(0,20).map(v=>String(v).slice(0,3000)):[],estimatedIntervals:intervals(input.estimatedIntervals??[]),estimatedExposureJustified:input.estimatedExposureJustified===true,exposureBlocks:(input.exposureBlocks??[]).slice(0,100).map(b=>({...intervals([b])[0],orders:integer(b.orders),status:String(b.status),source:String(b.source??'').slice(0,300)})),conflicts,sourceConflicts:(input.sourceConflicts??[]).map(String).slice(0,50),
-    source,sourceHash:String(input.sourceHash??'').slice(0,160),ordersScope,videoSlots,revision:integer(input.revision,100000)??1,
+    unknownMin:precision==='intervals'?1440-duration(list.filter(i=>i.state!=='UNKNOWN').map(i=>[i.start,i.end])):null
+  };
+}
+function normalizeDay(input) {
+  dayStamp(input.date);
+  const list=intervals(input.intervals??[]);
+  assertDayIntervalsHaveNoConflicts(list);
+  const facts=normalizeDayFacts(input,list);
+  const metadata=normalizeDaySourceMetadata(input,facts.orders,facts.workingMin);
+  const exposure=dayExposureMetrics(list,facts);
+  return {date:input.date,timezone:facts.timezone,zone:String(input.zone??'').slice(0,120),profileVersion:integer(input.profileVersion,100000),fieldSources:metadata.fieldSources,
+    orders:facts.orders,ordersConfirmed:input.ordersConfirmed===true,completed:input.completed!==false,asOfMinute:integer(input.asOfMinute,1440),appAccountedMin:number(input.appAccountedMin,1440),accountedConfirmed:input.accountedConfirmed===true,
+    intervals:list,precision:facts.precision,workingMin:facts.workingMin,workConfirmed:facts.workConfirmed,unavailableMin:exposure.unavailableMin,
+    onOrderMin:facts.orderFacts.onOrderMin,availableNoOrderMin:exposure.availableNoOrderMin,
+    countedNonWorkingMin:exposure.countedNonWorkingMin,
+    unknownMin:exposure.unknownMin,
+    orderEvidence:facts.orderEvidence,evidenceComplete:facts.orderFacts.complete,rawComplete:facts.orders!=null&&facts.orderEvidence.length===facts.orders,sourceNotes:Array.isArray(input.sourceNotes)?input.sourceNotes.slice(0,20).map(v=>String(v).slice(0,3000)):[],estimatedIntervals:intervals(input.estimatedIntervals??[]),estimatedExposureJustified:input.estimatedExposureJustified===true,exposureBlocks:(input.exposureBlocks??[]).slice(0,100).map(b=>({...intervals([b])[0],orders:integer(b.orders),status:String(b.status),source:String(b.source??'').slice(0,300)})),conflicts:facts.conflicts,sourceConflicts:(input.sourceConflicts??[]).map(String).slice(0,50),
+    source:metadata.source,sourceHash:String(input.sourceHash??'').slice(0,160),ordersScope:metadata.ordersScope,videoSlots:metadata.videoSlots,revision:integer(input.revision,100000)??1,
     importedAt:String(input.importedAt??''),confirmedAt:String(input.confirmedAt??''),manualTime:input.manualTime===true,
     revisions:Array.isArray(input.revisions)?input.revisions.slice(-100).map(r=>({revision:integer(r.revision,100000),at:String(r.at),precision:String(r.precision),workingMin:number(r.workingMin,1440),intervals:intervals(r.intervals??[]),source:String(r.source??''),manual:r.manual===true})):[]};
 }
