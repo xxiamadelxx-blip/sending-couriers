@@ -114,7 +114,7 @@ function simpleVideoReceiptMarkup(data,receipt) {
 }
 
 function simpleView(ctx) {
- const {root,getState,Native,notify,data,current,write,showError,run,shell,readPair}=ctx,{$}=ctx;
+ const {getState,data,current,shell}=ctx,{$}=ctx;
     const f=data(),date=current().date,own=f.plans[date],receipt=videoImportReceipt(f);
     const periodProgress=calculate(getState(),periodFor(date).id,date);
     const daysInHistory=periodProgress.dayCount??0;
@@ -125,13 +125,24 @@ function simpleView(ctx) {
     let plan;try{plan=planDay(f,date);}catch(error){if(!/Ночная работа пересекает следующий день/.test(error.message))throw error;plan={};}
     const slot=own?.slotMin??f.weekConfig?.slotMin??plan.slotMin??plan.accountedMin??840;
     const work=own?.workingMin??f.weekConfig?.workingMin??plan.workingMin??480;
-    shell('Прогноз',`<p class="forecast-intro">Оценка по вашей истории смен · ${esc(formatDate(date,true))}</p>
+    shell('Прогноз',simpleMarkup({f,date,slot,work,periodProgress,daysInHistory,periodNorm,receipt}),'simple');
+    bindSimplePlanControls(ctx,date);
+    bindSimpleImportActions(ctx);
+  }
+
+
+function simpleMarkup({f,date,slot,work,periodProgress,daysInHistory,periodNorm,receipt}) {
+ return `<p class="forecast-intro">Оценка по вашей истории смен · ${esc(formatDate(date,true))}</p>
       <section class="detail-card forecast-simple-plan" aria-labelledby="forecastPlanTitle"><div class="forecast-section-heading"><h2 id="forecastPlanTitle">Настройки</h2><span>План смены</span></div>${durationField('todayWorkHours','Активные часы',work,'',30)}${durationField('todaySlotHours','Полный слот',slot,'',30)}<p class="forecast-work-note">Активное время — работа. Полный слот включает простой.</p><p class="error" id="forecastError" role="alert" hidden></p><p class="forecast-saved" id="forecastSaved" role="status" hidden>Время сохранено для следующих дней</p></section>
       <section class="forecast-simple-hero" aria-live="polite"><p class="forecast-section-label">Результат</p><h2>Прогноз заказов</h2><p class="forecast-result-basis">По активным часам</p><div class="forecast-number is-unknown" id="simpleCount" aria-label="Прогноз заказов неизвестен">—</div><div class="forecast-band forecast-insufficient" id="simpleRange" role="status"></div></section>
       ${simpleVideoReceiptMarkup(f,receipt)}
       <section class="forecast-facts" aria-label="Факты периода"><p class="forecast-section-label">Факты</p><div class="forecast-facts-card"><div><span>Темп активного времени</span><strong>${periodProgress.pace==null?'—':`${num(periodProgress.pace)} заказа/ч`}</strong></div><div><span>Дней с записями</span><strong>${daysInHistory}</strong></div></div></section>
       <section class="detail-card period-norm-card" aria-labelledby="periodNormTitle"><div><p class="forecast-eyebrow">${esc(periodLabel(periodFor(date)))}</p><h2 id="periodNormTitle">До нормы за период</h2></div>${periodNorm}</section>
-      <div class="forecast-import-actions"><button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><button class="button outline forecast-import-button" id="importForecastVideo" type="button">Импортировать видео</button></div><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`,'simple');
+      <div class="forecast-import-actions"><button class="button outline forecast-import-button" id="importForecast" type="button">Импортировать отчёт</button><button class="button outline forecast-import-button" id="importForecastVideo" type="button">Импортировать видео</button></div><input id="forecastFile" type="file" accept=".xlsx,.json" hidden>`;
+}
+
+function bindSimplePlanControls(ctx,date) {
+ const {data,write,showError,run,readPair}=ctx,{$}=ctx;
     // Forecast sliders move in 30-minute increments; numeric inputs accept exact values.
     const slotCaption=$('label[for="todaySlotHours"]');
     if(slotCaption)slotCaption.textContent='Полный слот';
@@ -153,10 +164,13 @@ function simpleView(ctx) {
     $('#todayWorkHours').addEventListener('input',changed);
     $('#todaySlotHours').addEventListener('input',changed);
     ctx.updateModel=()=>{ctx.modelFailure=false;run(preview);};run(preview);
+}
+
+function bindSimpleImportActions(ctx) {
+ const {Native,notify,showError}=ctx,{$}=ctx;
     $('#importForecast').onclick=()=>{if(!ctx.flushPlan())return;if(Native?.importForecast)Native.importForecast();else $('#forecastFile').click();};
     $('#importForecastVideo').onclick=()=>{if(!ctx.flushPlan())return;if(typeof Native?.importVideo==='function')Native.importVideo();else notify('Импорт видео доступен в Android-приложении.');};
-    $('#forecastFile').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>8000000)throw new Error('Файл больше 8 МБ.');if(file.name.toLowerCase().endsWith('.xlsx'))throw new Error('Откройте XLSX в Android-приложении.');ctx.receiveImport(await file.text(),file.name);}catch(error){showError(error);}};
-  }
+    $('#forecastFile').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>8000000)throw new Error('Файл больше 8 МБ.');if(file.name.toLowerCase().endsWith('.xlsx'))throw new Error('Откройте XLSX в Android-приложении.');ctx.receiveImport(await file.text(),file.name);}catch(error){showError(error);}};}
 
 function todayMarkup({f,clock,p,morning,nowcast,estimate,slot,plan,closed}) {
   return `<section class="forecast-hero"><div class="forecast-eyebrow">${esc(formatDate(clock.date,true))}</div><h2>${morning?'Исходный прогноз дня':'За рабочий день'}</h2><div class="forecast-number">${orderText(estimate.central)}</div><div class="forecast-band">${estimate.central==null?esc(confidence(estimate)):`Диапазон ${estimate.lower}–${estimate.upper} · ${esc(confidence(estimate))}`}</div><p class="forecast-model-label" id="todayModelStatus" role="status">${esc(forecastModelLabel(estimate))}</p>${morning?`<p class="hint">Зафиксирован ${esc(new Date(morning.createdAt).toLocaleTimeString('ru-RU',{timeZone:morning.timezone,hour:'2-digit',minute:'2-digit'}))}${morning.partialDayIssue?' · после начала рабочего окна':''}</p>`:''}</section>
