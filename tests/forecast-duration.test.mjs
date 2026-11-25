@@ -13,6 +13,14 @@ test('day plans retain nominal slot and actual working duration independently th
  assert.deepEqual(f.days,before.days);assert.deepEqual(f.snapshots,before.snapshots);
  assert.throws(()=>normalizeForecast({...f,plans:{[start]:{workingMin:900,slotMin:840}}}));
 });
+test('a date-specific plan overrides the shared duration default',()=>{
+ const f=saveForecastHours(history(),start,840,480),date=addDays(start,1);
+ const overridden=normalizeForecast({...f,plans:{...f.plans,[date]:{workingMin:360,slotMin:600,intervals:[],precision:'total'}}});
+ const plan=planDay(overridden,date);
+ assert.equal(plan.workingMin,360);
+ assert.equal(plan.slotMin,600);
+});
+
 test('14-hour nominal slot predicts orders only for 9 working hours and changes payment risk separately',()=>{
  const f=history(),a={},b={},c={};for(let i=0;i<7;i++){const d=addDays(start,i);a[d]={workingMin:540,slotMin:840,accountedMin:840,intervals:[],precision:'total'};b[d]={...a[d],slotMin:540,accountedMin:540};c[d]={...a[d],workingMin:360};}
  const before=JSON.stringify(f),s=emptyState();s.forecast=f;

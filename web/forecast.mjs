@@ -101,18 +101,34 @@ export function saveProfile(data,input,now=new Date().toISOString()) {
   const p = profile({...input,version:Math.max(0,...data.profiles.map(p=>p.version))+1,createdAt:now});
   return {...data,profiles:[...data.profiles,p]};
 }
-export function planDay(data,date,overrides={}) {
-  const p=profileFor(data,date),own=overrides[date]??data.plans?.[date],previous=overrides[addDays(date,-1)]??data.plans?.[addDays(date,-1)];
-  let base;
-  if(!p)base=inferredPlan(data,date);
-  else {const current=p.week[weekday(date)],prev=p.week[(weekday(date)+6)%7],list=[...current.intervals.map(i=>({...i,end:Math.min(i.end,1440)})),...(previous?[]:prev.intervals.filter(i=>i.end>1440).map(i=>({...i,start:0,end:i.end-1440})))];const work=workingMinutes(list),accounted=current.accountedMin??(p.outsidePayment==='NO'?work:!list.length?0:null);base={date,profileVersion:p.version,intervals:list,workingMin:work,accountedMin:accounted,rest:!work};}
-  // The two duration settings remain the default on subsequent days. A saved
-  // plan for one particular date still takes precedence over that default.
+function profileDayPlan(data,date,previous,p) {
+  if(!p)return inferredPlan(data,date);
+  const current=p.week[weekday(date)],prev=p.week[(weekday(date)+6)%7],list=[...current.intervals.map(i=>({...i,end:Math.min(i.end,1440)})),...(previous?[]:prev.intervals.filter(i=>i.end>1440).map(i=>({...i,start:0,end:i.end-1440})))];
+  const work=workingMinutes(list),accounted=current.accountedMin??(p.outsidePayment==='NO'?work:!list.length?0:null);
+  return {date,profileVersion:p.version,intervals:list,workingMin:work,accountedMin:accounted,rest:!work};
+}
+function applyWeekConfig(base,data,own) {
+  // Shared durations remain the default on subsequent days; a saved date plan
+  // still takes precedence over these defaults.
   if(!own&&data.weekConfig){const preset=weekConfiguration(data.weekConfig),precise=preset.precision==='intervals'&&preset.intervals?.length;const list=precise?preset.intervals:[];base={...base,intervals:list,workingMin:precise?workingMinutes(list):preset.workingMin,slotMin:preset.slotMin,rest:preset.workingMin===0,assumption:'Планируемое время работы'};}
-  const precise=own&&(own.precision==='intervals'||own.intervals?.length>0),carry=(previous?.intervals??[]).filter(i=>i.state==='WORK'&&i.end>1440).map(i=>({...i,start:0,end:i.end-1440}));
+  return base;
+}
+function applyDatePlan(base,own) {
+  const precise=own&&(own.precision==='intervals'||own.intervals?.length>0);
   if(own){const list=precise?intervals(own.intervals??[],true).map(i=>({...i,end:Math.min(i.end,1440)})):[];base={...base,...own,intervals:list,workingMin:precise?workingMinutes(list):number(own.workingMin,1440),accountedMin:number(own.accountedMin,1440),rest:own.workingMin===0,assumption:precise?null:'Заданная длительность; время суток неизвестно'};}
+  return {base,precise};
+}
+function applyOvernightCarry(base,data,own,previous,precise) {
+  const carry=(previous?.intervals??[]).filter(i=>i.state==='WORK'&&i.end>1440).map(i=>({...i,start:0,end:i.end-1440}));
   if(carry.length&&!(own?.mode==='simple'||!own&&data.weekConfig?.mode==='simple')){if(own&&!precise&&own.workingMin!=null)fail('Ночная работа пересекает следующий день с заданной суммой. Укажите его рабочие окна.');base.intervals=[...base.intervals,...carry];base.workingMin=workingMinutes(base.intervals);base.rest=base.workingMin===0;}
   return base;
+}
+export function planDay(data,date,overrides={}) {
+  const p=profileFor(data,date),own=overrides[date]??data.plans?.[date],previous=overrides[addDays(date,-1)]??data.plans?.[addDays(date,-1)];
+  let base=profileDayPlan(data,date,previous,p);
+  base=applyWeekConfig(base,data,own);
+  const saved=applyDatePlan(base,own);
+  return applyOvernightCarry(saved.base,data,own,previous,saved.precise);
 }
 export function saveForecastHours(data,date,slotMin,workingMin) {
   dayStamp(date);
