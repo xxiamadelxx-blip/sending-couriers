@@ -222,8 +222,39 @@ def tap_form_input(index, attempts=8):
     raise AssertionError(f"Slot form input {index} did not enter the visible area")
 
 
+def form_input_focused(root, index):
+    """Return whether the requested slot input, rather than another field, has focus."""
+    fields = [n for n in root.iter("node") if n.get("class") == "android.widget.EditText"
+              and n.get("package") == PACKAGE]
+    return len(fields) > index >= 0 and fields[index].get("focused") == "true"
+
+
+def wait_for_form_input_focus(index, seconds=5):
+    """Wait for Android to focus the tapped field before sending text or Back."""
+    end = time.monotonic() + seconds
+    last_target = None
+    while time.monotonic() < end:
+        try:
+            root = dump(f"focus-{index}")
+        except (RuntimeError, ET.ParseError):
+            time.sleep(.25)
+            continue
+        fields = [n for n in root.iter("node") if n.get("class") == "android.widget.EditText"
+                  and n.get("package") == PACKAGE]
+        last_target = fields[index] if len(fields) > index >= 0 else None
+        if form_input_focused(root, index):
+            return root
+        time.sleep(.25)
+    target = ({key: last_target.get(key) for key in ("resource-id", "bounds", "focused")}
+              if last_target is not None else None)
+    raise AssertionError(
+        f"Slot form input {index} did not receive focus within {seconds}s; target={target}"
+    )
+
+
 def fill_field(index, value):
     tap_form_input(index)
+    wait_for_form_input_focus(index)
     adb("shell", "input", "text", str(value))
     if index == 2 and value == 0:
         screenshot("ime-rest-reward")

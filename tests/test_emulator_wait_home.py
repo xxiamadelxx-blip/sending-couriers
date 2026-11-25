@@ -63,6 +63,40 @@ class WaitHomeRecoveryTests(TestCase):
 
 
 class AndroidSmokeOracleTests(TestCase):
+    @staticmethod
+    def form(focused_index=None):
+        focus = lambda index: ' focused="true"' if index == focused_index else ''
+        return ET.fromstring(
+            '<hierarchy>' + ''.join(
+                f'<node class="android.widget.EditText" package="ru.courier.finance" '
+                f'bounds="[0,{index * 100}][200,{index * 100 + 80}]"{focus(index)} />'
+                for index in range(7)
+            ) + '</hierarchy>'
+        )
+
+    def test_form_input_focus_requires_the_requested_field(self):
+        self.assertTrue(device.form_input_focused(self.form(2), 2))
+        self.assertFalse(device.form_input_focused(self.form(1), 2))
+        self.assertFalse(device.form_input_focused(self.form(), 2))
+        self.assertFalse(device.form_input_focused(self.form(2), 7))
+
+    def test_waits_for_target_field_focus_before_continuing(self):
+        focused = self.form(2)
+        clock = iter([0, 1, 2])
+        with patch.object(device, "dump", side_effect=[self.form(), focused]), \
+                patch.object(device.time, "monotonic", side_effect=lambda: next(clock)), \
+                patch.object(device.time, "sleep", return_value=None):
+            self.assertIs(device.wait_for_form_input_focus(2), focused)
+
+    def test_focus_timeout_fails_with_target_diagnostic(self):
+        clock = iter([0, 1, 6])
+        with patch.object(device, "dump", return_value=self.form()), \
+                patch.object(device.time, "monotonic", side_effect=lambda: next(clock)), \
+                patch.object(device.time, "sleep", return_value=None):
+            with self.assertRaisesRegex(AssertionError, "did not receive focus") as error:
+                device.wait_for_form_input_focus(2, seconds=5)
+        self.assertIn("focused", str(error.exception))
+
     def test_visible_node_geometry_reads_real_android_size_and_bounds(self):
         root = ET.fromstring(
             '<hierarchy>'
@@ -111,25 +145,46 @@ class AndroidSmokeOracleTests(TestCase):
         </hierarchy>''')
         current = {"root": offscreen}
         taps = []
+        sequence = []
 
         def adb(*args, **kwargs):
             if args[:3] == ("shell", "input", "swipe"):
                 current["root"] = visible
             elif args[:3] == ("shell", "input", "tap"):
                 taps.append((int(args[3]), int(args[4])))
+                sequence.append("tap")
+                focused = ET.fromstring(ET.tostring(current["root"]))
+                fields = [n for n in focused.iter("node")
+                          if n.get("class") == "android.widget.EditText"
+                          and n.get("package") == "ru.courier.finance"]
+                for field in fields:
+                    field.attrib.pop("focused", None)
+                fields[2].set("focused", "true")
+                current["root"] = focused
             elif args[:3] == ("shell", "input", "text"):
+                sequence.append("text")
                 typed = ET.fromstring(ET.tostring(current["root"]))
                 fields = [n for n in typed.iter("node")
                           if n.get("class") == "android.widget.EditText"
                           and n.get("package") == "ru.courier.finance"]
                 fields[2].set("text", args[3])
                 current["root"] = typed
+            elif args[:3] == ("shell", "input", "keyevent"):
+                sequence.append("back")
             return ""
 
+        original_wait = device.wait_for_form_input_focus
+
+        def wait_for_focus(index):
+            sequence.append("focus")
+            return original_wait(index)
+
         with patch.object(device, "dump", side_effect=lambda _name: current["root"]), \
-                patch.object(device, "adb", side_effect=adb):
+                patch.object(device, "adb", side_effect=adb), \
+                patch.object(device, "wait_for_form_input_focus", side_effect=wait_for_focus):
             device.fill_field(2, 2000)
 
         self.assertEqual(len(taps), 1)
         self.assertGreaterEqual(taps[0][1], 407)
         self.assertLess(taps[0][1], 1670)
+        self.assertEqual(sequence, ["tap", "focus", "text", "back"])
