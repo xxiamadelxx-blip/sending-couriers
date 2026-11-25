@@ -522,25 +522,36 @@ function mergeVideoSlotDay(old,parsed,input,inputSource,suppliedSlotId,now) {
   return normalizeDay(merged);
 }
 
-function resolveHistoryImportState(old,parsed,input) {
-  const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
-  let sourceConflicts=[...parsed.sourceConflicts,...(reconcilesVideoSlots
+function initialHistorySourceConflicts(old,parsed,reconcilesVideoSlots) {
+  return [...parsed.sourceConflicts,...(reconcilesVideoSlots
     ?(old.sourceConflicts??[]).filter(item=>!item.startsWith('Видео-слот '))
     :(old?.sourceConflicts??[]))];
+}
+function removeResolvedVideoDayConflict(old,parsed,sourceConflicts) {
   const oldOrderSource=String(old?.fieldSources?.orders?.source??'');
-  const oldVideoDayConflict=Boolean(old?.source?.startsWith('video:')&&old.ordersConfirmed
+  const resolved=Boolean(old?.source?.startsWith('video:')&&old.ordersConfirmed
     &&old.fieldSources?.orders?.status==='CONFLICT'&&oldOrderSource&&!oldOrderSource.startsWith('video:')
     &&parsed.ordersConfirmed&&parsed.orders===old.orders);
-  if(oldVideoDayConflict) {
-    const mismatch=new RegExp('^Заказы: сохранено '+old.orders+', новый источник \\d+\\. Подтвердите итог дня\\.$');
-    sourceConflicts=sourceConflicts.filter(item=>!mismatch.test(item));
-  }
-  const geographyConflict=old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
-  if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
+  if(!resolved)return sourceConflicts;
+  const mismatch=new RegExp('^Заказы: сохранено '+old.orders+', новый источник \\d+\\. Подтвердите итог дня\\.$');
+  return sourceConflicts.filter(item=>!mismatch.test(item));
+}
+function historyGeographyConflict(old,input) {
+  return old?.manualTime&&((input.zone&&input.zone!==old.zone)||(input.timezone&&input.timezone!==old.timezone));
+}
+function appendHistoryFactConflicts(old,parsed,reconcilesVideoSlots,sourceConflicts) {
   if(old?.ordersConfirmed&&parsed.ordersConfirmed&&old.orders!==parsed.orders&&!reconcilesVideoSlots)
     sourceConflicts.push('Заказы: сохранено '+old.orders+', новый источник '+parsed.orders+'. Подтвердите итог дня.');
   if(old?.accountedConfirmed&&parsed.accountedConfirmed&&old.appAccountedMin!==parsed.appAccountedMin)
     sourceConflicts.push('Часы Яндекса: сохранено '+old.appAccountedMin+' мин, новый источник '+parsed.appAccountedMin+' мин. Подтвердите итог дня.');
+}
+function resolveHistoryImportState(old,parsed,input) {
+  const reconcilesVideoSlots=Boolean(old?.ordersScope==='video_slots'&&parsed.ordersConfirmed);
+  let sourceConflicts=initialHistorySourceConflicts(old,parsed,reconcilesVideoSlots);
+  sourceConflicts=removeResolvedVideoDayConflict(old,parsed,sourceConflicts);
+  const geographyConflict=historyGeographyConflict(old,input);
+  if(geographyConflict)sourceConflicts.push('Источник расходится с вручную выбранной местностью/часовым поясом. Сохранён ручной выбор.');
+  appendHistoryFactConflicts(old,parsed,reconcilesVideoSlots,sourceConflicts);
   return {reconcilesVideoSlots,geographyConflict,sourceConflicts};
 }
 function preserveHistoryWork(old,parsed,merged) {
