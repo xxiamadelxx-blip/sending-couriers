@@ -158,19 +158,26 @@ function simpleView(ctx) {
     $('#forecastFile').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>8000000)throw new Error('Файл больше 8 МБ.');if(file.name.toLowerCase().endsWith('.xlsx'))throw new Error('Откройте XLSX в Android-приложении.');ctx.receiveImport(await file.text(),file.name);}catch(error){showError(error);}};
   }
 
-function todayView(ctx) {
- const {root,getState,notify,data,current,write,run,shell,readPair}=ctx,{$}=ctx;
-    const f=data(),clock=current(),p=profileFor(f,clock.date),morning=f.snapshots.find(s=>s.date===clock.date&&s.kind==='MORNING'),nowcast=f.snapshots.filter(s=>s.date===clock.date&&s.kind==='NOWCAST').at(-1),fact=f.days[clock.date],plan=planDay(f,clock.date),closed=!!(fact?.completed&&fact.ordersConfirmed);
-    const estimate=morning?.central!=null?morning:predict(f,clock.date),slot=Object.hasOwn(f.plans[clock.date]??{},'slotMin')?f.plans[clock.date].slotMin:plan.slotMin??plan.accountedMin??f.weekConfig?.slotMin??null;
-    shell('Прогноз',`<section class="forecast-hero"><div class="forecast-eyebrow">${esc(formatDate(clock.date,true))}</div><h2>${morning?'Исходный прогноз дня':'За рабочий день'}</h2><div class="forecast-number">${orderText(estimate.central)}</div><div class="forecast-band">${estimate.central==null?esc(confidence(estimate)):`Диапазон ${estimate.lower}–${estimate.upper} · ${esc(confidence(estimate))}`}</div><p class="forecast-model-label" id="todayModelStatus" role="status">${esc(forecastModelLabel(estimate))}</p>${morning?`<p class="hint">Зафиксирован ${esc(new Date(morning.createdAt).toLocaleTimeString('ru-RU',{timeZone:morning.timezone,hour:'2-digit',minute:'2-digit'}))}${morning.partialDayIssue?' · после начала рабочего окна':''}</p>`:''}</section>
+function todayMarkup({f,clock,p,morning,nowcast,estimate,slot,plan,closed}) {
+  return `<section class="forecast-hero"><div class="forecast-eyebrow">${esc(formatDate(clock.date,true))}</div><h2>${morning?'Исходный прогноз дня':'За рабочий день'}</h2><div class="forecast-number">${orderText(estimate.central)}</div><div class="forecast-band">${estimate.central==null?esc(confidence(estimate)):`Диапазон ${estimate.lower}–${estimate.upper} · ${esc(confidence(estimate))}`}</div><p class="forecast-model-label" id="todayModelStatus" role="status">${esc(forecastModelLabel(estimate))}</p>${morning?`<p class="hint">Зафиксирован ${esc(new Date(morning.createdAt).toLocaleTimeString('ru-RU',{timeZone:morning.timezone,hour:'2-digit',minute:'2-digit'}))}${morning.partialDayIssue?' · после начала рабочего окна':''}</p>`:''}</section>
       <form id="todayPlan" class="detail-card"><h2>План на сегодня</h2>${durationField('todaySlotHours','Номинальный слот',slot,closed?'disabled':'',30)}${intervalField('todayWorkHours',f.plans[clock.date]?.intervals??plan.intervals,plan.workingMin,closed)}<div id="todayPlanResult"></div><p class="hint">Риск темпа — если весь слот учитывается Яндексом.</p>${errorHTML}<button class="button outline" id="saveTodayPlan" type="submit" ${closed?'disabled':''}>Сохранить план</button></form>
       ${estimate.intervalForecasts?.length?`<section class="detail-card"><h2>По рабочим окнам</h2><table class="forecast-table"><thead><tr><th>Время</th><th>Заказы</th><th>Диапазон</th></tr></thead><tbody>${estimate.intervalForecasts.map(w=>`<tr><td>${esc(minuteLabel(w.start))}–${esc(minuteLabel(w.end))}</td><td>${esc(w.central)}</td><td>${esc(w.lower)}–${esc(w.upper)}</td></tr>`).join('')}</tbody></table></section>`:''}
       ${nowcast?.central!=null?`<section class="detail-card" id="remainingForecast"><h2>Прогноз до конца смены</h2><p class="forecast-subnumber">Ещё ${orderText(nowcast.central)}</p><p class="hint">Диапазон ${nowcast.lower}–${nowcast.upper} · осталось ${hours(nowcast.remainingMin)} работы</p></section>`:''}
-      <details class="calculation"><summary>На чём основан прогноз</summary><p>${esc(estimate.reasons?.join('. ')??'')}</p><p>Похожих наблюдений: ${estimate.comparableN??0}. Простая база: ${num(estimate.baseline)}. Модель ${esc(estimate.modelVersion??'—')}.</p><p>История до ${esc(estimate.trainingCutoff??'—')}; профиль v${morning?.profileVersion??p?.version??'—'}. Паузы и неизвестное время не становятся нулевым спросом.</p></details>`);
-    const refresh=()=>{const pair=readPair('todayWorkHours','todaySlotHours'),activePlan=planDay(data(),clock.date,{[clock.date]:pair});$('#todayPlanResult').innerHTML=ctx.planResult(clock.date,pair,predict(data(),clock.date,activePlan));$('#forecastError').hidden=true;return pair;};
+      <details class="calculation"><summary>На чём основан прогноз</summary><p>${esc(estimate.reasons?.join('. ')??'')}</p><p>Похожих наблюдений: ${estimate.comparableN??0}. Простая база: ${num(estimate.baseline)}. Модель ${esc(estimate.modelVersion??'—')}.</p><p>История до ${esc(estimate.trainingCutoff??'—')}; профиль v${morning?.profileVersion??p?.version??'—'}. Паузы и неизвестное время не становятся нулевым спросом.</p></details>`;
+}
+function bindTodayPlan(ctx,clock,closed) {
+  const {data,notify,readPair,run,write}=ctx,{$}=ctx;
+  const refresh=()=>{const pair=readPair('todayWorkHours','todaySlotHours'),activePlan=planDay(data(),clock.date,{[clock.date]:pair});$('#todayPlanResult').innerHTML=ctx.planResult(clock.date,pair,predict(data(),clock.date,activePlan));$('#forecastError').hidden=true;return pair;};
     ctx.updateModel=()=>{run(refresh);const issue=data().snapshots.find(s=>s.date===clock.date&&s.kind==='MORNING')??predict(data(),clock.date);$('.forecast-number').innerHTML=`${issue.central??'—'}<span> заказов</span>`;$('.forecast-band').textContent=issue.central==null?confidence(issue):`Диапазон ${issue.lower}–${issue.upper} · ${confidence(issue)}`;$('#todayModelStatus').textContent=forecastModelLabel(issue);};$('#todayWorkHours').oninput=()=>run(refresh);$('#todaySlotHours').oninput=()=>run(refresh);run(refresh);
     $('#todayPlan').onsubmit=e=>{e.preventDefault();if(closed)return;run(()=>{const pair=refresh();write({...data(),plans:{...data().plans,[clock.date]:pair}},{nowcast:false});notify('План сохранён');ctx.views.todayPlan();});};
-  }
+}
+function todayView(ctx) {
+  const {data,current,shell}=ctx,{$}=ctx;
+  const f=data(),clock=current(),p=profileFor(f,clock.date),morning=f.snapshots.find(s=>s.date===clock.date&&s.kind==='MORNING'),nowcast=f.snapshots.filter(s=>s.date===clock.date&&s.kind==='NOWCAST').at(-1),fact=f.days[clock.date],plan=planDay(f,clock.date),closed=!!(fact?.completed&&fact.ordersConfirmed);
+  const estimate=morning?.central!=null?morning:predict(f,clock.date),slot=Object.hasOwn(f.plans[clock.date]??{},'slotMin')?f.plans[clock.date].slotMin:plan.slotMin??plan.accountedMin??f.weekConfig?.slotMin??null;
+  shell('Прогноз',todayMarkup({f,clock,p,morning,nowcast,estimate,slot,plan,closed}));
+  bindTodayPlan(ctx,clock,closed);
+}
 
 function readDayFactInput(ctx,f,d) {
  const {root,current,readHours}=ctx,{$}=ctx;
