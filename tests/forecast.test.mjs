@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,importDays,normalizeForecast,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,localClock,addDays,syncSlots,forecastClock,mergeForecast,videoImportReceipt,restoreVideoOrderEvidence} from '../web/forecast.mjs';
+import {emptyForecast,saveProfile,planDay,parseWindows,saveDay,saveTimeline,importDays,normalizeForecast,predict,backtest,ensureForecast,evaluateForecasts,weekPlan,saveScenario,localClock,addDays,syncSlots,forecastClock,mergeForecast,videoImportReceipt,restoreVideoOrderEvidence,forecastReport} from '../web/forecast.mjs';
 import {emptyState,normalizeState,mergeImport,upsertEntry,calculate,forecastFinances,setPaymentTerms} from '../web/core.mjs';
 import {COUNT_CONFIG,validCountModel,resetCountModels,installCountModels,exportCountModels} from '../web/forecast-count.mjs';
 const profile=(data=emptyForecast(),patch={})=>saveProfile(data,{effectiveFrom:'2026-01-01',timezone:'Europe/Moscow',zone:'Test',outsidePayment:'UNKNOWN',week:Array.from({length:7},()=>({intervals:parseWindows('09:00–14:00;17:00–21:00'),accountedMin:840})),...patch},'2026-01-01T00:00:00Z');
@@ -19,6 +19,16 @@ test('daily normalization preserves provenance and is stable after reload',()=>{
  assert.equal(day.onOrderMin,30);assert.equal(day.availableNoOrderMin,510);
 });
 function history(n=30) { let d=profile();for(let i=0;i<n;i++)d=saveDay(d,confirmed(addDays('2026-09-01',i),27+i%3));return d; }
+test('forecast report keeps sorted rows, section order and sanitized source text',()=>{
+ const day=(date,patch={})=>({date,orders:4,ordersConfirmed:true,workingMin:390,workConfirmed:true,appAccountedMin:840,unavailableMin:450,precision:'intervals',revision:3,source:'manual',conflicts:[],fieldSources:{workingMin:{status:'CONFIRMED'},appAccountedMin:{status:'CONFIRMED'}},orderEvidence:[{id:'o1'}],rawComplete:true,evidenceComplete:true,...patch});
+ const report=forecastReport({profiles:[{}],days:{'2026-10-02':day('2026-10-02'),'2026-10-01':day('2026-10-01',{ordersConfirmed:false,workConfirmed:false,source:'video|import\nsource',conflicts:['order|count\nconflict'],fieldSources:{workingMin:{status:'UNKNOWN'},appAccountedMin:{status:'CONFIRMED'}},rawComplete:false,evidenceComplete:false})},snapshots:[],models:[],evaluations:[],archive:{forecasts:[]}});
+ const lines=report.split('\n'),first='| 2026-10-01 | 4 (не подтверждено) | 390 (не подтверждено) | 840 | 450 | intervals | 3 | video import source | order count conflict |',second='| 2026-10-02 | 4 | 390 | 840 | 450 | intervals | 3 | manual |  |';
+ assert.ok(lines.includes('Профилей: 1; дней: 2; выпусков: 0; оценок: 0; архивных выпусков: 0.'));
+ assert.ok(lines.includes(first));assert.ok(lines.includes(second));assert.ok(lines.indexOf(first)<lines.indexOf(second));
+ const sections=['Выпуски (неизменяемые):','Реестр моделей:','Статусы часов:','Оценки ревизий:'],sectionIndexes=sections.map(x=>lines.indexOf(x));
+ assert.ok(sectionIndexes.every(i=>i>=0));assert.deepEqual(sectionIndexes,[...sectionIndexes].sort((a,b)=>a-b));
+ assert.ok(lines.includes('- 2026-10-01: работа=UNKNOWN; учёт=CONFIRMED; RAW=1/4; перечень=частичный; временные поля=частичные.'));
+});
 test('schema 1–6 migration retains money, slots, unknowns, forecast backup and old merge',()=>{
  let s=emptyState();s=upsertEntry(s,{date:'2026-10-01',dailyHours:14,dailyOrders:27,reward:2400,tips:80});s.forecast=history(5);
  const before=calculate(s,'2026-09-18');const reloaded=normalizeState(JSON.parse(JSON.stringify(s)));

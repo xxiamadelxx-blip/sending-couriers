@@ -782,15 +782,20 @@ export function saveScenario(data,name,start,overrides,now=new Date().toISOStrin
   const scenario=weekPlan(data,start,overrides),id=`scenario-${fingerprint({name,start,now})}`;
   return {...data,scenarios:[...data.scenarios.slice(-19),{id,name:String(name??'План').slice(0,80),start,createdAt:now,overrides:copy(overrides),snapshot:scenario}]};
 }
+function forecastReportDayLines(rows) { return rows.map(d=>`| ${d.date} | ${d.orders??'неизвестно'}${d.ordersConfirmed?'':' (не подтверждено)'} | ${d.workingMin??'неизвестно'}${d.workConfirmed?'':' (не подтверждено)'} | ${d.appAccountedMin??'неизвестно'} | ${d.unavailableMin??'неизвестно'} | ${d.precision} | ${d.revision} | ${d.source.replace(/[|\n]/g,' ')} | ${d.conflicts.join('; ').replace(/[|\n]/g,' ')} |`); }
+function forecastReportSnapshotLines(data) { return data.snapshots.slice(-60).map(s=>`- ${s.id}: ${s.createdAt}; ${s.kind}; ${s.date}; ${s.central??'—'} [${s.lower??'—'}; ${s.upper??'—'}]; n=${s.comparableN}; cutoff=${s.trainingCutoff}; hash=${s.sourceHash}; profile=${s.profileVersion}; model=${s.modelVersion}; поздняя фиксация=${Boolean(s.partialDayIssue)}.`); }
+function forecastReportModelLines(data) { return data.models.slice(-20).map(m=>`- ${m.id}: выбран ${m.type}; обновлён ${m.trainedAt}; cutoff=${m.trainingDataCutoff}; n=${m.trainingN??'—'}; MAE=${m.validation?.mae??'—'}; baseline MAE=${m.validation?.baselineMAE??'—'}; bias=${m.validation?.bias??'—'}; coverage=${m.validation?.coverage??'—'}; проверенных дней=${m.validation?.n??0}; обученный кандидат=${m.fit?.type??'нет достаточных данных'}; подтверждённых дат=${m.fit?.days??0}; окон=${m.fit?.observations??0}.`); }
+function forecastReportHourStatusLines(rows) { return rows.map(d=>`- ${d.date}: работа=${d.fieldSources.workingMin.status}; учёт=${d.fieldSources.appAccountedMin.status}; RAW=${d.orderEvidence.length}/${d.orders??'неизвестно'}; перечень=${d.rawComplete?'полный':'частичный'}; временные поля=${d.evidenceComplete?'полные':'частичные'}.`); }
+function forecastReportEvaluationLines(data) { return data.evaluations.slice(-60).map(e=>`- ${e.id}; факт v${e.factRevision}=${e.fact}; ошибка=${e.signedError}; в диапазоне=${e.covered}; до начала работы=${e.prospective}.`); }
 export function forecastReport(data) {
   const rows=Object.values(data.days).sort((a,b)=>a.date.localeCompare(b.date));
   return ['','## Локальный прогноз',`Модель: ${FORECAST_VERSION}; экспозиция: ${EXPOSURE_VERSION}.`,`Профилей: ${data.profiles.length}; дней: ${rows.length}; выпусков: ${data.snapshots.length}; оценок: ${data.evaluations.length}; архивных выпусков: ${data.archive?.forecasts?.length??0}.`,
     'WORK = готовность принимать заказ или выполнение доставки. Часы Яндекса отдельно. UNKNOWN не является нулевым спросом.',
     '| Дата | Заказы | Рабочие мин | Часы Яндекса, мин | Паузы, мин | Точность | Ревизия | Источник | Конфликты |','|---|---:|---:|---:|---:|---|---:|---|---|',
-    ...rows.map(d=>`| ${d.date} | ${d.orders??'неизвестно'}${d.ordersConfirmed?'':' (не подтверждено)'} | ${d.workingMin??'неизвестно'}${d.workConfirmed?'':' (не подтверждено)'} | ${d.appAccountedMin??'неизвестно'} | ${d.unavailableMin??'неизвестно'} | ${d.precision} | ${d.revision} | ${d.source.replace(/[|\n]/g,' ')} | ${d.conflicts.join('; ').replace(/[|\n]/g,' ')} |`),
-    '','Выпуски (неизменяемые):',...data.snapshots.slice(-60).map(s=>`- ${s.id}: ${s.createdAt}; ${s.kind}; ${s.date}; ${s.central??'—'} [${s.lower??'—'}; ${s.upper??'—'}]; n=${s.comparableN}; cutoff=${s.trainingCutoff}; hash=${s.sourceHash}; profile=${s.profileVersion}; model=${s.modelVersion}; поздняя фиксация=${Boolean(s.partialDayIssue)}.`),
-    'Реестр моделей:',...data.models.slice(-20).map(m=>`- ${m.id}: выбран ${m.type}; обновлён ${m.trainedAt}; cutoff=${m.trainingDataCutoff}; n=${m.trainingN??'—'}; MAE=${m.validation?.mae??'—'}; baseline MAE=${m.validation?.baselineMAE??'—'}; bias=${m.validation?.bias??'—'}; coverage=${m.validation?.coverage??'—'}; проверенных дней=${m.validation?.n??0}; обученный кандидат=${m.fit?.type??'нет достаточных данных'}; подтверждённых дат=${m.fit?.days??0}; окон=${m.fit?.observations??0}.`),
-    'Статусы часов:',...rows.map(d=>`- ${d.date}: работа=${d.fieldSources.workingMin.status}; учёт=${d.fieldSources.appAccountedMin.status}; RAW=${d.orderEvidence.length}/${d.orders??'неизвестно'}; перечень=${d.rawComplete?'полный':'частичный'}; временные поля=${d.evidenceComplete?'полные':'частичные'}.`),
-    'Оценки ревизий:',...data.evaluations.slice(-60).map(e=>`- ${e.id}; факт v${e.factRevision}=${e.fact}; ошибка=${e.signedError}; в диапазоне=${e.covered}; до начала работы=${e.prospective}.`),
+    ...forecastReportDayLines(rows),
+    '','Выпуски (неизменяемые):',...forecastReportSnapshotLines(data),
+    'Реестр моделей:',...forecastReportModelLines(data),
+    'Статусы часов:',...forecastReportHourStatusLines(rows),
+    'Оценки ревизий:',...forecastReportEvaluationLines(data),
     'Персональные профили, полные снимки и журнал импорта находятся в JSON-копии. Сценарии не входят в обучение.',''].join('\n');
 }
