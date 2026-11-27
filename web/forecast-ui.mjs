@@ -196,18 +196,25 @@ function todayView(ctx) {
   bindTodayPlan(ctx,clock,closed);
 }
 
+function fillUnworkedReportGaps(list,reportWindow) {
+ const report=parseWindows(reportWindow);if(report.length!==1||report[0].end>1440)throw new Error('Укажите одно окно отчёта внутри суток.');
+ const [span]=report;if(list.some(i=>i.start<span.start||i.end>span.end))throw new Error('Рабочие окна выходят за границы отчёта.');
+ const boundaries=[span.start,span.end,...list.flatMap(i=>[i.start,i.end])].sort((a,b)=>a-b);
+ for(let i=0;i<boundaries.length-1;i++){const a=boundaries[i],b=boundaries[i+1];if(b>a&&!list.some(j=>j.start<=a&&j.end>=b))list.push({start:a,end:b,state:'UNAVAILABLE',paymentCounted:'UNKNOWN'});}
+ return list;
+}
+function readDayFactIntervals(ctx,mode) {
+ const {root}=ctx,{$}=ctx;
+ const list=mode==='intervals'?[...intervalValue(root,'factWorkHours').intervals,...parseWindows($('#factPause').value,'UNAVAILABLE')]:[];
+ if(mode==='intervals'&&!list.some(i=>i.state==='WORK'))throw new Error('Введите рабочие окна или выберите «Не работал».');
+ if(mode==='intervals'&&$('#restUnavailable').checked)fillUnworkedReportGaps(list,$('#reportWindow').value);
+ return list;
+}
 function readDayFactInput(ctx,f,d) {
- const {root,current,readHours}=ctx,{$}=ctx;
+ const {current,readHours}=ctx,{$}=ctx;
  const date=$('#factDate').value,mode=$('#workPrecision').value,orders=$('#factOrders').value.trim();
  if(orders&&!/^\d+$/.test(orders))throw new Error('Количество заказов должно быть целым.');
- let list=mode==='intervals'?[...intervalValue(root,'factWorkHours').intervals,...parseWindows($('#factPause').value,'UNAVAILABLE')]:[];
- if(mode==='intervals'&&!list.some(i=>i.state==='WORK'))throw new Error('Введите рабочие окна или выберите «Не работал».');
- if(mode==='intervals'&&$('#restUnavailable').checked) {
-   const report=parseWindows($('#reportWindow').value);if(report.length!==1||report[0].end>1440)throw new Error('Укажите одно окно отчёта внутри суток.');
-   const [span]=report;if(list.some(i=>i.start<span.start||i.end>span.end))throw new Error('Рабочие окна выходят за границы отчёта.');
-   const boundaries=[span.start,span.end,...list.flatMap(i=>[i.start,i.end])].sort((a,b)=>a-b);
-   for(let i=0;i<boundaries.length-1;i++){const a=boundaries[i],b=boundaries[i+1];if(b>a&&!list.some(j=>j.start<=a&&j.end>=b))list.push({start:a,end:b,state:'UNAVAILABLE',paymentCounted:'UNKNOWN'});}
- }
+ const list=readDayFactIntervals(ctx,mode);
  const total=mode==='total'?readHours($('#factTotal').value):mode==='rest'?0:null;if(mode==='total'&&total==null)throw new Error('Укажите суммарные рабочие часы.');
  const input={date,zone:d?.zone??currentProfile(f)?.zone??'',timezone:d?.timezone??currentProfile(f)?.timezone??'Europe/Moscow',completed:$('#dayCompleted').checked,asOfMinute:parseMinute($('#factAsOf').value),orders:orders===''?null:Number(orders),ordersConfirmed:orders!=='',appAccountedMin:readHours($('#factAccounted').value),accountedConfirmed:$('#factAccounted').value.trim()!=='',
    precision:mode==='rest'?'total':mode,workingMin:total,intervals:list,workConfirmed:mode!=='unknown',source:'manual',sourceConflicts:$('#resolveSources')?.checked?[]:d?.sourceConflicts??[]};

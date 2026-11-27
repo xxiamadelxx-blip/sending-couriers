@@ -28,6 +28,10 @@ class Element {
     return true;
   }
   closest(selector) {
+    if(selector==='[data-interval]'&&this.id==='factWorkHours') {
+      if(!this.intervalControl)this.intervalControl={_intervals:[]};
+      return this.intervalControl;
+    }
     if(selector==='[data-interval]'&&(this.id==='weekActiveHours'||/^weekWork\d+$/.test(this.id)))return {_intervals:[]};
     return null;
   }
@@ -150,6 +154,67 @@ test('saving a day fact keeps orders, active hours, and reported slot as separat
   assert.equal(day.completed,true);
   assert.deepEqual(day.intervals,[]);
   assert.equal(f.state.entries.length,0,'Entering a forecast fact must not create a finance slot');
+});
+
+test('interval day facts fill only the report window and keep active time separate from slot time',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  const value=(id,next)=>{const field=f.root.querySelector('#'+id);assert.ok(field,'Missing input '+id);field.value=String(next);return field;};
+  value('workPrecision','intervals');
+  value('factOrders',12);
+  value('factAccounted','14');
+  value('factPause','13:00–14:00');
+  value('reportWindow','07:00–21:00');
+  f.root.querySelector('#factWorkHours').closest('[data-interval]')._intervals=[
+    {start:540,end:720,state:'WORK',paymentCounted:'UNKNOWN'},
+    {start:1050,end:1260,state:'WORK',paymentCounted:'UNKNOWN'}
+  ];
+  f.root.querySelector('#restUnavailable').checked=true;
+  f.root.querySelector('#dayCompleted').checked=true;
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  const day=f.state.forecast.days[f.date];
+  assert.equal(f.commits,1);
+  assert.equal(day.orders,12);
+  assert.equal(day.ordersConfirmed,true);
+  assert.equal(day.workingMin,390);
+  assert.equal(day.appAccountedMin,840);
+  assert.equal(day.accountedConfirmed,true);
+  assert.equal(day.precision,'intervals');
+  assert.equal(day.unknownMin,600,'Only the 14-hour report window becomes known');
+  assert.equal(day.intervals.reduce((sum,row)=>sum+row.end-row.start,0),840);
+  assert.deepEqual(day.intervals.filter(row=>row.state==='WORK').map(row=>[row.start,row.end]),[[540,720],[1050,1260]]);
+  assert.equal(f.state.entries.length,0);
+});
+
+test('interval day facts reject a report window that excludes working time without saving',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  f.root.querySelector('#workPrecision').value='intervals';
+  f.root.querySelector('#factWorkHours').closest('[data-interval]')._intervals=[
+    {start:360,end:540,state:'WORK',paymentCounted:'UNKNOWN'}
+  ];
+  f.root.querySelector('#reportWindow').value='07:00–21:00';
+  f.root.querySelector('#restUnavailable').checked=true;
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  assert.equal(f.commits,0);
+  assert.equal(f.attempts,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+  assert.match(f.root.querySelector('#forecastError').textContent,/Рабочие окна выходят за границы отчёта/);
+});
+
+test('interval day facts require a work window before saving',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  f.root.querySelector('#workPrecision').value='intervals';
+  f.root.querySelector('#factOrders').value='0';
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  assert.equal(f.commits,0);
+  assert.equal(f.attempts,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+  assert.match(f.root.querySelector('#forecastError').textContent,/Введите рабочие окна или выберите/);
 });
 
 test('day fact validation rejects fractional orders without mutating saved facts',t=>{
