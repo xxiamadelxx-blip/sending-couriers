@@ -8,6 +8,9 @@ import {mountForecast} from '../web/forecast-ui.mjs';
 // and browser rendering remain the responsibility of the existing UI tests.
 class Element {
   constructor(attributes) {
+    this.id=/\bid="([^"]*)"/.exec(attributes)?.[1]??'';
+    this.dataset=Object.fromEntries([...attributes.matchAll(/\bdata-([\w-]+)="([^"]*)"/g)].map(([,key,value])=>[key.replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()),value]));
+    this.innerHTML='';
     this.value=/\bvalue="([^"]*)"/.exec(attributes)?.[1]??'';
     this.hidden=/\bhidden(?:\s|$)/.test(attributes);
     this.textContent='';
@@ -24,7 +27,10 @@ class Element {
     this['on'+event.type]?.(event);
     return true;
   }
-  closest() {return null;}
+  closest(selector) {
+    if(selector==='[data-interval]'&&(this.id==='weekActiveHours'||/^weekWork\d+$/.test(this.id)))return {_intervals:[]};
+    return null;
+  }
   setAttribute(name,value) {this.attributes.set(name,String(value));}
   removeAttribute(name) {this.attributes.delete(name);}
 }
@@ -32,9 +38,8 @@ class Element {
 class Root {
   set innerHTML(html) {
     this.elements=new Map();
-    for(const tag of html.matchAll(/<\w+\b([^>]*\bid="([^"]+)"[^>]*)>/g)) {
-      this.elements.set('#'+tag[2],new Element(tag[1]));
-    }
+    this.allElements=[...html.matchAll(/<\w+\b([^>]*)>/g)].map(([,attributes])=>new Element(attributes));
+    for(const element of this.allElements)if(element.id)this.elements.set('#'+element.id,element);
   }
   querySelector(selector) {return this.elements.get(selector)??null;}
   // The regression uses text input, so interval/slider and legacy-tab binding
@@ -45,6 +50,14 @@ class Root {
     assert.ok(element,`Missing input ${id}`);
     element.value=value;
     element.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+}
+
+class WeekRoot extends Root {
+  querySelectorAll(selector) {
+    if(selector==='[data-week-work],[data-week-slot]')return this.allElements.filter(e=>e.dataset.weekWork!==undefined||e.dataset.weekSlot!==undefined);
+    if(selector==='[data-load-scenario]')return this.allElements.filter(e=>e.dataset.loadScenario!==undefined);
+    return [];
   }
 }
 
@@ -73,8 +86,8 @@ class Timers {
   }
 }
 
-function fixture(t) {
-  const timers=new Timers(),root=new Root();
+function fixture(t,RootType=Root) {
+  const timers=new Timers(),root=new RootType();
   const originals={setTimeout:globalThis.setTimeout,clearTimeout:globalThis.clearTimeout,window:Object.getOwnPropertyDescriptor(globalThis,'window')};
   globalThis.setTimeout=timers.setTimeout;
   globalThis.clearTimeout=timers.clearTimeout;
@@ -269,4 +282,38 @@ test('simple forecast preview keeps the insufficient-data state without writing 
   assert.equal(f.attempts,0);
   assert.equal(f.commits,0);
   assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+});
+
+
+test('week plan compares, saves, and reloads active hours separately from the full slot',t=>{
+  const f=fixture(t,WeekRoot);
+  f.mount('week');
+  assert.equal(f.root.querySelector('#weekActiveHours').value,'8');
+  assert.equal(f.root.querySelector('#weekSlotHours').value,'14');
+
+  const work=f.root.querySelector('#weekWork0');
+  assert.ok(work);
+  work.value='9';
+  work.oninput();
+
+  f.root.querySelector('#compareWeek').onclick();
+  assert.match(f.root.querySelector('#scenarioComparison').innerHTML,/Сравнение/);
+  assert.equal(f.commits,0,'Comparing a draft must not save it');
+
+  f.root.querySelector('#saveWeek').onclick();
+  assert.equal(f.state.forecast.scenarios.length,1);
+  assert.equal(f.state.forecast.plans[f.date].workingMin,540);
+  assert.equal(f.state.forecast.plans[f.date].slotMin,840);
+  assert.equal(f.state.forecast.weekConfig.workingMin,480);
+  assert.equal(f.state.entries.length,0,'A forecast scenario must not create a finance slot');
+  assert.equal(f.commits,1);
+
+  const saved=f.root.querySelectorAll('[data-load-scenario]')[0];
+  assert.ok(saved,'Saved scenarios remain available to load');
+  saved.onclick();
+  assert.equal(f.root.querySelector('#weekWork0').value,'9');
+  assert.equal(f.root.querySelector('#weekSlotHours').value,'14');
+  assert.equal(f.state.forecast.plans[f.date].workingMin,540);
+  assert.equal(f.state.forecast.plans[f.date].slotMin,840);
+  assert.equal(f.commits,1,'Loading a scenario must not write new facts');
 });

@@ -253,22 +253,13 @@ function weekMarkup(ctx,week,result,daySlot,dayNote,totals,weekModel) {
       <div class="forecast-actions"><button id="saveWeek" class="button primary" type="button">Сохранить сценарий</button><button id="compareWeek" class="button outline" type="button">Сравнить с моим графиком</button></div><div id="scenarioComparison"></div>${data().scenarios.length?`<details class="calculation"><summary>Сохранённые сценарии</summary>${data().scenarios.slice(-5).reverse().map(s=>`<button class="button quiet" type="button" data-load-scenario="${esc(s.id)}">${esc(s.name)} · ${esc(formatDate(s.start))}</button>`).join('')}</details>`:''}${errorHTML}`;
   }
 
-function weekView(ctx) {
- const {root,getState,notify,data,current,write,run,shell,readPair}=ctx,{$}=ctx;
-    const conditional={};
-    const rebuild=()=>{const w=weekPlan(data(),ctx.start,ctx.overrides);for(const d of w.days)conditional[d.date]={...d,slotMin:d.slotMin??d.accountedMin,accountedMin:d.accountedMin??d.slotMin,accountingAssumption:d.accountedMin==null};return w;};
-    const base=rebuild(),result=forecastFinances(getState(),ctx.start,conditional,current().date),week={...base,days:base.days.map(ctx.displayWeekDay)};
-    const daySlot=d=>d.isFact?(data().days[d.date].accountedConfirmed?data().days[d.date].appAccountedMin:null):conditional[d.date].slotMin;
-    const dayNote=d=>d.isFact?'Завершённый факт':`Вне работы: ${d.workingMin!=null&&daySlot(d)!=null?hours(Math.max(0,daySlot(d)-d.workingMin)):'—'}`;
-    const totals=r=>`<div class="forecast-metrics duration-totals">${metric('Работа на неделю',hours(r.week.workingMin))}${metric('Слоты на неделю',hours(r.week.accountedMin))}${metric('Вне работы',r.week.workingMin!=null&&r.week.accountedMin!=null?hours(Math.max(0,r.week.accountedMin-r.week.workingMin)):'—')}</div>`;
-    const weekModel=()=>week.days.find(d=>!d.isFact&&d.forecast.central!=null)?.forecast;
-    shell('План на 7 дней',weekMarkup(ctx,week,result,daySlot,dayNote,totals,weekModel));
+function bindWeekNavigation(ctx) {
+ const {run}=ctx,{$}=ctx;
     $('#weekStart').onchange=()=>run(()=>{ctx.start=$('#weekStart').value;ctx.overrides={};ctx.useWeekConfig();ctx.views.week();});$('#resetWeek').onclick=()=>{ctx.overrides={};ctx.weekConfig=null;ctx.weekConfigDraftValid=true;ctx.views.week();};
-    const refresh=()=>{
-      const w=rebuild(),r=forecastFinances(getState(),ctx.start,conditional,current().date);$('#weekTotals').innerHTML=ctx.periodResult(r.weekFinancial);$('#periodForecast').innerHTML=ctx.periodResult(r.fortnight);$('#weekDurationTotals').innerHTML=totals(r);$('#weekModelStatus').textContent=forecastModelLabel(w.days.map(ctx.displayWeekDay).find(d=>!d.isFact&&d.forecast.central!=null)?.forecast);
-      w.days.map(ctx.displayWeekDay).forEach((d,i)=>{$(`#dayEstimate${i}`).textContent=`${orderText(d.forecast.central)}`;$(`#weekBand${i}`).textContent=(d.isFact?'Завершённый факт · ':'')+range(d.forecast);$(`#weekAssumption${i}`).textContent=dayNote(d);$(`#weekRisk${i}`).innerHTML=d.isFact?'':ctx.planResult(d.date,{workingMin:d.workingMin,slotMin:daySlot(d)},d.forecast);});$('#forecastError').hidden=true;
-    };
-    ctx.updateModel=()=>run(refresh);
+}
+
+function bindWeekPlanInputs(ctx,week,refresh) {
+ const {root,readPair,run}=ctx,{$}=ctx;
     const applyCommon=()=>{
       ctx.weekConfigDraftValid=false;const next=readPair('weekActiveHours','weekSlotHours');ctx.weekConfig=next;ctx.weekConfigDraftValid=true;ctx.useWeekConfig(true);
       for(let i=0;i<7;i++){const d=week.days[i],v=ctx.overrides[d.date];if(v&&!d.isFact){setIntervals(root,`weekWork${i}`,v.intervals??[],v.workingMin);$(`#weekSlot${i}`).value=v.slotMin==null?'':String(v.slotMin/60);syncDuration(root,`weekSlot${i}`);}}
@@ -281,6 +272,10 @@ function weekView(ctx) {
       const i=Number(input.dataset.weekWork??input.dataset.weekSlot),d=week.days[i],pair=readPair(`weekWork${i}`,`weekSlot${i}`);
       ctx.overrides[d.date]={...pair,accountedMin:null,accountingAssumption:true};refresh();
     }));
+}
+
+function bindWeekScenarioActions(ctx,week,conditional) {
+ const {root}=ctx,{$}=ctx;
     $('#saveWeek').onclick=()=>run(()=>{
       if(!ctx.weekConfigDraftValid)throw new Error('Проверьте часы работы и номинального слота.');
       week.days.forEach((d,i)=>{if(!d.isFact)readPair(`weekWork${i}`,`weekSlot${i}`);});
@@ -290,6 +285,26 @@ function weekView(ctx) {
     });
     $('#compareWeek').onclick=()=>run(()=>{const a=forecastFinances(getState(),ctx.start,{},current().date),b=forecastFinances(getState(),ctx.start,conditional,current().date);$('#scenarioComparison').innerHTML=`<section class="detail-card"><h2>Сравнение</h2><table class="forecast-table"><thead><tr><th>Показатель</th><th>Мой график</th><th>Сценарий</th></tr></thead><tbody><tr><td>Заказы недели</td><td>${a.week.central??'—'}</td><td>${b.week.central??'—'}</td></tr><tr><td>Темп периода</td><td>${goalText(a.fortnight.pace)}</td><td>${goalText(b.fortnight.pace)}</td></tr></tbody></table></section>`;});
     root.querySelectorAll('[data-load-scenario]').forEach(b=>b.onclick=()=>{const s=data().scenarios.find(s=>s.id===b.dataset.loadScenario);ctx.start=s.start;ctx.overrides=JSON.parse(JSON.stringify(s.overrides));ctx.views.week();});
+}
+
+function weekView(ctx) {
+ const {root,getState,notify,data,current,write,run,shell,readPair}=ctx,{$}=ctx;
+    const conditional={};
+    const rebuild=()=>{const w=weekPlan(data(),ctx.start,ctx.overrides);for(const d of w.days)conditional[d.date]={...d,slotMin:d.slotMin??d.accountedMin,accountedMin:d.accountedMin??d.slotMin,accountingAssumption:d.accountedMin==null};return w;};
+    const base=rebuild(),result=forecastFinances(getState(),ctx.start,conditional,current().date),week={...base,days:base.days.map(ctx.displayWeekDay)};
+    const daySlot=d=>d.isFact?(data().days[d.date].accountedConfirmed?data().days[d.date].appAccountedMin:null):conditional[d.date].slotMin;
+    const dayNote=d=>d.isFact?'Завершённый факт':`Вне работы: ${d.workingMin!=null&&daySlot(d)!=null?hours(Math.max(0,daySlot(d)-d.workingMin)):'—'}`;
+    const totals=r=>`<div class="forecast-metrics duration-totals">${metric('Работа на неделю',hours(r.week.workingMin))}${metric('Слоты на неделю',hours(r.week.accountedMin))}${metric('Вне работы',r.week.workingMin!=null&&r.week.accountedMin!=null?hours(Math.max(0,r.week.accountedMin-r.week.workingMin)):'—')}</div>`;
+    const weekModel=()=>week.days.find(d=>!d.isFact&&d.forecast.central!=null)?.forecast;
+    shell('План на 7 дней',weekMarkup(ctx,week,result,daySlot,dayNote,totals,weekModel));
+    bindWeekNavigation(ctx);
+    const refresh=()=>{
+      const w=rebuild(),r=forecastFinances(getState(),ctx.start,conditional,current().date);$('#weekTotals').innerHTML=ctx.periodResult(r.weekFinancial);$('#periodForecast').innerHTML=ctx.periodResult(r.fortnight);$('#weekDurationTotals').innerHTML=totals(r);$('#weekModelStatus').textContent=forecastModelLabel(w.days.map(ctx.displayWeekDay).find(d=>!d.isFact&&d.forecast.central!=null)?.forecast);
+      w.days.map(ctx.displayWeekDay).forEach((d,i)=>{$(`#dayEstimate${i}`).textContent=`${orderText(d.forecast.central)}`;$(`#weekBand${i}`).textContent=(d.isFact?'Завершённый факт · ':'')+range(d.forecast);$(`#weekAssumption${i}`).textContent=dayNote(d);$(`#weekRisk${i}`).innerHTML=d.isFact?'':ctx.planResult(d.date,{workingMin:d.workingMin,slotMin:daySlot(d)},d.forecast);});$('#forecastError').hidden=true;
+    };
+    ctx.updateModel=()=>run(refresh);
+    bindWeekPlanInputs(ctx,week,refresh);
+    bindWeekScenarioActions(ctx,week,conditional);
   }
 
 function accuracyMetricsMarkup(q) {

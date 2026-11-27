@@ -47,7 +47,8 @@
 - Crapper: original `markdownReport` CC 36; wrapper 4, helpers 11/10/8/4/4 (aggregate 41, +5). Peak fell 25; aggregate complexity did not fall. Old and split renderers produced byte-identical full output in three representative fixtures; formulas were untouched.
 
 ## Current cleanup block
-- Split `mergeImport` into settings reconciliation and imported-entry merge. Pre-change CC is 36. Added focused regressions for conflicting cycle start, payment rule and 12-week opening; existing legacy-import and partial-import tests remain in place. This block's CI is pending.
+- `mergeImport`: PASS at source head `dc477c0668293872c71265af5cd076099a054eef`; CI tested merge `2f2770cd6e5d7ecbd31295a9b0b69a5071085826` on base `4f2f9943aa00ff4a1ecfc27dc8569acb1ea228ad`. JS 268/268, Python 99/99, financial mutation 28/28, Android smoke, and all six Android 35 UI gates passed. [UI evidence](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/45963659878/artifacts/15184183556) · [Android QA](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/45963659840/artifacts/15182227807). The test-signed upgrade gate passed; production signing was not tested. Crapper: CC 36 → wrapper 1, helpers 28/9 (aggregate 38, +2); peak fell by 8, aggregate did not.
+- `weekView`: moved existing navigation, duration input and saved-scenario actions into focused binders. Added a DOM regression for draft comparison, save, reload, and separate 9 active hours / 14 slot hours. `weekMarkup` and business calculations are unchanged. CI is pending.
 
 ## Next cleanup target
-- After `mergeImport` passes, rerank production hotspots from a fresh Crapper report. Keep financial formulas and import policy unchanged.
+- After `weekView` passes, rerank remaining hotspots using a fresh Crapper report; keep financial calculations and import policy unchanged.
