@@ -46,6 +46,19 @@ test('Period screen delegates its existing template to a focused markup renderer
  for(const id of ['periodDaysHeading','cycleHelpButton','cycleHelpDialog','cycleHelpTitle','cycleHelpDescription','cycleTotalIncome','cyclePremium','cycleConfig','configureCycle','premiumCycleStart','cyclePreview','cycleOpeningGross','cycleOpeningThrough','importCycleReport','cycleReportFile','settingsError','saveSettings','closeCycleHelp','periodHistory','periodExport'])
   assert.ok(renderer.includes('id="'+id+'"'),id);
 });
+test('Day fact form keeps its markup in a focused renderer and leaves state handling in dayView',()=>{
+ const start=forecast.indexOf('function dayFactMarkup(ctx,d) {');
+ const end=forecast.indexOf('\nfunction weekMarkup(',start);
+ const section=forecast.slice(start,end>start?end:undefined);
+ const view=section.slice(section.indexOf('function dayView(ctx) {'));
+ assert.ok(view.includes("shell('Факт дня',dayFactMarkup(ctx,d),'day');"));
+ assert.ok(view.includes("$('#workPrecision').value="));
+ assert.ok(view.includes('bindDayFactForm(ctx,f,d,plan);'));
+ const markup=section.slice(0,section.indexOf('function dayView(ctx) {'));
+ assert.ok(markup.includes('const {current}=ctx;'));
+ for(const token of ['workDayForm','factDate','factOrders','factAccounted','factWorkHours','factPause','factTotal','workingPreview','dayCompleted','factAsOf','saveWorkDay','resolveSources','d?.conflicts.length'])
+   assert.ok(markup.includes(token),'missing day form content: '+token);
+});
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));

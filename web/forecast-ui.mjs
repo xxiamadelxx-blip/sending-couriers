@@ -229,17 +229,22 @@ function bindDayFactForm(ctx,f,d,plan) {
  $('#workDayForm').onsubmit=e=>{e.preventDefault();ctx.run(()=>saveDayFact(ctx,f,d));};
 }
 
-function dayView(ctx) {
- const {data,current,shell}=ctx,{$}=ctx;
- const f=data(),d=f.days[ctx.dayDate],plan=planDay(f,ctx.dayDate);
-    shell('Факт дня',`<form id="workDayForm" novalidate>${textField('factDate','Дата',ctx.dayDate,'date')}
+function dayFactMarkup(ctx,d) {
+ const {current}=ctx;
+ return `<form id="workDayForm" novalidate>${textField('factDate','Дата',ctx.dayDate,'date')}
       ${textField('factOrders','Заказов за день',d?.orders??'','number','min="0" max="1000000" step="1" inputmode="numeric"')}${durationField('factAccounted','Учтено Яндексом',d?.appAccountedMin??null,'',30)}
       <div class="field"><label for="workPrecision">Фактическое рабочее время</label><select class="period-select" id="workPrecision"><option value="intervals">Знаю интервалы</option><option value="total">Знаю только сумму часов</option><option value="rest">Не работал</option><option value="unknown">Пока неизвестно</option></select></div>
       <div id="intervalFields">${intervalField('factWorkHours',d?.intervals?.filter(i=>i.state==='WORK')??[],d?.workingMin??null)}${textField('factPause','Личная пауза без доставки',windowsText(d?.intervals?.filter(i=>i.state==='UNAVAILABLE')),'text','placeholder="Можно оставить пустым"')}<button id="usePlannedWork" class="button quiet" type="button">Подставить мой план для подтверждения</button><details class="calculation"><summary>Остальное время отчёта</summary>${textField('reportWindow','Окно отчёта','', 'text','placeholder="07:00–21:00"')}<label class="forecast-checkbox"><input id="restUnavailable" type="checkbox">В остальное время не работал и не выполнял доставку</label></details></div>
       <div id="totalFields">${textField('factTotal','Всего рабочих часов',d?.workingMin==null?'':num(d.workingMin/60),'text','inputmode="decimal"')}</div>
       <p id="workingPreview" class="forecast-working-preview" role="status"></p>
       ${d?`<details class="calculation"><summary>Источник и уточнения</summary><p>${esc(d.source)} · ревизия ${d.revision}</p><p>RAW: ${d.orderEvidence.length}/${d.orders??'—'} · перечень ${d.rawComplete?'полный':'частичный'} · принятия/доставки ${d.evidenceComplete?'полные':'частичные'}</p><p>На заказах: ${hours(d.onOrderMin)} · ожидание без заказа: ${hours(d.availableNoOrderMin)}</p><p>Исправлений времени: ${d.revisions.length}</p></details>`:''}
-      ${d?.conflicts.length?`<p class="field-warning">${esc(d.conflicts.join(' '))}</p><label class="forecast-checkbox"><input type="checkbox" id="resolveSources">Подтверждаю выбранный итог вместо расходящихся источников</label>`:''}<label class="forecast-checkbox"><input type="checkbox" id="dayCompleted" ${(d?.completed??ctx.dayDate<current().date)?'checked':''}>День завершён, это полный итог</label>${textField('factAsOf','Данные на время',minuteLabel(d?.asOfMinute??current().minute),'time')}${errorHTML}<button class="button primary" id="saveWorkDay" type="submit">Сохранить факт</button></form>`,'day');
+      ${d?.conflicts.length?`<p class="field-warning">${esc(d.conflicts.join(' '))}</p><label class="forecast-checkbox"><input type="checkbox" id="resolveSources">Подтверждаю выбранный итог вместо расходящихся источников</label>`:''}<label class="forecast-checkbox"><input type="checkbox" id="dayCompleted" ${(d?.completed??ctx.dayDate<current().date)?'checked':''}>День завершён, это полный итог</label>${textField('factAsOf','Данные на время',minuteLabel(d?.asOfMinute??current().minute),'time')}${errorHTML}<button class="button primary" id="saveWorkDay" type="submit">Сохранить факт</button></form>`;
+}
+
+function dayView(ctx) {
+ const {data,shell}=ctx,{$}=ctx;
+ const f=data(),d=f.days[ctx.dayDate],plan=planDay(f,ctx.dayDate);
+    shell('Факт дня',dayFactMarkup(ctx,d),'day');
     $('#workPrecision').value=d?.precision==='total'?'total':d?.workConfirmed&&d.workingMin===0?'rest':d?.precision==='intervals'?'intervals':'unknown';
     bindDayFactForm(ctx,f,d,plan);
   }
