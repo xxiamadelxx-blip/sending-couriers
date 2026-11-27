@@ -397,69 +397,80 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == IMPORT_VIDEO) {
-            if (resultCode == RESULT_OK && data != null) {
-                String payload = data.getStringExtra("m4.video.result");
-                if (payload != null && web != null) web.evaluateJavascript(
-                    "window.receiveVideoImport && window.receiveVideoImport(" + JSONObject.quote(payload) + ")", null);
-            }
+            handleVideoImportResult(resultCode, data);
             return;
         }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         if (requestCode == SAVE_FILE && pendingSave != null) {
-            File source = pendingSave;
-            new Thread(() -> {
-                try (InputStream in = new java.io.FileInputStream(source); OutputStream out = getContentResolver().openOutputStream(uri, "w")) {
-                    if (out == null) throw new IllegalStateException();
-                    byte[] buffer = new byte[8192]; int count;
-                    while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
-                    out.flush();
-                    error("Файл сохранён");
-                } catch (Exception e) { error("Не удалось сохранить файл в выбранную папку."); }
-            }).start();
+            savePendingFile(uri);
         } else if (requestCode == IMPORT_FILE || requestCode == IMPORT_FORECAST) {
-            new Thread(() -> {
-                try (InputStream in = getContentResolver().openInputStream(uri); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                    if (in == null) throw new IllegalStateException();
-                    byte[] buffer = new byte[8192]; int count;
-                    while ((count = in.read(buffer)) != -1) { out.write(buffer, 0, count); if (out.size() > MAX_BYTES) throw new IllegalArgumentException(); }
-                    byte[] bytes = out.toByteArray();
-                    boolean xlsx = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K';
-                    String text = xlsx ? WorkbookReader.read(new ByteArrayInputStream(bytes))
-                        : new String(bytes, StandardCharsets.UTF_8);
-                    if (xlsx) {
-                        try {
-                            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
-                            StringBuilder digest=new StringBuilder(64);
-                            for (byte h : hash) digest.append(String.format(java.util.Locale.ROOT,"%02x",h & 0xff));
-                            String sha=digest.toString();
-                            factMirrorDatabase.mirrorWorkbook(text,sha);
-                            // Promote only after both source history and legacy
-                            // JSON are verified. Preserve the old JSON as backup.
-                            if(factMirrorDatabase.isApprovedPrimarySource(sha)
-                               && !preferences.getBoolean("m2_sqlite_primary",false)){
-                                String backup=preferences.getString("state","");
-                                if(!backup.isEmpty()){
-                                    // Do not race the asynchronous startup mirror.
-                                    // First commit the freshest legacy JSON exactly.
-                                    factMirrorDatabase.mirrorLegacy(backup);
-                                    if(factMirrorDatabase.matchesLegacy(backup))
-                                        preferences.edit().putBoolean("m2_sqlite_primary",true).commit();
-                                }
-                            }
-                        } catch(Exception archiveError) {
-                            // Old, user-visible import must continue. Source-parity
-                            // migration is NOT marked successful on a shadow error.
-                            Log.e("CourierSQLite","M2 workbook archival failed: "+archiveError.getClass().getSimpleName());
-                        }
-                    }
-                    String callback = requestCode == IMPORT_FORECAST ? "window.receiveForecastImport" : "window.receiveImport";
-                    runOnUiThread(() -> web.evaluateJavascript(callback + "(" + JSONObject.quote(text) + ")", null));
-                } catch (Exception e) { error("Не удалось прочитать файл. Допустимы JSON и XLSX до 8 МБ без пароля."); }
-            }).start();
+            importSelectedFile(requestCode, uri);
         }
     }
 
+    private void handleVideoImportResult(int resultCode, Intent data) {
+        if (resultCode == RESULT_OK && data != null) {
+            String payload = data.getStringExtra("m4.video.result");
+            if (payload != null && web != null) web.evaluateJavascript(
+                "window.receiveVideoImport && window.receiveVideoImport(" + JSONObject.quote(payload) + ")", null);
+        }
+    }
+
+    private void savePendingFile(Uri uri) {
+        File source = pendingSave;
+        new Thread(() -> {
+            try (InputStream in = new java.io.FileInputStream(source); OutputStream out = getContentResolver().openOutputStream(uri, "w")) {
+                if (out == null) throw new IllegalStateException();
+                byte[] buffer = new byte[8192]; int count;
+                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+                out.flush();
+                error("Файл сохранён");
+            } catch (Exception e) { error("Не удалось сохранить файл в выбранную папку."); }
+        }).start();
+    }
+
+    private void importSelectedFile(int requestCode, Uri uri) {
+        new Thread(() -> {
+            try (InputStream in = getContentResolver().openInputStream(uri); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                if (in == null) throw new IllegalStateException();
+                byte[] buffer = new byte[8192]; int count;
+                while ((count = in.read(buffer)) != -1) { out.write(buffer, 0, count); if (out.size() > MAX_BYTES) throw new IllegalArgumentException(); }
+                byte[] bytes = out.toByteArray();
+                boolean xlsx = requestCode == IMPORT_FORECAST && bytes.length>2 && bytes[0]=='P' && bytes[1]=='K';
+                String text = xlsx ? WorkbookReader.read(new ByteArrayInputStream(bytes))
+                    : new String(bytes, StandardCharsets.UTF_8);
+                if (xlsx) {
+                    try {
+                        byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+                        StringBuilder digest=new StringBuilder(64);
+                        for (byte h : hash) digest.append(String.format(java.util.Locale.ROOT,"%02x",h & 0xff));
+                        String sha=digest.toString();
+                        factMirrorDatabase.mirrorWorkbook(text,sha);
+                        // Promote only after both source history and legacy
+                        // JSON are verified. Preserve the old JSON as backup.
+                        if(factMirrorDatabase.isApprovedPrimarySource(sha)
+                           && !preferences.getBoolean("m2_sqlite_primary",false)){
+                            String backup=preferences.getString("state","");
+                            if(!backup.isEmpty()){
+                                // Do not race the asynchronous startup mirror.
+                                // First commit the freshest legacy JSON exactly.
+                                factMirrorDatabase.mirrorLegacy(backup);
+                                if(factMirrorDatabase.matchesLegacy(backup))
+                                    preferences.edit().putBoolean("m2_sqlite_primary",true).commit();
+                            }
+                        }
+                    } catch(Exception archiveError) {
+                        // Old, user-visible import must continue. Source-parity
+                        // migration is NOT marked successful on a shadow error.
+                        Log.e("CourierSQLite","M2 workbook archival failed: "+archiveError.getClass().getSimpleName());
+                    }
+                }
+                String callback = requestCode == IMPORT_FORECAST ? "window.receiveForecastImport" : "window.receiveImport";
+                runOnUiThread(() -> web.evaluateJavascript(callback + "(" + JSONObject.quote(text) + ")", null));
+            } catch (Exception e) { error("Не удалось прочитать файл. Допустимы JSON и XLSX до 8 МБ без пароля."); }
+        }).start();
+    }
     @Override public void onBackPressed() {
         handleBack();
     }

@@ -226,6 +226,27 @@ test('UI M2: large-text form keeps the focused label visible without relying on 
  assert.match(guard,/if \(offset > 0\) \{[\s\S]*?scroll\.scrollTop = Math\.max\(0, scroll\.scrollTop - offset\)/);
 });
 
+test('Android file result routing keeps video, save and import handlers separate',async()=>{
+ const activity=await readFile(new URL('../android/src/ru/courier/finance/MainActivity.java',import.meta.url),'utf8');
+ const routeStart=activity.indexOf('@Override protected void onActivityResult(');
+ const videoStart=activity.indexOf('private void handleVideoImportResult(',routeStart);
+ const saveStart=activity.indexOf('private void savePendingFile(',videoStart);
+ const importStart=activity.indexOf('private void importSelectedFile(',saveStart);
+ const route=activity.slice(routeStart,videoStart);
+ const video=activity.slice(videoStart,saveStart);
+ const save=activity.slice(saveStart,importStart);
+ const importer=activity.slice(importStart);
+ assert.ok(route.includes('super.onActivityResult(requestCode, resultCode, data);'));
+ assert.ok(route.includes('handleVideoImportResult(resultCode, data);'));
+ assert.ok(route.includes('resultCode != RESULT_OK || data == null || data.getData() == null'));
+ assert.ok(route.indexOf('handleVideoImportResult(resultCode, data)')<route.indexOf('resultCode != RESULT_OK'));
+ assert.ok(route.includes('if (requestCode == SAVE_FILE && pendingSave != null)'));
+ assert.ok(route.includes('savePendingFile(uri)'));
+ assert.ok(route.includes('importSelectedFile(requestCode, uri)'));
+ for(const token of ['m4.video.result','window.receiveVideoImport','JSONObject.quote(payload)'])assert.ok(video.includes(token),token);
+ for(const token of ['getContentResolver().openOutputStream(uri, "w")','Файл сохранён','Не удалось сохранить файл'])assert.ok(save.includes(token),token);
+ for(const token of ['openInputStream(uri)','out.size() > MAX_BYTES','WorkbookReader.read','factMirrorDatabase.mirrorWorkbook(text,sha)','m2_sqlite_primary','window.receiveForecastImport','window.receiveImport'])assert.ok(importer.includes(token),token);
+});
 test('Android smoke returns from XLSX picker and verifies saved facts and current payout label',async()=>{
  const xlsx=await readFile(new URL('../qa/xlsx_import_smoke.py',import.meta.url),'utf8');
  const form=await readFile(new URL('../qa/form_large_text_smoke.py',import.meta.url),'utf8');
