@@ -36,6 +36,15 @@ function periodResult(f) {
  const label={unknown:'Не хватает подтверждённых данных',high:'Высокий риск невыполнения',medium:'Есть риск: порог внутри диапазона',conditional:'Условия достижимы по сценарию',met:'Условия выполнены'}[f.risk];
  return `<p class="forecast-risk" data-risk="${f.risk}">${label}</p><div class="forecast-metrics">${metric('Заказы',f.orders==null?'—':`${f.orders} · ${f.lowerOrders}–${f.upperOrders}`)}${metric('Часы Яндекса',f.hours==null?'—':hoursText(f.hours)+' ч')}${metric('Темп для выплаты',goalText(f.pace))}${metric('До минимума часов',f.missingHours==null?'—':hoursText(f.missingHours)+' ч')}${metric('До нормы заказов',num(f.missingNorm))}${metric('Запас пустых часов',f.reserve==null?'—':hoursText(f.reserve/60)+' ч')}${metric('Почасовая сумма при выполнении',money(f.conditionalIncome))}</div><p class="hint">Условия: ${f.minimumHours} ч · темп ${goalText(f.terms.basePace)}${f.terms.criticalPace!=null?' · критический '+num(f.terms.criticalPace):''}. ${f.belowCritical?'Темп ниже критического. ':''}${f.complete?'Прогнозная выплата не гарантирована.':'Неизвестные дни не заменены нулями.'}</p>`;
 }
+function renderForecastShell(ctx,title,body,active,heading,nav,leave) {
+ const {root}=ctx;
+  root.className='forecast-page';
+  root.innerHTML=`${heading(title)}${['today','week','accuracy','data'].includes(active)?`<nav class="forecast-tabs" aria-label="Прогноз"><button type="button" data-tab="today" ${active==='today'?'aria-current="page"':''}>Сегодня</button><button type="button" data-tab="week" ${active==='week'?'aria-current="page"':''}>Неделя</button></nav>`:''}${body}${['today','week','accuracy','data'].includes(active)?'<div class="forecast-tools"><button type="button" data-tab="accuracy">Точность</button><button type="button" data-tab="data">История и импорт</button></div>':''}`;
+  ctx.$('#goBack').onclick=()=>['profile','day','import'].includes(ctx.screen)?ctx.render('today'):leave();
+  root.querySelectorAll('[data-tab]').forEach(button=>button.onclick=()=>ctx.render(button.dataset.tab));
+  bindDurations(root);bindIntervals(root);nav();window.scrollTo(0,0);
+}
+
 function createForecastContext(options) {
  const {root,getState,commit,heading,nav,leave,notify,Native}=options,initial=options.initial??'today';
  const ctx={root,getState,commit,heading,nav,leave,notify,Native,updateModel:()=>{},flushPlan:()=>true,modelFailure:false,screen:initial,start:null,overrides:{},dayDate:null,pending:null,weekConfig:null,weekConfigDraftValid:true};
@@ -49,13 +58,7 @@ function createForecastContext(options) {
  ctx.write=(next,{nowcast=true}={})=>{let f=evaluateForecasts(next);f=ensureForecast(f);if(nowcast)f=ensureForecast(f,new Date(),'NOWCAST');commit({...getState(),forecast:f});};
  ctx.showError=error=>{const element=ctx.$('#forecastError');if(element){element.textContent=error.message;element.hidden=false;}else notify(error.message);};
  ctx.run=fn=>{try{fn();}catch(error){ctx.showError(error);}};
- ctx.shell=(title,body,active=ctx.screen)=>{
-  root.className='forecast-page';
-  root.innerHTML=`${heading(title)}${['today','week','accuracy','data'].includes(active)?`<nav class="forecast-tabs" aria-label="Прогноз"><button type="button" data-tab="today" ${active==='today'?'aria-current="page"':''}>Сегодня</button><button type="button" data-tab="week" ${active==='week'?'aria-current="page"':''}>Неделя</button></nav>`:''}${body}${['today','week','accuracy','data'].includes(active)?'<div class="forecast-tools"><button type="button" data-tab="accuracy">Точность</button><button type="button" data-tab="data">История и импорт</button></div>':''}`;
-  ctx.$('#goBack').onclick=()=>['profile','day','import'].includes(ctx.screen)?ctx.render('today'):leave();
-  root.querySelectorAll('[data-tab]').forEach(button=>button.onclick=()=>ctx.render(button.dataset.tab));
-  bindDurations(root);bindIntervals(root);nav();window.scrollTo(0,0);
- };
+ ctx.shell=(title,body,active=ctx.screen)=>renderForecastShell(ctx,title,body,active,heading,nav,leave);
  ctx.readPair=(workId,slotId)=>{const value=ctx.$('#'+workId).closest('[data-interval]')?intervalValue(root,workId):{workingMin:readForecastHours(ctx.$('#'+workId).value)},workingMin=value.workingMin,slotMin=readForecastHours(ctx.$('#'+slotId).value);if(slotMin!=null&&workingMin>slotMin)throw new Error('Рабочее время не может превышать номинальный слот.');return {...value,workingMin,slotMin};};
  ctx.planResult=(date,plan,estimate)=>planResult(ctx,date,plan,estimate);
  ctx.periodResult=periodResult;

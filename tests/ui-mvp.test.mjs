@@ -46,6 +46,17 @@ test('Period screen delegates its existing template to a focused markup renderer
  for(const id of ['periodDaysHeading','cycleHelpButton','cycleHelpDialog','cycleHelpTitle','cycleHelpDescription','cycleTotalIncome','cyclePremium','cycleConfig','configureCycle','premiumCycleStart','cyclePreview','cycleOpeningGross','cycleOpeningThrough','importCycleReport','cycleReportFile','settingsError','saveSettings','closeCycleHelp','periodHistory','periodExport'])
   assert.ok(renderer.includes('id="'+id+'"'),id);
 });
+test('Forecast context delegates unchanged shell markup and navigation binding to a renderer',()=>{
+ const start=forecast.indexOf('function createForecastContext(options) {');
+ const end=forecast.indexOf('\nfunction ',start+10);
+ const factory=forecast.slice(start,end>start?end:undefined);
+ assert.ok(factory.includes('ctx.shell=(title,body,active=ctx.screen)=>renderForecastShell(ctx,title,body,active,heading,nav,leave);'));
+ const rendererStart=forecast.indexOf('function renderForecastShell(ctx,title,body,active,heading,nav,leave) {');
+ const rendererEnd=forecast.indexOf('\nfunction ',rendererStart+10);
+ const renderer=forecast.slice(rendererStart,rendererEnd>rendererStart?rendererEnd:undefined);
+ for(const token of ["root.className='forecast-page'","root.innerHTML=", "ctx.$('#goBack').onclick=","root.querySelectorAll('[data-tab]')",'bindDurations(root);bindIntervals(root);nav();window.scrollTo(0,0);'])
+   assert.ok(renderer.includes(token),'missing shell behavior: '+token);
+});
 test('Day fact form keeps its markup in a focused renderer and leaves state handling in dayView',()=>{
  const start=forecast.indexOf('function dayFactMarkup(ctx,d) {');
  const end=forecast.indexOf('\nfunction weekMarkup(',start);
