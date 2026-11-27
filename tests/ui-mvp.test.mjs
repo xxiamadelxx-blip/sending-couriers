@@ -25,6 +25,17 @@ test('Add Slot form delegates its existing editor markup to a focused renderer',
  for(const id of ['dayForm','dateVisible','formPeriod','slotHint','slotDeductionTotal','slotAccrued','slotAccrualFormula','slotWorkingEditor','formError','saveDay'])
   assert.ok(renderer.includes('id="'+id+'"'),id);
 });
+test('Home dashboard markup is isolated from summary state and event wiring',()=>{
+ const start=app.indexOf('function summary('),end=app.indexOf('function periodDetails(',start);
+ const section=app.slice(start,end>start?end:undefined);
+ assert.ok(section.includes('app.innerHTML=summaryMarkup(s,payout,cycle,gap,selectedPeriod);'));
+ const rendererStart=section.indexOf('function summaryMarkup(s,payout,cycle,gap,selectedPeriod) {');
+ const renderer=section.slice(rendererStart);
+ assert.ok(renderer.includes('return `<header class="overview-top">'));
+ for(const id of ['choosePeriod','summaryPace','summaryHours','summaryOrders','summaryGross','summaryPaid','summaryOwed','summaryOwedPremium','summaryPacePremium','summaryCyclePremium','export'])
+  assert.ok(renderer.includes('id="'+id+'"'),id);
+ assert.ok(section.includes('id="homeEmptyAdd"'),'the empty dashboard action remains in the summary flow');
+});
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));
