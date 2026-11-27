@@ -301,6 +301,7 @@ test('week plan compares, saves, and reloads active hours separately from the fu
   assert.equal(f.commits,0,'Comparing a draft must not save it');
 
   f.root.querySelector('#saveWeek').onclick();
+  assert.equal(f.root.querySelector('#forecastError').hidden,true,f.root.querySelector('#forecastError').textContent);
   assert.equal(f.state.forecast.scenarios.length,1);
   assert.equal(f.state.forecast.plans[f.date].workingMin,540);
   assert.equal(f.state.forecast.plans[f.date].slotMin,840);
