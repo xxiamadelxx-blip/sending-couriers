@@ -170,30 +170,63 @@ function allocateForecastIntervals(parts, forecast) {
  });
 }
 
+function insufficientCountForecast(meta,reason,preparing=false,selectedModel='baseline'){
+ const result={...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:[reason]};
+ if(selectedModel!==undefined)result.selectedModel=selectedModel;
+ if(preparing)result.preparing=true;
+ return result;
+}
+function countForecastTotals(historyTotals,bins){
+ const partialOnly=!historyTotals.length;
+ if(!partialOnly)return {totals:historyTotals,partialOnly};
+ const byDate=new Map();
+ for(const b of bins){
+  const row=byDate.get(b.date)??{date:b.date,orders:0,workingMin:0,workConfirmed:true};
+  row.orders+=b.count;row.workingMin+=b.exposure*60;byDate.set(b.date,row);
+ }
+ return {totals:[...byDate.values()],partialOnly};
+}
+function countForecastAssessment(base,fits,partialOnly,precise,assumption){
+ const low=partialOnly||base.n<5||base.reconstructed>0||!precise||!!assumption;
+ const confidence=low?'low':base.n<15?'limited':'moderate';
+ const reasons=[
+  base.n>=3?'Личная история с учётом дня недели и свежести':'Мало сопоставимых наблюдений',
+  base.reconstructed?`${base.reconstructed} реконструкций в baseline с весом0,3; не подтверждённые часы`:'Подтверждённая экспозиция',
+  fits.timeKind?`Единый тип времени: ${fits.timeKind}; интервалы${fits.step}мин`:'Недостаточно данных для почасового профиля',
+  precise?'Личные паузы исключены':'Время суток неизвестно; только дневная оценка'
+ ];
+ return {confidence,reasons};
+}
+function countForecastWithArtifact(h,date,plan,meta,workingMin,artifact){
+ const fits=artifact.fits,choice=artifact.choice;
+ const {totals,partialOnly}=countForecastTotals(h.totals,fits.bins);
+ if(!totals.length)return insufficientCountForecast(meta,'Не хватает истории с известной работой');
+ const base=baseline(totals,date,workingMin),weights=hourlyWeights(fits,date,plan,base.rate),workWindows=windows(plan);
+ const precise=workWindows.length&&Math.abs(workWindows.reduce((n,w)=>n+w.end-w.start,0)-workingMin)<1;
+ if(precise&&fits.bins.length)base.mean=weights.reduce((n,w)=>n+w.weight,0);
+ const candidate=choice.selected==='nb'?fits.nb:choice.selected==='poisson'?fits.poisson:null;
+ const fit=precise?candidate:null,mean=fit?modelMean(fit,date,plan):base.mean;
+ if(!Number.isFinite(mean)||mean>1000000)
+  return insufficientCountForecast(meta,'Проверьте длительность работы и аномальные итоги истории',false,undefined);
+ const selected=fit?choice.selected:'baseline',usedChoice={...choice,selected};
+ const b={central:Math.round(mean),...countBand(mean,base,usedChoice,fit)};
+ const parts=fit?workWindows.map(w=>({...w,weight:modelMean(fit,date,{intervals:[{...w,state:'WORK'}]})})):weights;
+ const intervalForecasts=precise?allocateForecastIntervals(parts,b):[];
+ const assessment=countForecastAssessment(base,fits,partialOnly,precise,plan.assumption);
+ return {...meta,...b,intervalForecasts,confidence:assessment.confidence,baseline:Math.round(base.mean),comparableN:base.n,reasons:assessment.reasons,selectedModel:fit?.type??'weighted-count-baseline',fit:fit??fits.poisson,timeKind:fits.timeKind,selection:{...choice,selected,results:undefined},features:['exposure','weekday','recency',...(fits.bins.length?['hourly order events']:[])],estimatedExposureN:base.reconstructed};
+}
 function countForecast(input,date,plan){
  const h=history(input,date,plan.zone),workingMin=plan.workingMin,cutoff=new Date(stamp(date)-DAY).toISOString().slice(0,10);
  const meta={comparableN:h.totals.length,modelVersion:plan.modelVersion,trainingCutoff:cutoff,sourceHash:h.key,workingMin,intervalForecasts:[]};
  if(workingMin===0)return {...meta,central:0,lower:0,upper:0,confidence:'rest',baseline:0,reasons:['День отдыха'],selectedModel:'baseline'};
- if(workingMin==null)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Укажите рабочие интервалы'],selectedModel:'baseline'};
+ if(workingMin==null)return insufficientCountForecast(meta,'Укажите рабочие интервалы');
  const artifact=models.get(h.key)??(trainingEnabled?prepareCountModel(input,date,plan.zone):null);
- if(!artifact)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Модель готовится по сохранённой истории'],preparing:true};
+ if(!artifact)return insufficientCountForecast(meta,'Модель готовится по сохранённой истории',true,undefined);
  // Reconstructed day lengths may support an anchored baseline, but cannot establish
  // a personal order rate on their own. Confirmed sub-windows provide that anchor too.
  if(!h.totals.some(d=>d.workConfirmed)&&!artifact.fits.bins.length)
-  return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Не хватает подтверждённого рабочего времени'],selectedModel:'baseline'};
- const fits=artifact.fits,partialOnly=!h.totals.length,byDate=new Map();
- if(partialOnly)for(const b of fits.bins){const row=byDate.get(b.date)??{date:b.date,orders:0,workingMin:0,workConfirmed:true};row.orders+=b.count;row.workingMin+=b.exposure*60;byDate.set(b.date,row);}
- const totals=partialOnly?[...byDate.values()]:h.totals;
- if(!totals.length)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Не хватает истории с известной работой'],selectedModel:'baseline'};
- const base=baseline(totals,date,workingMin),choice=artifact.choice,weights=hourlyWeights(fits,date,plan,base.rate),precise=windows(plan).length&&Math.abs(windows(plan).reduce((n,w)=>n+w.end-w.start,0)-workingMin)<1;
- if(precise&&fits.bins.length)base.mean=weights.reduce((n,w)=>n+w.weight,0);
- const candidate=choice.selected==='nb'?fits.nb:choice.selected==='poisson'?fits.poisson:null,fit=precise?candidate:null,mean=fit?modelMean(fit,date,plan):base.mean;
- if(!Number.isFinite(mean)||mean>1000000)return {...meta,central:null,lower:null,upper:null,confidence:'insufficient',baseline:null,reasons:['Проверьте длительность работы и аномальные итоги истории']};
- const selected=fit?choice.selected:'baseline',usedChoice={...choice,selected},b={central:Math.round(mean),...countBand(mean,base,usedChoice,fit)},parts=fit?windows(plan).map(w=>({...w,weight:modelMean(fit,date,{intervals:[{...w,state:'WORK'}]})})):weights;
- const intervalForecasts=precise?allocateForecastIntervals(parts,b):[];
- const low=partialOnly||base.n<5||base.reconstructed>0||!precise||!!plan.assumption;
- const reasons=[base.n>=3?'Личная история с учётом дня недели и свежести':'Мало сопоставимых наблюдений',base.reconstructed?`${base.reconstructed} реконструкций в baseline с весом0,3; не подтверждённые часы`:'Подтверждённая экспозиция',fits.timeKind?`Единый тип времени: ${fits.timeKind}; интервалы${fits.step}мин`:'Недостаточно данных для почасового профиля',precise?'Личные паузы исключены':'Время суток неизвестно; только дневная оценка'];
- return {...meta,...b,intervalForecasts,confidence:low?'low':base.n<15?'limited':'moderate',baseline:Math.round(base.mean),comparableN:base.n,reasons,selectedModel:fit?.type??'weighted-count-baseline',fit:fit??fits.poisson,timeKind:fits.timeKind,selection:{...choice,selected,results:undefined},features:['exposure','weekday','recency',...(fits.bins.length?['hourly order events']:[])],estimatedExposureN:base.reconstructed};
+  return insufficientCountForecast(meta,'Не хватает подтверждённого рабочего времени');
+ return countForecastWithArtifact(h,date,plan,meta,workingMin,artifact);
 }
 function validateCounts(input,cutoff,modelVersion,zone=''){
  const cached=models.get(history(input,cutoff,zone).key);if(cached?.validation)return cached.validation;
