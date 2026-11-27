@@ -14,6 +14,17 @@ test('UI M1: slot edit form groups hours and money without discarding any existi
  assert.match(css,/#app\.form-page \.slot-form-section \{ padding:16px/);
  assert.match(css,/#app\.form-page \.save-area \.button \{ min-height:56px/);
 });
+test('Add Slot form delegates its existing editor markup to a focused renderer',()=>{
+ const start=app.indexOf('function form('),end=app.indexOf('function dayCaption(',start);
+ const section=app.slice(start,end>start?end:undefined);
+ assert.ok(section.includes('app.innerHTML = slotFormMarkup(original,e,inputHint,orderValue,carried,val);'));
+ const rendererStart=section.indexOf('function slotFormMarkup(original,e,inputHint,orderValue,carried,val) {');
+ const rendererEnd=section.indexOf('function renderSlotWorkingEditor(',rendererStart);
+ const renderer=section.slice(rendererStart,rendererEnd);
+ assert.ok(renderer.includes('return `${editorHeading('));
+ for(const id of ['dayForm','dateVisible','formPeriod','slotHint','slotDeductionTotal','slotAccrued','slotAccrualFormula','slotWorkingEditor','formError','saveDay'])
+  assert.ok(renderer.includes('id="'+id+'"'),id);
+});
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));

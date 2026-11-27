@@ -600,7 +600,18 @@ function form(id = null, returnTo = 'history') {
   // Earlier versions stored omitted deductions as 0; keep those fields optional on edit.
   const val = key => e[key] == null || (['tax', 'parkCommission'].includes(key) && e[key] === 0) ? '' : String(e[key]).replace('.', ',');
   const orderValue = original ? val('dailyOrders') : '0';
-  app.innerHTML = `${editorHeading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll">
+  app.innerHTML = slotFormMarkup(original,e,inputHint,orderValue,carried,val);
+  // Unset optional values remain unknown; new order counters start at an editable zero.
+  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = input.id === 'dailyHours' ? '00:00' : input.id === 'dailyOrders' ? '' : '0.0'; });
+  installLargeTextFormLabelFocusGuard();
+  $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });
+  renderSlotWorkingEditor(e.date,ctx);
+  bindSlotFormEvents(ctx);
+  resetScroll();
+}
+
+function slotFormMarkup(original,e,inputHint,orderValue,carried,val) {
+  return `${editorHeading(original ? 'Изменить запись' : 'Добавить слот')}<form id="dayForm" novalidate><div class="form-scroll">
     <section class="slot-form-section slot-date-section"><h2>Дата и слот</h2><div class="form-grid"><div class="field full form-date-field"><label for="date">Дата</label><div class="date-box"><span id="dateVisible">${esc(formatDate(e.date, true))}</span>${icon.calendar}<input name="date" id="date" type="date" lang="ru" value="${esc(e.date)}" required></div><p class="form-period" id="formPeriod">Период: ${esc(periodLabel(periodFor(e.date)))}</p></div></div></section>
     ${inputHint ? `<p class="hint optional-reading">${esc(inputHint)}</p>` : ''}
     <p class="hint slot-hint" id="slotHint" hidden></p>
@@ -617,13 +628,6 @@ function form(id = null, returnTo = 'history') {
     </div></section>
     <details class="additional slot-working"><summary>Рабочее время дня</summary><div id="slotWorkingEditor"></div></details>
     <div id="formError" class="error" role="alert" hidden></div>${original ? '<button type="button" id="deleteDay" class="danger-button">Удалить эту запись</button>' : ''}</div><div class="save-area"><button class="button primary" id="saveDay" type="submit">${original ? 'Сохранить изменения' : 'Сохранить слот'}</button></div></form>`;
-  // Unset optional values remain unknown; new order counters start at an editable zero.
-  app.querySelectorAll('.form-grid input[type="text"]').forEach(input => { input.placeholder = input.id === 'dailyHours' ? '00:00' : input.id === 'dailyOrders' ? '' : '0.0'; });
-  installLargeTextFormLabelFocusGuard();
-  $('#goBack').addEventListener('click', () => { Native?.clearSlotDraft?.(); returnTo === 'period' ? periodDetails() : history(); });
-  renderSlotWorkingEditor(e.date,ctx);
-  bindSlotFormEvents(ctx);
-  resetScroll();
 }
 
 function renderSlotWorkingEditor(date,ctx) {
