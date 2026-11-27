@@ -133,7 +133,9 @@ test('Period payout action has the same transparent accent style and 48dp target
  assert.match(css,/#app \.payment-status-action\s*\{[^}]*min-height:\s*48px[^}]*background:\s*transparent[^}]*color:\s*var\(--accent\)/);
 });
 test('UI M1: slot history keeps editable ID and complete monetary rows',()=>{
- const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
+ const start=app.indexOf('function historyCardMarkup(e, title) {');
+ const end=app.indexOf('\nfunction ',start+10);
+ const section=app.slice(start,end>start?end:undefined);
  assert.ok(section.includes('class="day-money"'));
  assert.ok(!section.includes('class="day-money" role="group"'), 'Android must expose each monetary row after transfer upgrade');
  for(const v of ['Выплачено','Чаевые','Отдельные бонусы','Итог на экране'])assert.ok(section.includes(v));
@@ -392,15 +394,20 @@ test('Period day totals use independent calculateDay facts, not forecast or Home
  assert.match(app,/form\(button\.dataset\.entry,'period'\)/);
 });
 test('approved History: day reward plus full per-slot fields and separate edit by stable id',()=>{
- const section=app.slice(app.indexOf('function history('),app.indexOf('function closure('));
+ const start=app.indexOf('function history() {');
+ const end=app.indexOf('\nfunction ',start+10);
+ const section=app.slice(start,end>start?end:undefined);
+ const cardStart=app.indexOf('function historyCardMarkup(e, title) {');
+ const cardEnd=app.indexOf('\nfunction ',cardStart+10);
+ const card=app.slice(cardStart,cardEnd>cardStart?cardEnd:undefined);
  assert.match(section,/class="day-summary"/);
  assert.match(section,/class="day-summary-reward"/);
  assert.match(section,/money\(d\.paidReward\)/);
  for(const label of ['Выплачено','Чаевые','Отдельные бонусы','Итог на экране','Отработано','Заказов']) {
-   assert.ok(section.includes(label), 'missing existing entry field or label: '+label);
+   assert.ok(card.includes(label), 'missing existing entry field or label: '+label);
  }
- assert.ok(section.includes('data-entry="${esc(e.id)}"'));
- assert.ok(section.includes("d.entries.map((e, i) => card(e, `Слот ${i + 1}`)"));
+ assert.ok(card.includes('data-entry="${esc(e.id)}"'));
+ assert.ok(section.includes("d.entries.map((e, i) => historyCardMarkup(e, `Слот ${i + 1}`)"));
 });
 
 test('Period secondary 12-week tracker shows gross-income and 5% premium separately from paid amounts',()=>{
