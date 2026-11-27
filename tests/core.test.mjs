@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   periodFor, shiftPeriod, isoDate, parseMoney, parseInteger, parseHours, emptyState, upsertEntry,
   calculate, reserveMinutes, reserveText, markdownReport, mergeImport, normalizeState,
-  deductionChecks, pendingLegacy, ruNumber, paceText, plural, accruedIncome, goalText, money
+  deductionChecks, pendingLegacy, setPaymentTerms, ruNumber, paceText, plural, accruedIncome, goalText, money
 } from '../web/core.mjs';
 
 test('ru-RU formatting and money formula use stable units and kopecks',()=>{
@@ -351,6 +351,45 @@ test('JSON imports merge dates, preserve other periods and process schema 1 auto
   const old = mergeImport(state, [oldDay('2026-09-30', 179, 345)]);
   assert.equal(pendingLegacy(old, '2026-09-18').length, 0); assert.equal(calculate(old, '2026-09-18').hours, 179);
   assert.equal(calculate(old, period).hours, 8.5);
+});
+
+test('import conflict guards preserve existing cycle and payment settings', () => {
+  const cycleStart = '2026-09-18';
+  const rule = { effectivePeriodStart: cycleStart, hourlyRate: 400, basePace: 1.8, premiumPace: 2.8, paceBonusPercent: 5, cycleBonusPercent: 5 };
+  const empty = emptyState();
+  let state = normalizeState({ ...empty, settings: { ...empty.settings, premiumCycleStart: cycleStart } });
+  state = setPaymentTerms(state, rule);
+  const before = JSON.stringify(state);
+  const conflictingRule = { ...rule, hourlyRate: 420 };
+
+  assert.throws(() => mergeImport(state, {
+    schemaVersion: 5, entries: [],
+    settings: { premiumCycleStart: '2026-09-19', paymentRules: [conflictingRule] }
+  }), /В копии другая дата начала/);
+  assert.equal(JSON.stringify(state), before);
+
+  assert.throws(() => mergeImport(state, {
+    schemaVersion: 5, entries: [],
+    settings: { premiumCycleStart: cycleStart, paymentRules: [conflictingRule] }
+  }), /В копии другие условия оплаты/);
+  assert.equal(JSON.stringify(state), before);
+
+  const opening = normalizeState({
+    ...state,
+    settings: {
+      ...state.settings,
+      cycleOpening: { cycleStart, through: '2026-10-01', grossIncome: 50000, source: 'manual' }
+    }
+  });
+  const openingBefore = JSON.stringify(opening);
+  assert.throws(() => mergeImport(opening, {
+    schemaVersion: 5, entries: [],
+    settings: {
+      premiumCycleStart: cycleStart,
+      cycleOpening: { cycleStart, through: '2026-10-01', grossIncome: 50001, source: 'manual' }
+    }
+  }), /В копии другая накопленная сумма за 12 недель/);
+  assert.equal(JSON.stringify(opening), openingBefore);
 });
 
 test('a partial cumulative import recalculates following untouched intervals and preserves new days', () => {

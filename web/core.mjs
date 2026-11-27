@@ -763,10 +763,7 @@ function readState(raw) {
 export function normalizeState(raw) {
   return resolveOldReadings(readState(raw));
 }
-export function mergeImport(state, incoming) {
-  // Resolve after merging so a partial accumulated import updates adjacent
-  // unchanged intervals using all original readings, rather than duplicating time.
-  const parsed = readState(incoming);
+function mergeImportSettings(state, incoming, parsed) {
   const currentStart = state.settings?.premiumCycleStart ?? null;
   const incomingStart = parsed.settings.premiumCycleStart;
   if (currentStart && incomingStart && currentStart !== incomingStart) throw new Error('В копии другая дата начала 12-недельного цикла. Сначала укажите нужную дату во вкладке «Период» и повторите импорт. Записи не изменены.');
@@ -789,6 +786,10 @@ export function mergeImport(state, incoming) {
   const settings = normalizeSettings({ ...state.settings, ...(incoming.settings ?? {}),
     paymentRules:[...rules.values()], premiumCycleStart: currentStart ?? incomingStart,
     cycleOpening:currentOpening ?? incomingOpening });
+  return settings;
+}
+
+function mergeImportEntries(state, incoming, parsed) {
   const byId = new Map(state.entries.map(e => [e.id, e]));
   const oldInput = incoming.schemaVersion !== SCHEMA_VERSION && !(Array.isArray(incoming) ? incoming : incoming.entries).some(e => e?.id != null);
   for (const row of parsed.entries) {
@@ -802,6 +803,15 @@ export function mergeImport(state, incoming) {
   }
   const entries = [...byId.values()].sort(entryOrder);
   validateSequence(entries);
+  return entries;
+}
+
+export function mergeImport(state, incoming) {
+  // Resolve after merging so a partial accumulated import updates adjacent
+  // unchanged intervals using all original readings, rather than duplicating time.
+  const parsed = readState(incoming);
+  const settings = mergeImportSettings(state, incoming, parsed);
+  const entries = mergeImportEntries(state, incoming, parsed);
   return resolveOldReadings({ schemaVersion: SCHEMA_VERSION, entries, closures: { ...state.closures, ...parsed.closures }, settings, forecast:mergeForecast(state.forecast,incoming.forecast) });
 }
 function mdSafe(value) {
