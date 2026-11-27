@@ -6,6 +6,29 @@ const css=await readFile(new URL('../web/style.css',import.meta.url),'utf8');
 const qa=await readFile(new URL('../qa/ui_audit_matrix.py',import.meta.url),'utf8');
 const forecast=await readFile(new URL('../web/forecast-ui.mjs',import.meta.url),'utf8');
 const core=await readFile(new URL('../web/core.mjs',import.meta.url),'utf8');
+test('History screen keeps card rendering and action binding in separate steps',()=>{
+ const start=app.indexOf('function history() {');
+ const end=app.indexOf('\nfunction ',start+10);
+ const view=app.slice(start,end>start?end:undefined);
+ assert.ok(view.includes('historyCardMarkup(d.entries[0], formatDate(date, true))'));
+ assert.ok(view.includes('historyCardMarkup(e, `Слот ${i + 1}`)'));
+ assert.ok(view.includes('bindHistoryActions();'));
+ assert.ok(view.indexOf('app.innerHTML')<view.indexOf('bindHistoryActions();'),'actions bind after history markup is mounted');
+ assert.doesNotMatch(view,/\.addEventListener\(/);
+ const cardStart=app.indexOf('function historyCardMarkup(e, title) {');
+ const cardEnd=app.indexOf('\nfunction ',cardStart+10);
+ const card=app.slice(cardStart,cardEnd>cardStart?cardEnd:undefined);
+ for(const token of ['class="day-card"','class="day-meters"','data-entry="${esc(e.id)}"','Выплачено','Чаевые','Отдельные бонусы'])
+  assert.ok(card.includes(token),token);
+ const actionStart=app.indexOf('function bindHistoryActions() {');
+ const actionEnd=app.indexOf('\nfunction ',actionStart+10);
+ const actions=app.slice(actionStart,actionEnd>actionStart?actionEnd:undefined);
+ for(const token of ["$('#goBack')",".edit-day","#historyExport","#closePeriod","#importData","#importVideo","#importInput"])
+  assert.ok(actions.includes(token),token);
+ assert.ok(actions.includes('file.size > 2000000'),'JSON import size limit remains');
+ assert.ok(actions.includes('Native.importData()'),'native JSON import path remains');
+ assert.ok(actions.includes('Native?.importVideo'),'native video import path remains');
+});
 
 test('UI M1: slot edit form groups hours and money without discarding any existing field',()=>{
  const section=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
