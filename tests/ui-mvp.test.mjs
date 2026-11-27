@@ -435,7 +435,9 @@ test('Add Slot form uses accessible in-app work-mode choice rather than Android 
  assert.doesNotMatch(page,/<select id="slotWorkMode"/,'native Android selector must not open a system popup');
  assert.ok(render.includes('host.innerHTML=slotWorkingMarkup('));
  assert.ok(render.includes('bindSlotWorkingEditor(host,ctx,choices)'));
- for(const s of ['id="slotWorkModeButton"','id="slotModeOptions"','role="radiogroup"','data-slot-mode="${key}"',"['unknown','Не указывать']","['intervals','Интервалы С—До']","['total','Итого за день']","['rest','Выходной']"])
+ for(const s of ["['unknown','Не указывать']","['intervals','Интервалы С—До']","['total','Итого за день']","['rest','Выходной']"])
+   assert.ok(render.includes(s),s);
+ for(const s of ['id="slotWorkModeButton"','id="slotModeOptions"','role="radiogroup"','data-slot-mode="${key}"'])
    assert.ok(markup.includes(s),s);
  assert.ok(markup.includes('id="slotWorkMode" type="hidden" value="${mode}"'),'the mode is tracked as a real form control for save');
  assert.ok(actions.includes('workingDirty=true'),'mode changes must be tracked as user edits');
