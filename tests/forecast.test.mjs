@@ -171,6 +171,11 @@ test('forecast state merge unions video slots once and gives a daily total autho
  const reconciled=mergeForecast(merged,daily).days[date];
  assert.equal(reconciled.orders,26);assert.equal(reconciled.ordersScope,'daily');assert.equal(reconciled.videoSlots.length,2);assert.equal(reconciled.workingMin,481);assert.deepEqual(reconciled.sourceConflicts,[]);
 });
+test('forecast merge rejects edits to an immutable saved snapshot',()=>{
+ let current=history();current=ensureForecast(current,new Date('2026-10-01T03:00:00Z'));
+ const incoming=JSON.parse(JSON.stringify(current));assert.ok(incoming.snapshots.length);incoming.snapshots[0].partialDayIssue=!incoming.snapshots[0].partialDayIssue;
+ assert.throws(()=>mergeForecast(current,incoming),/зафиксированный прогноз или профиль/);
+});
 test('today financial projection keeps the confirmed fact and predicts only the remaining plan',()=>{
  let s=emptyState();s.forecast=history();s.forecast=saveDay(s.forecast,{...confirmed('2026-10-01',100),completed:false,asOfMinute:17*60});
  let r=forecastFinances(s,'2026-10-01',{},'2026-10-01').weekFinancial.rows[0];assert.ok(r.orders>100&&r.orders<127);assert.equal(r.source,'fact+remaining');assert.equal(r.workingMin,540);assert.equal(r.accountedMin,840);

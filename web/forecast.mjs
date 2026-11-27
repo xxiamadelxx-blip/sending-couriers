@@ -355,38 +355,72 @@ export function normalizeForecast(input) {
   normalizeForecastSettings(input,result);
   return result;
 }
-export function mergeForecast(current,incoming) {
-  if(incoming==null) return current??emptyForecast();
-  const a=normalizeForecast(current??emptyForecast()),b=normalizeForecast(incoming);
-  const keyed=(left,right,key,immutable=false)=>{ const map=new Map(left.map(v=>[v[key],v])); for(const v of right) { if(immutable&&map.has(v[key])&&JSON.stringify(map.get(v[key]))!==JSON.stringify(v)) fail('В копии изменён зафиксированный прогноз или профиль. Импорт отменён.'); map.set(v[key],v); } return [...map.values()]; };
-  const days={...a.days}; for(const incoming of Object.values(b.days)) {
-    const old=days[incoming.date];let d=incoming;if(!old){days[d.date]=d;continue;}
-    const sourceConflicts=[...new Set([...old.sourceConflicts,...d.sourceConflicts])];
-    const slots=mergeVideoSlots(old.videoSlots,d.videoSlots);
-    const oldDaily=old.ordersConfirmed&&old.ordersScope!=='video_slots';
-    const incomingDaily=d.ordersConfirmed&&d.ordersScope!=='video_slots';
-    const dailyConflict=oldDaily&&incomingDaily&&old.orders!==d.orders;
-    if(oldDaily||incomingDaily) {
-      for(let i=sourceConflicts.length-1;i>=0;i--)if(sourceConflicts[i].startsWith('Видео-слот '))sourceConflicts.splice(i,1);
-    }
-    if(old.manualTime) {
-      if(JSON.stringify([old.intervals,old.workingMin,old.precision])!==JSON.stringify([d.intervals,d.workingMin,d.precision]))sourceConflicts.push('В копии другие рабочие часы. Сохранено ручное уточнение; подтвердите время дня.');
-      d={...d,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions};
-    }
-    if(old.accountedConfirmed&&d.accountedConfirmed&&old.appAccountedMin!==d.appAccountedMin) {sourceConflicts.push('В копии другие часы Яндекса. Сохранён подтверждённый знаменатель; уточните день.');d={...d,appAccountedMin:old.appAccountedMin};}
-    if(dailyConflict) {sourceConflicts.push('В копии другой итог заказов. Сохранён подтверждённый итог; уточните день.');d={...d,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...d.fieldSources,orders:old.fieldSources.orders}};}
-    else if(oldDaily) d={...d,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...d.fieldSources,orders:old.fieldSources.orders}};
-    else if(incomingDaily) d={...d,orders:incoming.orders,ordersConfirmed:true,ordersScope:'daily'};
-    else if(slots.length) {
-      const slotConflict=slots.some(slot=>slot.conflicts.length>0);
-      d={...d,orders:slots.reduce((sum,slot)=>sum+slot.orderCount,0),ordersConfirmed:true,ordersScope:'video_slots',
-        fieldSources:{...d.fieldSources,orders:{source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',note:'Сумма отдельных подтверждённых видео-слотов за дату.'}}};
-      if(slotConflict)sourceConflicts.push('Видео-слоты содержат разные итоги для одного идентификатора; проверьте источник.');
-    }
-    d={...d,videoSlots:slots,orderEvidence:mergeVideoEvidence(old.orderEvidence,d.orderEvidence),sourceConflicts:[...new Set(sourceConflicts)]};
-    days[d.date]=normalizeDay(d);
+function mergeForecastKeyed(left,right,key,immutable=false) {
+  const map=new Map(left.map(value=>[value[key],value]));
+  for(const value of right) {
+    if(immutable&&map.has(value[key])&&JSON.stringify(map.get(value[key]))!==JSON.stringify(value))fail('В копии изменён зафиксированный прогноз или профиль. Импорт отменён.');
+    map.set(value[key],value);
   }
-  return normalizeForecast({...a,days,profiles:keyed(a.profiles,b.profiles,'version',true),snapshots:keyed(a.snapshots,b.snapshots,'id',true),evaluations:keyed(a.evaluations,b.evaluations,'id',true),models:keyed(a.models,b.models,'id',true),scenarios:keyed(a.scenarios,b.scenarios,'id'),imports:keyed(a.imports,b.imports,'id',true),weather:a.weather??b.weather,trainedModel:a.trainedModel??b.trainedModel,plans:{...b.plans,...a.plans},weekConfig:b.weekConfig??a.weekConfig,location:a.location??b.location,typicalPlan:a.typicalPlan??b.typicalPlan,archive:Object.fromEntries(['forecasts','accuracy','models','financialRules'].map(k=>[k,keyed(a.archive[k],b.archive[k],'id',true)]))});
+  return [...map.values()];
+}
+function mergeForecastArchive(current,incoming) {
+  return Object.fromEntries(['forecasts','accuracy','models','financialRules'].map(key=>[key,mergeForecastKeyed(current[key],incoming[key],'id',true)]));
+}
+function mergeForecastTimeFacts(old,incoming,sourceConflicts) {
+  let day=incoming;
+  if(old.manualTime) {
+    if(JSON.stringify([old.intervals,old.workingMin,old.precision])!==JSON.stringify([day.intervals,day.workingMin,day.precision]))sourceConflicts.push('В копии другие рабочие часы. Сохранено ручное уточнение; подтвердите время дня.');
+    day={...day,intervals:old.intervals,workingMin:old.workingMin,precision:old.precision,workConfirmed:old.workConfirmed,manualTime:true,revisions:old.revisions};
+  }
+  if(old.accountedConfirmed&&day.accountedConfirmed&&old.appAccountedMin!==day.appAccountedMin) {
+    sourceConflicts.push('В копии другие часы Яндекса. Сохранён подтверждённый знаменатель; уточните день.');
+    day={...day,appAccountedMin:old.appAccountedMin};
+  }
+  return day;
+}
+function mergeForecastOrderFacts(old,day,incoming,slots,sourceConflicts,oldDaily,incomingDaily,dailyConflict) {
+  if(dailyConflict) {
+    sourceConflicts.push('В копии другой итог заказов. Сохранён подтверждённый итог; уточните день.');
+    day={...day,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...day.fieldSources,orders:old.fieldSources.orders}};
+  } else if(oldDaily) day={...day,orders:old.orders,ordersConfirmed:true,ordersScope:'daily',fieldSources:{...day.fieldSources,orders:old.fieldSources.orders}};
+  else if(incomingDaily) day={...day,orders:incoming.orders,ordersConfirmed:true,ordersScope:'daily'};
+  else if(slots.length) {
+    const slotConflict=slots.some(slot=>slot.conflicts.length>0);
+    day={...day,orders:slots.reduce((sum,slot)=>sum+slot.orderCount,0),ordersConfirmed:true,ordersScope:'video_slots',
+      fieldSources:{...day.fieldSources,orders:{source:'video_slots',kind:'FACT',status:slotConflict?'CONFLICT':'CONFIRMED',note:'Сумма отдельных подтверждённых видео-слотов за дату.'}}};
+    if(slotConflict)sourceConflicts.push('Видео-слоты содержат разные итоги для одного идентификатора; проверьте источник.');
+  }
+  return day;
+}
+function mergeForecastDay(old,incoming) {
+  const sourceConflicts=[...new Set([...old.sourceConflicts,...incoming.sourceConflicts])];
+  const slots=mergeVideoSlots(old.videoSlots,incoming.videoSlots);
+  const oldDaily=old.ordersConfirmed&&old.ordersScope!=='video_slots';
+  const incomingDaily=incoming.ordersConfirmed&&incoming.ordersScope!=='video_slots';
+  const dailyConflict=oldDaily&&incomingDaily&&old.orders!==incoming.orders;
+  if(oldDaily||incomingDaily) {
+    for(let i=sourceConflicts.length-1;i>=0;i--)if(sourceConflicts[i].startsWith('Видео-слот '))sourceConflicts.splice(i,1);
+  }
+  let day=mergeForecastTimeFacts(old,incoming,sourceConflicts);
+  day=mergeForecastOrderFacts(old,day,incoming,slots,sourceConflicts,oldDaily,incomingDaily,dailyConflict);
+  return normalizeDay({...day,videoSlots:slots,orderEvidence:mergeVideoEvidence(old.orderEvidence,day.orderEvidence),sourceConflicts:[...new Set(sourceConflicts)]});
+}
+function mergeForecastDays(current,incoming) {
+  const days={...current};
+  for(const day of Object.values(incoming)) {
+    const old=days[day.date];
+    if(!old) {days[day.date]=day;continue;}
+    days[day.date]=mergeForecastDay(old,day);
+  }
+  return days;
+}
+function mergeForecastState(current,incoming,days) {
+  return normalizeForecast({...current,days,profiles:mergeForecastKeyed(current.profiles,incoming.profiles,'version',true),snapshots:mergeForecastKeyed(current.snapshots,incoming.snapshots,'id',true),evaluations:mergeForecastKeyed(current.evaluations,incoming.evaluations,'id',true),models:mergeForecastKeyed(current.models,incoming.models,'id',true),scenarios:mergeForecastKeyed(current.scenarios,incoming.scenarios,'id'),imports:mergeForecastKeyed(current.imports,incoming.imports,'id',true),weather:current.weather??incoming.weather,trainedModel:current.trainedModel??incoming.trainedModel,plans:{...incoming.plans,...current.plans},weekConfig:incoming.weekConfig??current.weekConfig,location:current.location??incoming.location,typicalPlan:current.typicalPlan??incoming.typicalPlan,archive:mergeForecastArchive(current.archive,incoming.archive)});
+}
+export function mergeForecast(current,incoming) {
+  if(incoming==null)return current??emptyForecast();
+  const a=normalizeForecast(current??emptyForecast()),b=normalizeForecast(incoming);
+  return mergeForecastState(a,b,mergeForecastDays(a.days,b.days));
 }
 export function saveDay(data,input,now=new Date().toISOString()) {
   const old=data.days[input.date],p=profileFor(data,input.date);
