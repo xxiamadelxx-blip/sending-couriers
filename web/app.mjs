@@ -380,7 +380,50 @@ function periodDetails() {
   // Every displayed day total comes from the same existing calculateDay model.
   const daily=periodDayMarkup(s.entries,date=>calculateDay(state,date),
     date=>formatDate(date,true),hoursText,money,esc);
-  app.innerHTML = `${heading('Период')}${navigation()}
+  app.innerHTML = periodDetailsMarkup(s,cycle,opening,daily,state);
+  bottomNav('period'); $('#goBack').addEventListener('click', summary); bindNavigation(periodDetails);
+  const cycleHelp=$('#cycleHelpDialog');
+  $('#cycleHelpButton').addEventListener('click',()=>cycleHelp.showModal());
+  $('#closeCycleHelp').addEventListener('click',()=>cycleHelp.close());
+  function previewCycle() {
+    try {
+      const next = updateSettings(state, { premiumCycleStart: $('#premiumCycleStart').value });
+      const nextCycle = calculatePremiumCycle(next, $('#premiumCycleStart').value || today());
+      $('#cyclePreview').textContent = nextCycle.start ? `${formatDate(nextCycle.start)} — ${formatDate(nextCycle.end)}` : 'Не настроено';
+    } catch (error) { $('#cyclePreview').textContent = error.message; }
+  }
+  $('#premiumCycleStart').addEventListener('input', previewCycle); previewCycle();
+  function cycleOpeningInput(){
+    const gross=$('#cycleOpeningGross').value.trim(),through=$('#cycleOpeningThrough').value;
+    if (!gross && !through) return null;
+    if (!gross || !through) throw new Error('Укажите и накопленную сумму, и дату её окончания.');
+    return {cycleStart:$('#premiumCycleStart').value,through,grossIncome:gross,
+      source:$('#cycleOpeningGross').dataset.source || (opening && gross.replace(/\\s/g,'').replace(',','.')===String(opening.grossIncome) && through===opening.through ? opening.source : 'manual')};
+  }
+  $('#cycleOpeningGross').addEventListener('input',e=>{ e.target.dataset.source='manual'; });
+  $('#cycleOpeningThrough').addEventListener('change',()=>{ $('#cycleOpeningGross').dataset.source='manual'; });
+  $('#importCycleReport').addEventListener('click',()=>{
+    if(Native) Native.importData(); else $('#cycleReportFile').click();
+  });
+  $('#cycleReportFile').addEventListener('change',async e=>{
+    const selected=e.target.files?.[0]; e.target.value='';
+    if(selected) window.receiveImport(await selected.text());
+  });
+  $('#settingsForm').addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      const saved=updateSettings(state,{premiumCycleStart:$('#premiumCycleStart').value,cycleOpening:cycleOpeningInput()});
+      persist(saved);periodDetails();notify('Доход сохранён, премия пересчитана');
+    }
+    catch (error) { $('#settingsError').textContent = error.message; $('#settingsError').hidden = false; feedback('error'); }
+  });
+  $('#periodExport').addEventListener('click', openExportDialog);
+  $('#periodHistory').addEventListener('click', history);
+  app.querySelectorAll('.period-slot-edit').forEach(button=>button.addEventListener('click',()=>form(button.dataset.entry,'period')));
+  resetScroll();
+}
+function periodDetailsMarkup(s,cycle,opening,daily,state) {
+  return `${heading('Период')}${navigation()}
     <section class="period-days" aria-labelledby="periodDaysHeading">
       <div class="period-days-heading"><h2 id="periodDaysHeading">Ведомость дней</h2><span>14 дней</span></div>
       <div class="period-days-list">${daily}</div>
@@ -425,47 +468,8 @@ function periodDetails() {
       <button class="button quiet" id="periodHistory" type="button">Записи периода${icons.chevron}</button>
       <button class="button quiet export-action" id="periodExport" type="button">${icons.share}Экспорт для ChatGPT</button>
     </div>`;
-  bottomNav('period'); $('#goBack').addEventListener('click', summary); bindNavigation(periodDetails);
-  const cycleHelp=$('#cycleHelpDialog');
-  $('#cycleHelpButton').addEventListener('click',()=>cycleHelp.showModal());
-  $('#closeCycleHelp').addEventListener('click',()=>cycleHelp.close());
-  function previewCycle() {
-    try {
-      const next = updateSettings(state, { premiumCycleStart: $('#premiumCycleStart').value });
-      const nextCycle = calculatePremiumCycle(next, $('#premiumCycleStart').value || today());
-      $('#cyclePreview').textContent = nextCycle.start ? `${formatDate(nextCycle.start)} — ${formatDate(nextCycle.end)}` : 'Не настроено';
-    } catch (error) { $('#cyclePreview').textContent = error.message; }
-  }
-  $('#premiumCycleStart').addEventListener('input', previewCycle); previewCycle();
-  function cycleOpeningInput(){
-    const gross=$('#cycleOpeningGross').value.trim(),through=$('#cycleOpeningThrough').value;
-    if (!gross && !through) return null;
-    if (!gross || !through) throw new Error('Укажите и накопленную сумму, и дату её окончания.');
-    return {cycleStart:$('#premiumCycleStart').value,through,grossIncome:gross,
-      source:$('#cycleOpeningGross').dataset.source || (opening && gross.replace(/\\s/g,'').replace(',','.')===String(opening.grossIncome) && through===opening.through ? opening.source : 'manual')};
-  }
-  $('#cycleOpeningGross').addEventListener('input',e=>{ e.target.dataset.source='manual'; });
-  $('#cycleOpeningThrough').addEventListener('change',()=>{ $('#cycleOpeningGross').dataset.source='manual'; });
-  $('#importCycleReport').addEventListener('click',()=>{
-    if(Native) Native.importData(); else $('#cycleReportFile').click();
-  });
-  $('#cycleReportFile').addEventListener('change',async e=>{
-    const selected=e.target.files?.[0]; e.target.value='';
-    if(selected) window.receiveImport(await selected.text());
-  });
-  $('#settingsForm').addEventListener('submit', event => {
-    event.preventDefault();
-    try {
-      const saved=updateSettings(state,{premiumCycleStart:$('#premiumCycleStart').value,cycleOpening:cycleOpeningInput()});
-      persist(saved);periodDetails();notify('Доход сохранён, премия пересчитана');
-    }
-    catch (error) { $('#settingsError').textContent = error.message; $('#settingsError').hidden = false; feedback('error'); }
-  });
-  $('#periodExport').addEventListener('click', openExportDialog);
-  $('#periodHistory').addEventListener('click', history);
-  app.querySelectorAll('.period-slot-edit').forEach(button=>button.addEventListener('click',()=>form(button.dataset.entry,'period')));
-  resetScroll();
 }
+
 function settings() {
   if(!leaveForecast())return;
   app.className = 'settings-page'; view = 'settings'; editingId = null;

@@ -36,6 +36,16 @@ test('Home dashboard markup is isolated from summary state and event wiring',()=
   assert.ok(renderer.includes('id="'+id+'"'),id);
  assert.ok(section.includes('id="homeEmptyAdd"'),'the empty dashboard action remains in the summary flow');
 });
+test('Period screen delegates its existing template to a focused markup renderer',()=>{
+ const start=app.indexOf('function periodDetails('),end=app.indexOf('function settings(',start);
+ const section=app.slice(start,end>start?end:undefined);
+ assert.ok(section.includes('app.innerHTML = periodDetailsMarkup(s,cycle,opening,daily,state);'));
+ const rendererStart=section.indexOf('function periodDetailsMarkup(s,cycle,opening,daily,state) {');
+ const renderer=section.slice(rendererStart);
+ assert.ok(renderer.includes('return `${heading('));
+ for(const id of ['periodDaysHeading','cycleHelpButton','cycleHelpDialog','cycleHelpTitle','cycleHelpDescription','cycleTotalIncome','cyclePremium','cycleConfig','configureCycle','premiumCycleStart','cyclePreview','cycleOpeningGross','cycleOpeningThrough','importCycleReport','cycleReportFile','settingsError','saveSettings','closeCycleHelp','periodHistory','periodExport'])
+  assert.ok(renderer.includes('id="'+id+'"'),id);
+});
 test('Period is a day-entry ledger, with secondary payment/cycle information instead of duplicate Home totals',()=>{
  const section=app.slice(app.indexOf('function periodDetails('),app.indexOf('function settings('));
  assert.ok(section.includes('periodDayMarkup(s.entries,date=>calculateDay(state,date)'));
