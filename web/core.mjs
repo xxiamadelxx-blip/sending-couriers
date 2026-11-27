@@ -807,22 +807,22 @@ export function mergeImport(state, incoming) {
 function mdSafe(value) {
   return String(value ?? '').replace(/\r?\n/g, ' · ').replace(/\|/g, '\\|').replace(/[<>]/g, s => s === '<' ? '&lt;' : '&gt;');
 }
-export function markdownReport(state, id, exportDate = today()) {
-  const s = calculate(state, id);
-  const cycle = calculatePremiumCycle(state, exportDate >= id && exportDate <= periodFor(id).end ? exportDate : periodFor(id).end);
-  const slotCounts = new Map();
-  const rows = s.entries.map(e => {
+function markdownReportRows(state,entries) {
+    const slotCounts = new Map();
+  const rows = entries.map(e => {
     const number = (slotCounts.get(e.date) ?? 0) + 1;
     slotCounts.set(e.date, number);
     const legacy = e.legacyReading;
     const origin = legacy ? `${legacy.edited ? 'Исправлено вручную' : legacy.interpretation === 'daily' ? 'Ввод за день' : `Накопительные показания${legacy.fromDate ? ` после ${legacy.fromDate}` : ' с начала периода'}`}; исходные показания на ${legacy.date}: ${legacy.hours} ч, ${legacy.orders} заказов` : 'Ввод за слот / день';
     return `| ${e.date} | ${hoursText(e.dailyHours)} | ${e.dailyOrders ?? '—'} | ${money(e.reward)} | ${money(e.tips)} | ${money(e.tax)} | ${money(e.parkCommission)} | ${money(e.separateBonus)} | ${money(e.displayedNet)} | ${mdSafe(origin)} | ${mdSafe(e.note)} | ${number} |`;
   });
-  const days = [...new Set(s.entries.map(e => e.date))].map(date => {
+  const days = [...new Set(entries.map(e => e.date))].map(date => {
     const d = calculateDay(state, date);
     return `| ${date} | ${hoursText(d.hours)} | ${d.orders ?? '—'} | ${money(d.paidReward)} | ${money(d.tips)} | ${money(d.tax)} | ${money(d.parkCommission)} | ${money(d.separateBonus)} | ${money(d.accruedIncome)} |`;
   });
-  const p = periodFor(id);
+  return {rows,days};
+}
+function markdownReportOverview(s,p,exportDate) {
   return [
     '# Courier Forecast Report', '', `Версия приложения: ${APP_VERSION}; формат данных: ${SCHEMA_VERSION}.`,
     'Проверь этот отчёт на ошибки: пересчитай суммы слотов и дней, темп, остаток и обе премии по указанным формулам. Найди пропуски и расхождения. Не придумывай отсутствующие выплаты, заказы или чаевые. Расчётные премии не являются фактическими выплатами. Итоги дней и строки слотов — одни и те же деньги, не складывай их повторно.', '',
@@ -841,6 +841,10 @@ export function markdownReport(state, id, exportDate = today()) {
     '## Финансы периода', `- Почасовая база: ${money(s.hourlyBase)}`, `- Чаевые: ${money(s.tips)}`, `- Удержания (налог и комиссия парка): ${money(s.deductions)}`,
     `- Начислено по формуле база + чаевые − удержания: ${money(s.accruedIncome)}`, `- Выплачено: ${money(s.paidReward)}`,
     `- Осталось выплатить: ${money(s.estimatedYandexOwed)}`, `- Отдельные бонусы: ${money(s.separateBonus)}`, `- Общий доход с отдельными бонусами: ${money(s.grossUserIncome)}`, '',
+  ];
+}
+function markdownReportPremiums(state,s,cycle) {
+  return [
     '## Расчётные премии',
     `- Премия за темп от ${goalText(s.terms.premiumPace)} заказа/ч: ${money(s.pacePremium)}. Формула: ${percentText(s.terms.paceBonusPercent)}% × почасовая база по ставкам дат записей, только при точном темпе ≥ ${goalText(s.terms.premiumPace)}.`,
     `- Начало 12-недельного отсчёта: ${state.settings?.premiumCycleStart ?? 'не настроено'}.`,
@@ -857,6 +861,10 @@ export function markdownReport(state, id, exportDate = today()) {
     '### Записи 12-недельного цикла',
     '| Дата | ID записи | Часы |', '| --- | --- | ---: |',
     ...cycle.entries.map(e => `| ${e.date} | ${mdSafe(e.id)} | ${hoursText(e.dailyHours)} |`), '',
+  ];
+}
+function markdownReportEntries(s,rows,days) {
+  return [
     '## Итоги по дням', 'Суммы записей за дату. Они уже включены в итог периода и не прибавляются повторно.',
     '| Дата | Часы | Заказы | Выплачено | Чаевые | Налог | Комиссия парка | Бонусы отдельно | Начислено |',
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |', ...days, '',
@@ -868,6 +876,10 @@ export function markdownReport(state, id, exportDate = today()) {
     '| ID | Дата | Создано | Изменено |', '| --- | --- | --- | --- |',
     ...s.entries.map(e => `| ${mdSafe(e.id)} | ${e.date} | ${mdSafe(e.createdAt)} | ${mdSafe(e.updatedAt)} |`), '',
     ...(s.closure ? ['## Закрытие периода', `- Фактическая финальная доплата: ${money(s.closure.finalAdjustment)}`, `- Примечание: ${mdSafe(s.closure.note) || '—'}`, '- Финальная доплата сохранена отдельно и не прибавляется повторно к почасовой базе.', ''] : []),
+  ];
+}
+function markdownReportRules(state,s) {
+  return [
     '## Условия оплаты',
     `- Выбранный период: ${money(s.terms.hourlyRate)}/ч; темп оплаты ${goalText(s.terms.basePace)}; темп премии ${goalText(s.terms.premiumPace)}; премия за темп ${percentText(s.terms.paceBonusPercent)}%; за 12 недель ${percentText(s.terms.cycleBonusPercent)}%.`,
     '| Начиная с даты | Ставка | Темп оплаты | Темп премии | За темп | За 12 недель |', '| --- | ---: | ---: | ---: | ---: | ---: |',
@@ -888,5 +900,17 @@ export function markdownReport(state, id, exportDate = today()) {
     '- Прежние дневные записи учитываются автоматически. Ранее сохранённые вклады дней не преобразуются повторно. Старые возрастающие показания более 24 часов распознаются как накопительные и преобразуются в разницы; разница через пропущенные даты относится ко всему интервалу.',
     '- Финансовые суммы включают все записи периода, включая выходные и дни, добавленные задним числом.',
     '- Если часы ещё не записаны, почасовая база, общий доход и остаток не определяются.', ''
+  ];
+}
+export function markdownReport(state, id, exportDate = today()) {
+  const s = calculate(state, id);
+  const cycle = calculatePremiumCycle(state, exportDate >= id && exportDate <= periodFor(id).end ? exportDate : periodFor(id).end);
+  const {rows,days}=markdownReportRows(state,s.entries);
+  const p = periodFor(id);
+  return [
+    ...markdownReportOverview(s,p,exportDate),
+    ...markdownReportPremiums(state,s,cycle),
+    ...markdownReportEntries(s,rows,days),
+    ...markdownReportRules(state,s)
   ].join('\n') + forecastReport(state.forecast ?? emptyForecast());
 }
