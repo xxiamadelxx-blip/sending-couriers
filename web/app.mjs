@@ -648,7 +648,12 @@ function renderSlotWorkingEditor(date,ctx) {
     const unknown=actual?.intervals.filter(i=>i.state==='UNKNOWN')??[];
     const clock=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
     const choices=[['unknown','Не указывать'],['intervals','Интервалы С—До'],['total','Итого за день'],['rest','Выходной']];
-    host.innerHTML=`<span class="slot-mode-label" id="slotWorkModeLabel">Фактически работал</span>
+    host.innerHTML=slotWorkingMarkup({mode,choices,work,actual,pauses,unknown,clock});
+    bindSlotWorkingEditor(host,ctx,choices);
+}
+
+function slotWorkingMarkup({mode,choices,work,actual,pauses,unknown,clock}) {
+    return `<span class="slot-mode-label" id="slotWorkModeLabel">Фактически работал</span>
       <input id="slotWorkMode" type="hidden" value="${mode}">
       <button class="slot-mode-button" id="slotWorkModeButton" type="button"
         aria-labelledby="slotWorkModeLabel slotWorkModeValue" aria-controls="slotModeOptions" aria-expanded="false">
@@ -662,6 +667,9 @@ function renderSlotWorkingEditor(date,ctx) {
       <div id="slotTotal">${field('slotWorkTotal','Часы фактической работы',mode==='total'?String(actual.workingMin/60).replace('.',','):'',{unit:'ч',full:true})}</div>
       ${pauses.length?`<p class="hint">Сохранённая пауза: ${pauses.map(i=>clock(i.start)+'–'+clock(i.end)).join(', ')}</p>`:''}
       ${unknown.length?`<p class="hint">Неизвестное окно: ${unknown.map(i=>clock(i.start)+'–'+clock(i.end)).join(', ')}</p>`:''}`;
+}
+
+function bindSlotWorkingEditor(host,ctx,choices) {
     const modeInput=$('#slotWorkMode'), modeButton=$('#slotWorkModeButton'),options=$('#slotModeOptions');
     const closeOptions=()=>{ options.hidden=true;modeButton.setAttribute('aria-expanded','false'); };
     const show=()=>{$('#slotIntervals').hidden=modeInput.value!=='intervals';$('#slotTotal').hidden=modeInput.value!=='total';};
@@ -692,7 +700,6 @@ function renderSlotWorkingEditor(date,ctx) {
     $('#slotWorkHours').addEventListener('input',()=>{ctx.workingDirty=true;});
     $('#slotWorkTotal').addEventListener('input',()=>{ctx.workingDirty=true;});
 }
-
 function setSlotInlineError(key,message='') {
     const input=$('#'+key),status=$('#'+key+'-error');
     input.setAttribute('aria-invalid',String(Boolean(message)));

@@ -425,11 +425,20 @@ test('Period cycle settings offer saved gross opening amount and ChatGPT JSON im
 
 test('Add Slot form uses accessible in-app work-mode choice rather than Android system select',()=>{
  const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
+ const renderStart=app.indexOf('function renderSlotWorkingEditor(');
+ const markupStart=app.indexOf('function slotWorkingMarkup(',renderStart);
+ const bindStart=app.indexOf('function bindSlotWorkingEditor(',markupStart);
+ const bindEnd=app.indexOf('function ',bindStart+10);
+ const render=app.slice(renderStart,markupStart);
+ const markup=app.slice(markupStart,bindStart);
+ const actions=app.slice(bindStart,bindEnd);
  assert.doesNotMatch(page,/<select id="slotWorkMode"/,'native Android selector must not open a system popup');
+ assert.ok(render.includes('host.innerHTML=slotWorkingMarkup('));
+ assert.ok(render.includes('bindSlotWorkingEditor(host,ctx,choices)'));
  for(const s of ['id="slotWorkModeButton"','id="slotModeOptions"','role="radiogroup"','data-slot-mode="${key}"',"['unknown','Не указывать']","['intervals','Интервалы С—До']","['total','Итого за день']","['rest','Выходной']"])
-   assert.ok(page.includes(s),s);
- assert.ok(page.includes('id="slotWorkMode" type="hidden" value="${mode}"'),'the mode is tracked as a real form control for save');
- assert.ok(page.includes('workingDirty=true'),'mode changes must be tracked as user edits');
+   assert.ok(markup.includes(s),s);
+ assert.ok(markup.includes('id="slotWorkMode" type="hidden" value="${mode}"'),'the mode is tracked as a real form control for save');
+ assert.ok(actions.includes('workingDirty=true'),'mode changes must be tracked as user edits');
 });
 test('New slots persist editable zero order count without changing unknown entries',()=>{
  const page=app.slice(app.indexOf('function form('),app.indexOf('function dayCaption(')>app.indexOf('function form(')?app.indexOf('function dayCaption('):undefined);
