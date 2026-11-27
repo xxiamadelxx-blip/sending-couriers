@@ -275,7 +275,7 @@ function bindWeekPlanInputs(ctx,week,refresh) {
 }
 
 function bindWeekScenarioActions(ctx,week,conditional) {
- const {root}=ctx,{$}=ctx;
+ const {root,run}=ctx,{$}=ctx;
     $('#saveWeek').onclick=()=>run(()=>{
       if(!ctx.weekConfigDraftValid)throw new Error('Проверьте часы работы и номинального слота.');
       week.days.forEach((d,i)=>{if(!d.isFact)readPair(`weekWork${i}`,`weekSlot${i}`);});
