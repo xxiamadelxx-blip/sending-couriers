@@ -771,6 +771,21 @@ public final class YandexScreenParserTest {
         assertTrue(times.contains("11:07"));
     }
 
+    @Test public void removesWeakBackwardRowAtEndOfAscendingScan() {
+        String slot="Слот: 301,00 ₽\\n341681811\\n3 заказа · 3 км\\n"
+            +"Начало\\n2026.10.18 07:30\\nЗавершение\\n2026.10.18 22:00";
+        String stable="Яндекс Про\\nЗаказы\\n10:00 100,00 ₽ >\\n10:30 100,00 ₽ >\\n11:00 100,00 ₽ >";
+        String reversed="Яндекс Про\\nЗаказы\\n10:00 100,00 ₽ >\\n10:30 100,00 ₽ >\\n09:58 100,00 ₽ >";
+        VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,6000,
+            java.util.Arrays.asList(observation(0,"slot",slot),observation(1,"stable-one",stable),
+                observation(2,"stable-two",stable),observation(3,"reversed",reversed)),4);
+        assertEquals(3,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        java.util.Set<String> times=new java.util.HashSet<>();
+        for(YandexScreenParser.Candidate row:video.uniqueCandidates())
+            if("ORDER_LIST_ROW".equals(row.candidateType)) times.add(field(row,"order_time"));
+        assertFalse(times.contains("09:58"));
+    }
+
     @Test public void removesOneFrameTimeReversalWhenAnotherRealRowHasOnlyTwoFrames() {
         String slot="Слот: 300,00 ₽\n341681811\n3 заказа · 3 км\n"
             +"Начало\n2026.10.18 07:30\nЗавершение\n2026.10.18 22:00";

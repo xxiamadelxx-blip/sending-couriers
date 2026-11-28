@@ -284,23 +284,35 @@ public final class VideoImportProcessor {
                 ScanDirections directions) {
             Set<String> discard=new HashSet<>();
             if(directions.ascendingSlots.isEmpty()&&directions.descendingSlots.isEmpty()) return discard;
-            for(Observation observation:observations) {
-                Map<String,Integer> extremeBySlot=new HashMap<>();
-                for(YandexScreenParser.Candidate candidate:evidence.frameCandidates.get(observation.frameIndex)) {
-                    if(!eligibleRow(candidate,evidence.slotCards)) continue;
-                    String slotId=value(candidate,"slot_id"); if(slotId==null) continue;
-                    boolean ascending=directions.ascendingSlots.contains(slotId);
-                    boolean descending=directions.descendingSlots.contains(slotId);
-                    if(!ascending&&!descending) continue;
-                    if(sequenceOutliers.contains(candidate.mergeKey())) continue;
-                    if(discardIfScanReversal(candidate,slotId,ascending,evidence,extremeBySlot,discard)) continue;
-                    int minute=orderMinute(candidate);
-                    Integer extreme=extremeBySlot.get(slotId);
-                    extremeBySlot.put(slotId,extreme==null?minute:(ascending
-                        ?Math.max(extreme.intValue(),minute):Math.min(extreme.intValue(),minute)));
-                }
-            }
+            for(Observation observation:observations)
+                discardScanReversalsInFrame(evidence.frameCandidates.get(observation.frameIndex),
+                    evidence,sequenceOutliers,directions,discard);
             return discard;
+        }
+
+        private static void discardScanReversalsInFrame(
+                List<YandexScreenParser.Candidate> frameCandidates,CandidateEvidence evidence,
+                Set<String> sequenceOutliers,ScanDirections directions,Set<String> discard) {
+            Map<String,Integer> extremeBySlot=new HashMap<>();
+            for(YandexScreenParser.Candidate candidate:frameCandidates) {
+                if(!eligibleRow(candidate,evidence.slotCards)) continue;
+                String slotId=value(candidate,"slot_id");
+                if(slotId==null) continue;
+                boolean ascending=directions.ascendingSlots.contains(slotId);
+                boolean descending=directions.descendingSlots.contains(slotId);
+                if(!ascending&&!descending) continue;
+                if(sequenceOutliers.contains(candidate.mergeKey())) continue;
+                if(discardIfScanReversal(candidate,slotId,ascending,evidence,extremeBySlot,discard)) continue;
+                updateScanExtreme(extremeBySlot,slotId,orderMinute(candidate),ascending);
+            }
+        }
+
+        private static void updateScanExtreme(Map<String,Integer> extremeBySlot,String slotId,
+                int minute,boolean ascending) {
+            Integer extreme=extremeBySlot.get(slotId);
+            int updated=extreme==null?minute:(ascending
+                ?Math.max(extreme.intValue(),minute):Math.min(extreme.intValue(),minute));
+            extremeBySlot.put(slotId,updated);
         }
 
         private static boolean discardIfScanReversal(YandexScreenParser.Candidate candidate,String slotId,
