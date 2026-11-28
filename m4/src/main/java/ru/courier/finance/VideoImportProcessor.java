@@ -132,6 +132,15 @@ public final class VideoImportProcessor {
             final Set<String> descendingSlots=new HashSet<>();
         }
 
+        private static final class SlotOrderSnapshot {
+            final List<YandexScreenParser.Candidate> rows;
+            final long totalKopecks;
+            final boolean valid;
+            SlotOrderSnapshot(List<YandexScreenParser.Candidate> rows,long totalKopecks,boolean valid) {
+                this.rows=rows; this.totalKopecks=totalKopecks; this.valid=valid;
+            }
+        }
+
         /**
          * Deduplicates repeated OCR detections, keeping raw per-frame observations intact.
          * Scrolling order lists are chronological; a one-frame time reversal and a
@@ -382,62 +391,107 @@ public final class VideoImportProcessor {
                 String slotId=slotEntry.getKey(); YandexScreenParser.Candidate slot=slotEntry.getValue();
                 Integer declared=parseInteger(value(slot,"slot_order_count"));
                 Long total=parseLong(value(slot,"slot_total_kopecks"));
-                if(declared==null||declared<1||total==null||total<0) continue;
-                List<YandexScreenParser.Candidate> rows=new ArrayList<>(); long sum=0; boolean valid=true;
-                for(YandexScreenParser.Candidate candidate:candidates)
-                    if("ORDER_LIST_ROW".equals(candidate.candidateType)&&slotId.equals(value(candidate,"slot_id"))) {
-                        Long amount=parseLong(value(candidate,"amount_kopecks"));
-                        if(amount==null||amount<0) { valid=false; break; }
-                        rows.add(candidate); sum+=amount;
-                    }
-                if(!valid||rows.size()<=declared||rows.size()>declared+4||sum<=total) continue;
+                if(!hasValidSlotOrderSummary(declared,total)) continue;
+                SlotOrderSnapshot snapshot=collectSlotOrderRows(candidates,slotId);
+                if(!needsWeakOrderReconciliation(snapshot,declared,total)) continue;
 
-                YandexScreenParser.Candidate removable=null;int matches=0;
-                for(int i=0;rows.size()==declared+1&&i<rows.size();i++) {
-                    YandexScreenParser.Candidate row=rows.get(i);
-                    SupportedCandidate support=evidence.get(row.mergeKey());
-                    if(support==null||support.frames>1) continue;
-                    boolean allOtherRowsRepeat=true,allOtherRowsSeenTwice=true;
-                    long amount=parseLong(value(row,"amount_kopecks"));
-                    for(int j=0;j<rows.size();j++) if(j!=i) {
-                        SupportedCandidate otherSupport=evidence.get(rows.get(j).mergeKey());
-                        if(otherSupport==null||otherSupport.frames<3) allOtherRowsRepeat=false;
-                        if(otherSupport==null||otherSupport.frames<2) { allOtherRowsSeenTwice=false; break; }
-                    }
-                    if((allOtherRowsRepeat||allOtherRowsSeenTwice
-                            &&isOneFrameTimeReversal(row,evidence,frames))
-                            &&rows.size()-1==declared&&sum-amount==total) { removable=row; matches++; }
-                }
-                if(matches==1) { candidates.remove(removable); continue; }
+                YandexScreenParser.Candidate singleWeakRow=singleWeakExtraRow(
+                    snapshot.rows,declared,total,snapshot.totalKopecks,evidence,frames);
+                if(singleWeakRow!=null) { candidates.remove(singleWeakRow); continue; }
 
                 // OCR can repeatedly misread 13:50 as 13:59. Only reconcile
                 // short-lived variants when the slot's independent count AND
                 // total require precisely those extra rows to be removed.
-                List<YandexScreenParser.Candidate> variants=new ArrayList<>();
-                long surplus=sum-total;
-                for(YandexScreenParser.Candidate row:rows) {
-                    SupportedCandidate weak=evidence.get(row.mergeKey());
-                    if(weak==null||weak.frames>4) continue;
-                    int minute=orderMinute(row); boolean hasStrongReading=false;
-                    for(YandexScreenParser.Candidate other:rows) {
-                        if(other==row||!same(value(row,"occurrence"),value(other,"occurrence"))
-                                ||!same(value(row,"amount_kopecks"),value(other,"amount_kopecks"))) continue;
-                        int difference=Math.abs(minute-orderMinute(other));
-                        if(difference<1||difference>10) continue;
-                        SupportedCandidate strong=evidence.get(other.mergeKey());
-                        if(strong==null||strong.frames<Math.max(12,weak.frames*5)
-                                ||coObserved.getOrDefault(row.mergeKey(),Collections.<String>emptySet())
-                                    .contains(other.mergeKey())) continue;
-                        hasStrongReading=true; break;
-                    }
-                    if(hasStrongReading) variants.add(row);
-                }
-                long variantTotal=0;
-                for(YandexScreenParser.Candidate row:variants)
-                    variantTotal+=parseLong(value(row,"amount_kopecks"));
-                if(variants.size()==rows.size()-declared&&variantTotal==surplus)
-                    candidates.removeAll(variants);
+                removeRepeatedTimeVariants(candidates,snapshot,declared,total,evidence,coObserved);
             }
+        }
+
+        private static boolean hasValidSlotOrderSummary(Integer declared,Long total) {
+            return declared!=null&&declared>=1&&total!=null&&total>=0;
+        }
+
+        private SlotOrderSnapshot collectSlotOrderRows(List<YandexScreenParser.Candidate> candidates,
+                String slotId) {
+            List<YandexScreenParser.Candidate> rows=new ArrayList<>(); long sum=0;
+            for(YandexScreenParser.Candidate candidate:candidates)
+                if("ORDER_LIST_ROW".equals(candidate.candidateType)&&slotId.equals(value(candidate,"slot_id"))) {
+                    Long amount=parseLong(value(candidate,"amount_kopecks"));
+                    if(amount==null||amount<0) return new SlotOrderSnapshot(rows,sum,false);
+                    rows.add(candidate); sum+=amount;
+                }
+            return new SlotOrderSnapshot(rows,sum,true);
+        }
+
+        private static boolean needsWeakOrderReconciliation(SlotOrderSnapshot snapshot,
+                int declared,long total) {
+            return snapshot.valid&&snapshot.rows.size()>declared
+                &&snapshot.rows.size()<=declared+4&&snapshot.totalKopecks>total;
+        }
+
+        private YandexScreenParser.Candidate singleWeakExtraRow(
+                List<YandexScreenParser.Candidate> rows,int declared,long total,long sum,
+                Map<String,SupportedCandidate> evidence,
+                Map<Integer,List<YandexScreenParser.Candidate>> frames) {
+            if(rows.size()!=declared+1) return null;
+            YandexScreenParser.Candidate removable=null; int matches=0;
+            for(int i=0;i<rows.size();i++) {
+                YandexScreenParser.Candidate row=rows.get(i);
+                SupportedCandidate support=evidence.get(row.mergeKey());
+                if(support==null||support.frames>1) continue;
+                boolean allOtherRowsRepeat=allOtherRowsHaveMinimumSupport(rows,i,evidence,3);
+                boolean allOtherRowsSeenTwice=allOtherRowsHaveMinimumSupport(rows,i,evidence,2);
+                Long amount=parseLong(value(row,"amount_kopecks"));
+                if((allOtherRowsRepeat||allOtherRowsSeenTwice
+                        &&isOneFrameTimeReversal(row,evidence,frames))
+                        &&rows.size()-1==declared&&sum-amount==total) {
+                    removable=row; matches++;
+                }
+            }
+            return matches==1?removable:null;
+        }
+
+        private static boolean allOtherRowsHaveMinimumSupport(
+                List<YandexScreenParser.Candidate> rows,int excludedIndex,
+                Map<String,SupportedCandidate> evidence,int minimumFrames) {
+            for(int i=0;i<rows.size();i++) if(i!=excludedIndex) {
+                SupportedCandidate support=evidence.get(rows.get(i).mergeKey());
+                if(support==null||support.frames<minimumFrames) return false;
+            }
+            return true;
+        }
+
+        private void removeRepeatedTimeVariants(List<YandexScreenParser.Candidate> candidates,
+                SlotOrderSnapshot snapshot,int declared,long total,
+                Map<String,SupportedCandidate> evidence,Map<String,Set<String>> coObserved) {
+            List<YandexScreenParser.Candidate> variants=new ArrayList<>(); long variantTotal=0;
+            for(YandexScreenParser.Candidate row:snapshot.rows)
+                if(hasStrongAlternativeTime(row,snapshot.rows,evidence,coObserved)) {
+                    variants.add(row);
+                    variantTotal+=parseLong(value(row,"amount_kopecks"));
+                }
+            long surplus=snapshot.totalKopecks-total;
+            if(variants.size()==snapshot.rows.size()-declared&&variantTotal==surplus)
+                candidates.removeAll(variants);
+        }
+
+        private static boolean hasStrongAlternativeTime(YandexScreenParser.Candidate row,
+                List<YandexScreenParser.Candidate> rows,Map<String,SupportedCandidate> evidence,
+                Map<String,Set<String>> coObserved) {
+            SupportedCandidate weak=evidence.get(row.mergeKey());
+            if(weak==null||weak.frames>4) return false;
+            int minute=orderMinute(row);
+            for(YandexScreenParser.Candidate other:rows) {
+                if(other==row||!same(value(row,"occurrence"),value(other,"occurrence"))
+                        ||!same(value(row,"amount_kopecks"),value(other,"amount_kopecks"))) continue;
+                int difference=Math.abs(minute-orderMinute(other));
+                if(difference<1||difference>10) continue;
+                SupportedCandidate strong=evidence.get(other.mergeKey());
+                if(strong==null||strong.frames<Math.max(12,weak.frames*5)
+                        ||coObserved.getOrDefault(row.mergeKey(),Collections.<String>emptySet())
+                            .contains(other.mergeKey())) continue;
+                return true;
+            }
+            return false;
         }
 
 
