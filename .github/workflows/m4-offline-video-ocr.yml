@@ -158,6 +158,16 @@ jobs:
           test -s m4-fixture/screen.mp4
       - name: Run parser unit tests and build isolated Android probe
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Publish parser unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-parser-unit-test-report-${{ github.sha }}
+          path: |
+            app/build/reports/tests/testDebugUnitTest/**
+            app/build/test-results/testDebugUnitTest/**
+          retention-days: 1
+          if-no-files-found: warn
       - name: Build signed app APK for manual video-import validation
         run: gradle --no-daemon :app:assembleM4Qa
       - name: Verify APK package and fingerprint

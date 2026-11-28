@@ -775,6 +775,7 @@ public final class YandexScreenParserTest {
         String slot="Слот: 301,00 ₽\\n341681811\\n3 заказа · 3 км\\n07:30 — 22:00";
         YandexScreenParser.Candidate parsedSlot=find(YandexScreenParser.parse(slot),"SLOT_DETAIL");
         assertNotNull(parsedSlot);
+        assertEquals("341681811",field(parsedSlot,"slot_id"));
         assertEquals("07:30",field(parsedSlot,"slot_start_time"));
         assertEquals("22:00",field(parsedSlot,"slot_end_time"));
         String stable="Яндекс Про\\nЗаказы\\n10:00 100,00 ₽ >\\n10:30 100,00 ₽ >\\n11:00 100,00 ₽ >";
