@@ -31,6 +31,14 @@ public final class WorkbookReader {
         return factory.newDocumentBuilder().parse(new ByteArrayInputStream(bytes));
     }
     public static String read(InputStream input) throws Exception {
+        Map<String, byte[]> parts = readPackageParts(input);
+        JSONArray shared = readSharedStrings(parts);
+        Map<String,String> relations = readRelationships(parts);
+        JSONObject sheets = readSheets(parts, shared, relations);
+        return new JSONObject().put("sheets", sheets).toString();
+    }
+
+    private static Map<String, byte[]> readPackageParts(InputStream input) throws Exception {
         Map<String, byte[]> parts = new HashMap<>();
         int total = 0, count = 0;
         try (ZipInputStream zip = new ZipInputStream(input)) {
@@ -46,11 +54,19 @@ public final class WorkbookReader {
                 if (name.endsWith(".xml") || name.endsWith(".rels")) parts.put(name, out.toByteArray());
             }
         }
+        return parts;
+    }
+
+    private static JSONArray readSharedStrings(Map<String, byte[]> parts) throws Exception {
         JSONArray shared = new JSONArray();
         if (parts.containsKey("xl/sharedStrings.xml")) {
             NodeList list = xml(parts.get("xl/sharedStrings.xml")).getElementsByTagNameNS("*", "si");
             for (int i=0; i<list.getLength(); i++) shared.put(list.item(i).getTextContent());
         }
+        return shared;
+    }
+
+    private static Map<String,String> readRelationships(Map<String, byte[]> parts) throws Exception {
         Map<String,String> relations = new HashMap<>();
         NodeList rels = xml(parts.get("xl/_rels/workbook.xml.rels")).getElementsByTagNameNS("*", "Relationship");
         for (int i=0; i<rels.getLength(); i++) {
@@ -60,38 +76,55 @@ public final class WorkbookReader {
             if (target.contains("..")) throw new IllegalArgumentException("Invalid relation");
             relations.put(rel.getAttribute("Id"), target.startsWith("/")?target.substring(1):"xl/"+target);
         }
+        return relations;
+    }
+
+    private static JSONObject readSheets(Map<String, byte[]> parts, JSONArray shared,
+                                         Map<String,String> relations) throws Exception {
         JSONObject sheets = new JSONObject();
         NodeList list = xml(parts.get("xl/workbook.xml")).getElementsByTagNameNS("*", "sheet");
         for (int i=0; i<list.getLength(); i++) {
             Element sheet = (Element)list.item(i);
             String name = sheet.getAttribute("name");
-            if (!java.util.Arrays.asList("Смены", "Дневные итоги", "Заказы RAW", "Прогнозы", "Точность", "Модели", "Настройки", "Финансовые правила").contains(name)) continue;
+            if (!java.util.Arrays.asList("Смены", "Дневные итоги", "Заказы RAW", "Прогнозы", "Точность", "Модели", "Настройки", "Финансовые правила", "Календарь", "Методика", "Решения", "Финансовые факты", "Контроль", "Аудит 19.10", "Снимки периода").contains(name)) continue;
             String id = sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
             Document document = xml(parts.get(relations.get(id)));
-            NodeList cells = document.getElementsByTagNameNS("*", "c");
-            if (cells.getLength() > 100000) throw new IllegalArgumentException("Too many XLSX cells");
-            JSONObject rows = new JSONObject();
-            for (int j=0; j<cells.getLength(); j++) {
-                Element cell = (Element)cells.item(j);
-                String address = cell.getAttribute("r");
-                if (!address.matches("[A-Z]{1,3}[1-9][0-9]{0,5}")) continue;
-                String row = address.replaceAll("[A-Z]", ""), column = address.replaceAll("[0-9]", "");
-                if (!rows.has(row)) rows.put(row, new JSONObject());
-                if (cell.getElementsByTagNameNS("*", "f").getLength() > 0) { rows.getJSONObject(row).put(column, new JSONObject().put("formula", true)); continue; }
-                String type = cell.getAttribute("t");
-                NodeList values = cell.getElementsByTagNameNS("*", "v");
-                Object value = JSONObject.NULL;
-                if ("inlineStr".equals(type)) { NodeList text = cell.getElementsByTagNameNS("*", "is"); if (text.getLength()>0) value=text.item(0).getTextContent(); }
-                else if (values.getLength()>0) {
-                    String text = values.item(0).getTextContent();
-                    if ("s".equals(type)) value=shared.get(Integer.parseInt(text));
-                    else if (type.isEmpty() || "n".equals(type)) { try { value=Double.parseDouble(text); } catch (NumberFormatException ignored) { } }
-                    else if (!"e".equals(type)) value=text;
-                }
-                rows.getJSONObject(row).put(column, value);
-            }
-            sheets.put(name, rows);
+            sheets.put(name, readSheetRows(document, shared));
         }
-        return new JSONObject().put("sheets", sheets).toString();
+        return sheets;
+    }
+
+    private static JSONObject readSheetRows(Document document, JSONArray shared) throws Exception {
+        NodeList cells = document.getElementsByTagNameNS("*", "c");
+        if (cells.getLength() > 100000) throw new IllegalArgumentException("Too many XLSX cells");
+        JSONObject rows = new JSONObject();
+        for (int j=0; j<cells.getLength(); j++) {
+            Element cell = (Element)cells.item(j);
+            String address = cell.getAttribute("r");
+            if (!address.matches("[A-Z]{1,3}[1-9][0-9]{0,5}")) continue;
+            String row = address.replaceAll("[A-Z]", ""), column = address.replaceAll("[0-9]", "");
+            if (!rows.has(row)) rows.put(row, new JSONObject());
+            rows.getJSONObject(row).put(column, readCellValue(cell, shared));
+        }
+        return rows;
+    }
+
+    private static Object readCellValue(Element cell, JSONArray shared) throws Exception {
+        if (cell.getElementsByTagNameNS("*", "f").getLength() > 0) {
+            return new JSONObject().put("formula", true);
+        }
+        String type = cell.getAttribute("t");
+        NodeList values = cell.getElementsByTagNameNS("*", "v");
+        Object value = JSONObject.NULL;
+        if ("inlineStr".equals(type)) {
+            NodeList text = cell.getElementsByTagNameNS("*", "is");
+            if (text.getLength()>0) value=text.item(0).getTextContent();
+        } else if (values.getLength()>0) {
+            String text = values.item(0).getTextContent();
+            if ("s".equals(type)) value=shared.get(Integer.parseInt(text));
+            else if (type.isEmpty() || "n".equals(type)) { try { value=Double.parseDouble(text); } catch (NumberFormatException ignored) { } }
+            else if (!"e".equals(type)) value=text;
+        }
+        return value;
     }
 }

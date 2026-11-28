@@ -58,8 +58,8 @@ public final class NativeStateProbe {
         check(bridge.writeState(schema4), "schema 4 remains writable");
         check(bridge.readState().equals(schema4), "schema 4 exact readback");
         check(bridge.writeState("{\"schemaVersion\":5,\"entries\":[],\"closures\":{}}"), "schema 5 remains writable");
-        check(AppAppearance.background(true) == 0xff000000, "night surfaces are true black");
-        check(AppAppearance.background(false) == 0xfff4f7f3, "day native and web backgrounds agree");
+        check(AppAppearance.background(true) == 0xff10151a, "night launch matches the selected page canvas");
+        check(AppAppearance.background(false) == 0xffeae7de, "day native launch matches the selected page canvas");
         check(AppAppearance.foreground(true) != AppAppearance.foreground(false), "native launch text has two palettes");
         String current = new String(Files.readAllBytes(Paths.get(args[0])), StandardCharsets.UTF_8);
         if (args.length > 1 && args[1].equals("--reproduce")) {

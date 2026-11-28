@@ -40,6 +40,7 @@ try {
   assert.ok(overflow.actionBottom<=overflow.navTop,`overview actions visible above navigation: ${JSON.stringify(overflow)}`);
   const recordsBefore=(await stored(page)).entries,closuresBefore=(await stored(page)).closures;
   await page.locator('#navPeriod').click();assert.match(await page.locator('main').innerText(),/Начало цикла не задано/);
+  await page.locator('#cycleHelpButton').click();assert.equal(await page.locator('#cycleHelpDialog').evaluate(dialog=>dialog.open),true);assert.match(await page.locator('#cycleHelpDialog').innerText(),/конец 84-дневного цикла/);await page.locator('#closeCycleHelp').click();assert.equal(await page.locator('#cycleHelpDialog').evaluate(dialog=>dialog.open),false);
   assert.equal(compact(await page.locator('#pacePremium').innerText()),'0₽');
   await page.locator('#configureCycle').click();await page.locator('#premiumCycleStart').fill('2026-10-02');await page.locator('#saveSettings').click();
   assert.match(await page.locator('#cycleDates').innerText(),/24 дек/);assert.equal(compact(await page.locator('#cyclePremium').innerText()),'1242₽');
@@ -60,6 +61,16 @@ try {
   assert.deepEqual(errors,[]);
   results.push({width,result:'PASS',overflow,scenarios:['schema3-preserves-IDs','cycle-save-relaunch','84-day-boundary','existing-fortnights-and-closures-unchanged','both-premiums-separate','ChatGPT-export-with-cycle-and-IDs','backup-schema5','old-import-preserves-cycle','conflict-atomic-rejection']});await context.close();
  }
+ const paydayContext=await browser.newContext({viewport:{width:390,height:844},locale:'ru-RU',timezoneId:'Europe/Moscow'});
+ const paydayFixture={schemaVersion:6,settings:{premiumCycleStart:'2026-08-21',theme:'dark',soundEnabled:true,hapticsEnabled:true,paymentRules:[]},closures:{},entries:[
+  {id:'cycle-opening',date:'2026-08-21',dailyHours:10,dailyOrders:28,reward:0,tax:0,parkCommission:0,tips:0,separateBonus:0,createdAt:'2026-08-21T00:00:00Z',updatedAt:'2026-08-21T00:00:00Z'},
+  {id:'payday-slot',date:'2026-11-01',dailyHours:8,dailyOrders:28,reward:500,tax:0,parkCommission:0,tips:0,separateBonus:0,createdAt:'2026-11-01T00:00:00Z',updatedAt:'2026-11-01T00:00:00Z'}
+ ]};
+ await paydayContext.addInitScript(data=>{const RealDate=Date,frozen=RealDate.parse('2026-11-13T12:00:00+03:00');class FrozenDate extends RealDate{constructor(...args){super(...(args.length?args:[frozen]))}static now(){return frozen}}globalThis.Date=FrozenDate;localStorage.setItem('courier-finance-v1',JSON.stringify(data));},paydayFixture);
+ const paydayPage=await paydayContext.newPage();await paydayPage.goto(url);await paydayPage.locator('#summaryPace').waitFor();
+ await paydayPage.locator('#choosePeriod').click();await paydayPage.locator('#periodPicker').selectOption('2026-10-30');await paydayPage.locator('#goBack').click();
+ assert.equal(compact(await paydayPage.locator('#summaryOwed').innerText()),'2848₽');assert.match(await paydayPage.locator('#summaryOwedPremium').innerText(),/468₽/);assert.match(await paydayPage.locator('#summaryOwedPremium').innerText(),/За темп: 144₽/);assert.match(await paydayPage.locator('#summaryOwedPremium').innerText(),/За 12 недель: 324₽/);
+ await paydayPage.locator('#navPeriod').click();await paydayPage.locator('#cycleHelpButton').click();assert.equal(await paydayPage.locator('#cycleHelpDialog').evaluate(dialog=>dialog.open),true);await paydayContext.close();results.push({result:'PASS',scenarios:['clickable-cycle-explanation','ended-cycle-window-payout-total','pace-and-cycle-premium-breakdown']});
  const boundaryContext=await browser.newContext({viewport:{width:390,height:844}});
  await boundaryContext.addInitScript(()=>localStorage.setItem('courier-finance-v1',JSON.stringify({schemaVersion:1,entries:[{date:'2026-10-02',displayedHours:30,displayedOrders:60},{date:'2026-10-08',displayedHours:40,displayedOrders:80}],closures:{}})));
  const boundaryPage=await boundaryContext.newPage();await boundaryPage.goto(url);await boundaryPage.locator('#navPeriod').click();await boundaryPage.locator('#configureCycle').click();await boundaryPage.locator('#premiumCycleStart').fill('2026-10-05');await boundaryPage.locator('#saveSettings').click();await boundaryPage.locator('.boundary-note summary').click();assert.match(await boundaryPage.locator('#cycleBoundaryNote').innerText(),/точно разделить их по границе невозможно/);assert.equal(compact(await boundaryPage.locator('#cyclePremium').innerText()),'180₽');await boundaryContext.close();results.push({result:'PASS',scenario:'legacy-cycle-boundary-warning-visible-without-changing-hours'});

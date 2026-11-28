@@ -1,0 +1,385 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {emptyState} from '../web/core.mjs';
+import {forecastClock,saveForecastHours} from '../web/forecast.mjs';
+import {mountForecast} from '../web/forecast-ui.mjs';
+
+// Only the simple forecast's DOM contract is needed here. Layout, pointer input,
+// and browser rendering remain the responsibility of the existing UI tests.
+class Element {
+  constructor(attributes) {
+    this.id=/\bid="([^"]*)"/.exec(attributes)?.[1]??'';
+    this.dataset=Object.fromEntries([...attributes.matchAll(/\bdata-([\w-]+)="([^"]*)"/g)].map(([,key,value])=>[key.replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()),value]));
+    this.innerHTML='';
+    this.value=/\bvalue="([^"]*)"/.exec(attributes)?.[1]??'';
+    this.hidden=/\bhidden(?:\s|$)/.test(attributes);
+    this.textContent='';
+    this.listeners=new Map();
+    this.attributes=new Map();
+    this.classList={toggle(){}};
+  }
+  addEventListener(type,listener) {
+    if(!this.listeners.has(type))this.listeners.set(type,[]);
+    this.listeners.get(type).push(listener);
+  }
+  dispatchEvent(event) {
+    for(const listener of this.listeners.get(event.type)??[])listener(event);
+    this['on'+event.type]?.(event);
+    return true;
+  }
+  closest(selector) {
+    if(selector==='[data-interval]'&&this.id==='factWorkHours') {
+      if(!this.intervalControl)this.intervalControl={_intervals:[]};
+      return this.intervalControl;
+    }
+    if(selector==='[data-interval]'&&(this.id==='weekActiveHours'||/^weekWork\d+$/.test(this.id)))return {_intervals:[]};
+    return null;
+  }
+  setAttribute(name,value) {this.attributes.set(name,String(value));}
+  removeAttribute(name) {this.attributes.delete(name);}
+}
+
+class Root {
+  set innerHTML(html) {
+    this.elements=new Map();
+    this.allElements=[...html.matchAll(/<\w+\b([^>]*)>/g)].map(([,attributes])=>new Element(attributes));
+    for(const element of this.allElements)if(element.id)this.elements.set('#'+element.id,element);
+  }
+  querySelector(selector) {return this.elements.get(selector)??null;}
+  // The regression uses text input, so interval/slider and legacy-tab binding
+  // are deliberately outside this fixture's scope.
+  querySelectorAll() {return [];}
+  input(id,value) {
+    const element=this.querySelector('#'+id);
+    assert.ok(element,`Missing input ${id}`);
+    element.value=value;
+    element.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+}
+
+class WeekRoot extends Root {
+  querySelectorAll(selector) {
+    if(selector==='[data-week-work],[data-week-slot]')return this.allElements.filter(e=>e.dataset.weekWork!==undefined||e.dataset.weekSlot!==undefined);
+    if(selector==='[data-load-scenario]')return this.allElements.filter(e=>e.dataset.loadScenario!==undefined);
+    return [];
+  }
+}
+
+class Timers {
+  now=0;
+  nextId=1;
+  pending=new Map();
+  setTimeout=(callback,delay=0,...args)=>{
+    const id=this.nextId++;
+    this.pending.set(id,{callback,args,delay,at:this.now+delay});
+    return id;
+  };
+  clearTimeout=id=>{this.pending.delete(id);};
+  count(delay) {return [...this.pending.values()].filter(timer=>timer.delay===delay).length;}
+  advance(milliseconds) {
+    const until=this.now+milliseconds;
+    for(;;) {
+      const next=[...this.pending].filter(([,timer])=>timer.at<=until).sort((a,b)=>a[1].at-b[1].at)[0];
+      if(!next)break;
+      const [id,timer]=next;
+      this.pending.delete(id);
+      this.now=timer.at;
+      timer.callback(...timer.args);
+    }
+    this.now=until;
+  }
+}
+
+function fixture(t,RootType=Root) {
+  const timers=new Timers(),root=new RootType();
+  const originals={setTimeout:globalThis.setTimeout,clearTimeout:globalThis.clearTimeout,window:Object.getOwnPropertyDescriptor(globalThis,'window')};
+  globalThis.setTimeout=timers.setTimeout;
+  globalThis.clearTimeout=timers.clearTimeout;
+  globalThis.window={scrollTo(){}};
+  t.after(()=>{
+    globalThis.setTimeout=originals.setTimeout;
+    globalThis.clearTimeout=originals.clearTimeout;
+    if(originals.window)Object.defineProperty(globalThis,'window',originals.window);
+    else delete globalThis.window;
+  });
+  let state=emptyState(),attempts=0,commits=0,failure=null;
+  const date=forecastClock(state.forecast).date;
+  state={...state,forecast:saveForecastHours(state.forecast,date,840,480)};
+  const mount=(initial='today')=>mountForecast({
+    root,getState:()=>state,
+    commit:next=>{
+      attempts++;
+      if(failure)throw failure;
+      state=next;
+      commits++;
+    },
+    heading:()=>'<button id="goBack" type="button"></button>',
+    nav(){},leave(){},notify(){},initial
+  });
+  return {root,timers,date,mount,get state(){return state;},get attempts(){return attempts;},get commits(){return commits;},set failure(error){failure=error;}};
+}
+
+test('history screen opens the day editor from its add-fact action',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  assert.ok(f.root.querySelector('#newWorkFact'));
+  f.root.querySelector('#newWorkFact').onclick();
+  assert.ok(f.root.querySelector('#workDayForm'));
+  assert.equal(f.commits,0);
+});
+
+test('saving a day fact keeps orders, active hours, and reported slot as separate facts',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  const value=(id,next)=>{const field=f.root.querySelector('#'+id);assert.ok(field,`Missing field ${id}`);field.value=String(next);return field;};
+  value('workPrecision','total');
+  value('factOrders',23);
+  value('factTotal','6.5');
+  value('factAccounted','14');
+  value('factAsOf','21:30');
+  f.root.querySelector('#dayCompleted').checked=true;
+  let prevented=false;
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){prevented=true;}});
+  const day=f.state.forecast.days[f.date];
+  assert.equal(prevented,true);
+  assert.equal(f.commits,1);
+  assert.equal(day.orders,23);
+  assert.equal(day.ordersConfirmed,true);
+  assert.equal(day.workingMin,390);
+  assert.equal(day.workConfirmed,true);
+  assert.equal(day.appAccountedMin,840);
+  assert.equal(day.accountedConfirmed,true);
+  assert.equal(day.precision,'total');
+  assert.equal(day.completed,true);
+  assert.deepEqual(day.intervals,[]);
+  assert.equal(f.state.entries.length,0,'Entering a forecast fact must not create a finance slot');
+});
+
+test('interval day facts fill only the report window and keep active time separate from slot time',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  const value=(id,next)=>{const field=f.root.querySelector('#'+id);assert.ok(field,'Missing input '+id);field.value=String(next);return field;};
+  value('workPrecision','intervals');
+  value('factOrders',12);
+  value('factAccounted','14');
+  value('factPause','13:00–14:00');
+  value('reportWindow','07:00–21:00');
+  f.root.querySelector('#factWorkHours').closest('[data-interval]')._intervals=[
+    {start:540,end:720,state:'WORK',paymentCounted:'UNKNOWN'},
+    {start:1050,end:1260,state:'WORK',paymentCounted:'UNKNOWN'}
+  ];
+  f.root.querySelector('#restUnavailable').checked=true;
+  f.root.querySelector('#dayCompleted').checked=true;
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  const day=f.state.forecast.days[f.date];
+  assert.equal(f.commits,1);
+  assert.equal(day.orders,12);
+  assert.equal(day.ordersConfirmed,true);
+  assert.equal(day.workingMin,390);
+  assert.equal(day.appAccountedMin,840);
+  assert.equal(day.accountedConfirmed,true);
+  assert.equal(day.precision,'intervals');
+  assert.equal(day.unknownMin,600,'Only the 14-hour report window becomes known');
+  assert.equal(day.intervals.reduce((sum,row)=>sum+row.end-row.start,0),840);
+  assert.deepEqual(day.intervals.filter(row=>row.state==='WORK').map(row=>[row.start,row.end]),[[540,720],[1050,1260]]);
+  assert.equal(f.state.entries.length,0);
+});
+
+test('interval day facts reject a report window that excludes working time without saving',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  f.root.querySelector('#workPrecision').value='intervals';
+  f.root.querySelector('#factWorkHours').closest('[data-interval]')._intervals=[
+    {start:360,end:540,state:'WORK',paymentCounted:'UNKNOWN'}
+  ];
+  f.root.querySelector('#reportWindow').value='07:00–21:00';
+  f.root.querySelector('#restUnavailable').checked=true;
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  assert.equal(f.commits,0);
+  assert.equal(f.attempts,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+  assert.match(f.root.querySelector('#forecastError').textContent,/Рабочие окна выходят за границы отчёта/);
+});
+
+test('interval day facts require a work window before saving',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  f.root.querySelector('#workPrecision').value='intervals';
+  f.root.querySelector('#factOrders').value='0';
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  assert.equal(f.commits,0);
+  assert.equal(f.attempts,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+  assert.match(f.root.querySelector('#forecastError').textContent,/Введите рабочие окна или выберите/);
+});
+
+test('day fact validation rejects fractional orders without mutating saved facts',t=>{
+  const f=fixture(t);
+  f.mount('data');
+  f.root.querySelector('#newWorkFact').onclick();
+  f.root.querySelector('#workPrecision').value='total';
+  f.root.querySelector('#factOrders').value='1.5';
+  f.root.querySelector('#factTotal').value='6';
+  f.root.querySelector('#factAccounted').value='14';
+  f.root.querySelector('#workDayForm').onsubmit({preventDefault(){}});
+  assert.equal(f.commits,0);
+  assert.equal(f.attempts,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+  const error=f.root.querySelector('#forecastError');
+  assert.equal(error.hidden,false);
+  assert.match(error.textContent,/Количество заказов должно быть целым/);
+});
+
+test('flush persists changed hours before immediate forecast re-entry and cancels the old save',t=>{
+  const f=fixture(t),screen=f.mount();
+  assert.equal(f.root.querySelector('#todayWorkHours').value,'8');
+  f.root.input('todayWorkHours','9');
+  assert.equal(f.state.forecast.weekConfig.workingMin,480,'Input alone still awaits autosave');
+  assert.equal(f.timers.count(500),1);
+
+  assert.equal(screen.flush(),true);
+  assert.equal(f.state.forecast.weekConfig.workingMin,540);
+  assert.equal(f.state.forecast.plans[f.date].workingMin,540);
+  assert.equal(f.state.forecast.plans[f.date].slotMin,840);
+  assert.equal(f.timers.count(500),0);
+  assert.equal(f.commits,1);
+
+  const reopened=f.mount();
+  assert.equal(f.root.querySelector('#todayWorkHours').value,'9');
+  assert.equal(f.root.querySelector('#todaySlotHours').value,'14');
+  assert.equal(reopened.flush(),true);
+  assert.equal(f.commits,1,'Leaving an unchanged screen must not write again');
+  f.timers.advance(5000);
+  assert.equal(f.commits,1,'An old screen must not write after re-entry');
+  assert.equal(f.state.forecast.weekConfig.workingMin,540);
+  assert.equal(f.root.querySelector('#todayWorkHours').value,'9');
+});
+
+test('flush cancels a pending autosave and commits only the latest valid input',t=>{
+  const f=fixture(t),screen=f.mount();
+  f.root.input('todayWorkHours','9');
+  f.timers.advance(200);
+  f.root.input('todayWorkHours','10');
+  assert.equal(f.timers.count(500),1);
+  assert.equal(screen.flush(),true);
+  assert.equal(f.state.forecast.weekConfig.workingMin,600);
+  f.timers.advance(5000);
+  assert.equal(f.commits,1);
+  assert.equal(f.state.forecast.weekConfig.workingMin,600);
+});
+
+test('remaining on the screen still autosaves once after the debounce',t=>{
+  const f=fixture(t),screen=f.mount();
+  f.root.input('todayWorkHours','9');
+  f.timers.advance(499);
+  assert.equal(f.commits,0);
+  assert.equal(f.state.forecast.weekConfig.workingMin,480);
+  f.timers.advance(1);
+  assert.equal(f.commits,1);
+  assert.equal(f.state.forecast.weekConfig.workingMin,540);
+  assert.equal(f.timers.count(500),0);
+  assert.equal(screen.flush(),true);
+  f.timers.advance(5000);
+  assert.equal(f.commits,1);
+});
+
+test('failed flush preserves persisted state and the draft, cancels autosave, and can be retried',t=>{
+  const f=fixture(t),screen=f.mount();
+  const before=f.state,serialized=JSON.stringify(before);
+  f.root.input('todayWorkHours','9');
+  f.failure=new Error('Не удалось сохранить данные на телефоне.');
+
+  assert.equal(screen.flush(),false);
+  assert.equal(f.state,before);
+  assert.equal(JSON.stringify(f.state),serialized);
+  assert.equal(f.root.querySelector('#todayWorkHours').value,'9');
+  assert.equal(f.root.querySelector('#forecastError').hidden,false);
+  assert.match(f.root.querySelector('#forecastError').textContent,/Не удалось сохранить/);
+  assert.equal(f.timers.count(500),0);
+  assert.equal(f.attempts,1);
+  f.timers.advance(5000);
+  assert.equal(f.attempts,1,'A failed navigation must not leave a delayed write');
+
+  f.failure=null;
+  assert.equal(screen.flush(),true);
+  assert.equal(f.commits,1);
+  assert.equal(f.state.forecast.weekConfig.workingMin,540);
+  assert.equal(f.root.querySelector('#todayWorkHours').value,'9');
+});
+
+test('an invalid duration pair blocks flush without losing the draft or writing stale input',t=>{
+  const f=fixture(t),screen=f.mount();
+  const before=f.state,serialized=JSON.stringify(before);
+  f.root.input('todayWorkHours','9');
+  f.root.input('todayWorkHours','15');
+
+  assert.equal(screen.flush(),false);
+  assert.equal(f.state,before);
+  assert.equal(JSON.stringify(f.state),serialized);
+  assert.equal(f.root.querySelector('#todayWorkHours').value,'15');
+  assert.equal(f.root.querySelector('#forecastError').hidden,false);
+  assert.match(f.root.querySelector('#forecastError').textContent,/не может превышать/);
+  f.timers.advance(5000);
+  assert.equal(f.attempts,0,'The previous valid draft must not be saved after invalid input');
+
+  f.root.input('todayWorkHours','9');
+  assert.equal(screen.flush(),true);
+  assert.equal(f.state.forecast.weekConfig.workingMin,540);
+  assert.equal(f.commits,1);
+  assert.equal(f.timers.count(500),0);
+});
+
+test('simple forecast preview keeps the insufficient-data state without writing facts',t=>{
+  const f=fixture(t);
+  f.mount();
+  const count=f.root.querySelector('#simpleCount'),range=f.root.querySelector('#simpleRange');
+
+  assert.ok(count);
+  assert.ok(range);
+  assert.equal(count.hidden,true);
+  assert.equal(count.innerHTML,'—');
+  assert.equal(count.attributes.get('aria-label'),'Прогноз заказов неизвестен');
+  assert.match(range.innerHTML,/Пока мало данных/);
+  assert.equal(f.attempts,0);
+  assert.equal(f.commits,0);
+  assert.equal(Object.hasOwn(f.state.forecast.days,f.date),false);
+});
+
+
+test('week plan compares, saves, and reloads active hours separately from the full slot',t=>{
+  const f=fixture(t,WeekRoot);
+  f.mount('week');
+  assert.equal(f.root.querySelector('#weekActiveHours').value,'8');
+  assert.equal(f.root.querySelector('#weekSlotHours').value,'14');
+
+  const work=f.root.querySelector('#weekWork0');
+  assert.ok(work);
+  work.value='9';
+  work.oninput();
+
+  f.root.querySelector('#compareWeek').onclick();
+  assert.match(f.root.querySelector('#scenarioComparison').innerHTML,/Сравнение/);
+  assert.equal(f.commits,0,'Comparing a draft must not save it');
+
+  f.root.querySelector('#saveWeek').onclick();
+  assert.equal(f.root.querySelector('#forecastError').hidden,true,f.root.querySelector('#forecastError').textContent);
+  assert.equal(f.state.forecast.scenarios.length,1);
+  assert.equal(f.state.forecast.plans[f.date].workingMin,540);
+  assert.equal(f.state.forecast.plans[f.date].slotMin,840);
+  assert.equal(f.state.forecast.weekConfig.workingMin,480);
+  assert.equal(f.state.entries.length,0,'A forecast scenario must not create a finance slot');
+  assert.equal(f.commits,1);
+
+  const saved=f.root.querySelectorAll('[data-load-scenario]')[0];
+  assert.ok(saved,'Saved scenarios remain available to load');
+  saved.onclick();
+  assert.equal(f.root.querySelector('#weekWork0').value,'9');
+  assert.equal(f.root.querySelector('#weekSlotHours').value,'14');
+  assert.equal(f.state.forecast.plans[f.date].workingMin,540);
+  assert.equal(f.state.forecast.plans[f.date].slotMin,840);
+  assert.equal(f.commits,1,'Loading a scenario must not write new facts');
+});

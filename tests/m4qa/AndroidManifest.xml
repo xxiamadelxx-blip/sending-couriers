@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <application>
+    <activity android:name=".MainActivity" tools:node="replace" android:exported="false" android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:windowSoftInputMode="adjustResize" />
+    <activity android:name=".M4QaInputActivity" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

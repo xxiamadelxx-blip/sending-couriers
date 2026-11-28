@@ -3,8 +3,17 @@ import assert from 'node:assert/strict';
 import {
   periodFor, shiftPeriod, isoDate, parseMoney, parseInteger, parseHours, emptyState, upsertEntry,
   calculate, reserveMinutes, reserveText, markdownReport, mergeImport, normalizeState,
-  deductionChecks, pendingLegacy
+  deductionChecks, pendingLegacy, setPaymentTerms, ruNumber, paceText, plural, accruedIncome, goalText, money
 } from '../web/core.mjs';
+
+test('ru-RU formatting and money formula use stable units and kopecks',()=>{
+  assert.equal(ruNumber(1234.5),'1\u00a0234,5');
+  assert.equal(money(1234567.89),'1\u00a0234\u00a0567,89\u00a0₽');
+  assert.equal(paceText(76/42),'1,81');assert.equal(goalText(2.1),'2,10');
+  assert.equal(plural(24,['заказ','заказа','заказов']),'заказа');
+  assert.equal(plural(31,['заказ','заказа','заказов']),'заказ');
+  assert.equal(accruedIncome(1234.56,0.22,0.11,0.05),1234.62);
+});
 
 const period = '2026-10-02';
 const day = (date, hours, orders, extras = {}) => ({ date, dailyHours: hours, dailyOrders: orders, reward: 0, tax: '', parkCommission: '', tips: 0, separateBonus: 0, ...extras });
@@ -29,8 +38,8 @@ test('two daily 14-hour entries add to 28 and recalculate all finances', () => {
   state = upsertEntry(state, day('2026-10-03', 14, 36, { reward: 3600, tips: 90 }));
   const s = calculate(state, period);
   assert.equal(s.hours, 28); assert.equal(s.orders, 36);
-  assert.equal(s.hourlyBase, 10080); assert.equal(s.grossUserIncome, 10170);
-  assert.equal(s.estimatedYandexOwed, 6480); assert.equal(s.pace, 36 / 28);
+  assert.equal(s.hourlyBase, 10080); assert.equal(s.accruedIncome, 10170); assert.equal(s.grossUserIncome, 10170);
+  assert.equal(s.paidReward, 3600); assert.equal(s.estimatedYandexOwed, 6570); assert.equal(s.pace, 36 / 28);
   assert.equal(s.reserve, 0);
 });
 
@@ -96,7 +105,8 @@ test('paid reward remains full; tips, bonuses, deductions and closure are separa
   const s = calculate(state, period);
   assert.equal(s.hours, 15); assert.equal(s.orders, 35);
   assert.equal(s.hourlyBase, 5400); assert.equal(s.paidReward, 1800.3);
-  assert.equal(s.grossUserIncome, 5450.8); assert.equal(s.estimatedYandexOwed, 3599.7);
+  assert.equal(s.deductions, 144.02); assert.equal(s.accruedIncome, 5256.28);
+  assert.equal(s.grossUserIncome, 5306.78); assert.equal(s.estimatedYandexOwed, 3455.98);
   assert.equal(s.tax, 72.01); assert.equal(s.parkCommission, 72.01);
 });
 
@@ -114,8 +124,9 @@ test('backdated money-only record keeps hours optional and updates full payment 
   state = upsertEntry(state, { date: '2026-10-02', reward: '500,75', tax: 20.03, parkCommission: 20.03, tips: 4.5 });
   const s = calculate(state, period);
   assert.equal(s.hours, 8); assert.equal(s.orders, 20);
-  assert.equal(s.paidReward, 1500.75); assert.equal(s.grossUserIncome, 2884.5);
-  assert.equal(s.estimatedYandexOwed, 1379.25);
+  assert.equal(s.paidReward, 1500.75); assert.equal(s.deductions, 40.06);
+  assert.equal(s.accruedIncome, 2844.44); assert.equal(s.grossUserIncome, 2844.44);
+  assert.equal(s.estimatedYandexOwed, 1343.69);
 });
 
 test('hours and orders can be entered independently; recorded totals determine pace', () => {
@@ -180,7 +191,7 @@ test('4000 reward with 84 tax and 200 commission saves; only tax has a warning',
   const state = upsertEntry(emptyState(), input);
   assert.equal(state.entries[0].tax, 84); assert.equal(state.entries[0].parkCommission, 200);
   const s = calculate(state, period);
-  assert.equal(s.paidReward, 4000); assert.equal(s.grossUserIncome, 5112); assert.equal(s.estimatedYandexOwed, 1112);
+  assert.equal(s.paidReward, 4000); assert.equal(s.deductions, 284); assert.equal(s.accruedIncome, 4828); assert.equal(s.grossUserIncome, 4828); assert.equal(s.estimatedYandexOwed, 828);
   assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(state))), state);
 });
 
@@ -257,7 +268,7 @@ test('pending schema 2 from 1.1.0 opens without a choice or an extra write', () 
   assert.equal(JSON.stringify(raw), before);
   const s = calculate(state, period);
   assert.equal(s.hours, 28); assert.equal(s.orders, 36);
-  assert.equal(s.grossUserIncome, 10170); assert.equal(s.estimatedYandexOwed, 6480);
+  assert.equal(s.accruedIncome, 10170); assert.equal(s.grossUserIncome, 10170); assert.equal(s.estimatedYandexOwed, 6570);
   assert.equal(s.hiddenMinutes, 0); assert.equal(s.pendingCount, 0);
   assert.doesNotMatch(markdownReport(state, period), /выбор|ожидают|способ переноса/i);
 });
@@ -342,6 +353,45 @@ test('JSON imports merge dates, preserve other periods and process schema 1 auto
   assert.equal(calculate(old, period).hours, 8.5);
 });
 
+test('import conflict guards preserve existing cycle and payment settings', () => {
+  const cycleStart = '2026-09-18';
+  const rule = { effectivePeriodStart: cycleStart, hourlyRate: 400, basePace: 1.8, premiumPace: 2.8, paceBonusPercent: 5, cycleBonusPercent: 5 };
+  const empty = emptyState();
+  let state = normalizeState({ ...empty, settings: { ...empty.settings, premiumCycleStart: cycleStart } });
+  state = setPaymentTerms(state, rule);
+  const before = JSON.stringify(state);
+  const conflictingRule = { ...rule, hourlyRate: 420 };
+
+  assert.throws(() => mergeImport(state, {
+    schemaVersion: 5, entries: [],
+    settings: { premiumCycleStart: '2026-09-19', paymentRules: [conflictingRule] }
+  }), /В копии другая дата начала/);
+  assert.equal(JSON.stringify(state), before);
+
+  assert.throws(() => mergeImport(state, {
+    schemaVersion: 5, entries: [],
+    settings: { premiumCycleStart: cycleStart, paymentRules: [conflictingRule] }
+  }), /В копии другие условия оплаты/);
+  assert.equal(JSON.stringify(state), before);
+
+  const opening = normalizeState({
+    ...state,
+    settings: {
+      ...state.settings,
+      cycleOpening: { cycleStart, through: '2026-10-01', grossIncome: 50000, source: 'manual' }
+    }
+  });
+  const openingBefore = JSON.stringify(opening);
+  assert.throws(() => mergeImport(opening, {
+    schemaVersion: 5, entries: [],
+    settings: {
+      premiumCycleStart: cycleStart,
+      cycleOpening: { cycleStart, through: '2026-10-01', grossIncome: 50001, source: 'manual' }
+    }
+  }), /В копии другая накопленная сумма за 12 недель/);
+  assert.equal(JSON.stringify(opening), openingBefore);
+});
+
 test('a partial cumulative import recalculates following untouched intervals and preserves new days', () => {
   let state = normalizeState(oldState([oldDay(period, 14, 20), oldDay('2026-10-03', 28, 60)]));
   state = upsertEntry(state, day('2026-10-04', 8.5, 20));
@@ -378,7 +428,7 @@ test('malformed/future schemas, duplicate dates, bad hour precision and mixed sc
   for (const data of [{ schemaVersion: 7, entries: [] }, { entries: [null] }, { entries: [day(period, 5, 10), day(period, 6, 12)] }, { schemaVersion: 2, entries: [oldDay(period, 14, 36)] }, { schemaVersion: 2, entries: [day(period, '1.001', 2)] }]) assert.throws(() => normalizeState(data));
 });
 
-test('Markdown exports daily hours, unknown cells, full finances, provenance and closure without deduction rows', () => {
+test('Markdown exports daily hours, the new money formula, provenance and closure', () => {
   let state = upsertEntry(emptyState(), day(period, 8.5, 20, { reward: 1200.5, tax: 48.02, parkCommission: 48.02, tips: 90, separateBonus: 3750, note: 'текст | две\nстроки <tag>' }));
   state = upsertEntry(state, { date: '2026-10-03', reward: 0 });
   state.closures[period] = { finalAdjustment: 100, note: 'факт', closedAt: '2026-10-16' };
@@ -386,5 +436,8 @@ test('Markdown exports daily hours, unknown cells, full finances, provenance and
   assert.match(md, /Часы за период: 8,5/); assert.match(md, /dailyHours/);
   assert.match(md, /\| 2026-10-02 \| 8,5 \| 20 \|/); assert.match(md, /\| 2026-10-03 \| — \| — \| 0\s?₽/);
   assert.match(md, /Фактическая финальная доплата/); assert.match(md, /текст \\\| две · строки &lt;tag&gt;/);
-  assert.doesNotMatch(md, /налог|комисси|NaN|Infinity|Текущий спидометр|Изменение отображаемых/i);
+  assert.match(md,/Начислено по формуле база \+ чаевые − удержания/);
+  assert.match(md,/Осталось выплатить = начислено − сумма reward/);
+  assert.match(md,/\| Выплачено \| Чаевые \| Налог \| Комиссия парка \|/);
+  assert.doesNotMatch(md,/NaN|Infinity|Текущий спидометр|Изменение отображаемых/i);
 });

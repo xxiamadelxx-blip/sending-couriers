@@ -1,0 +1,829 @@
+package ru.courier.finance;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.media.MediaMetadataRetriever;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+/** Extracts sparse frame evidence from a local MP4/MOV. It never writes order or payment facts. */
+public final class VideoImportProcessor {
+    public static final long MAX_VIDEO_BYTES = 2L * 1024L * 1024L * 1024L;
+    public static final long MAX_DURATION_MS = 30L * 60L * 1000L;
+    public static final int MAX_FRAMES = 600;
+    // Preserve the source phone resolution so the bundled OCR can read the small order-list text.
+    private static final int MAX_BITMAP_SIDE = 1608;
+    // Short clips are sampled every 250 ms so briefly opened order cards are
+    // still likely to appear in the OCR evidence. Long clips remain bounded.
+    private static final long MIN_SAMPLE_SPACING_MS = 250L;
+
+    public interface Ocr {
+        TesseractOcrEngine.Recognition recognize(Bitmap bitmap) throws Exception;
+        default TesseractOcrEngine.Recognition recognizeFocused(Bitmap bitmap) throws Exception {
+            return recognize(bitmap);
+        }
+    }
+    public interface Progress {
+        void onProgress(int completedFrames, int estimatedFrames);
+    }
+
+    public static final class Observation {
+        public final int frameIndex;
+        public final long timestampMs;
+        public final String timestampBasis;
+        public final String frameSelectionMethod;
+        public final String frameSha256;
+        public final String ocrText;
+        public final float ocrConfidence;
+        public final YandexScreenParser.ScreenType screenType;
+        public final String parseReason;
+        public final boolean reviewRequired;
+        public final String reviewImagePath;
+        public final List<YandexScreenParser.Candidate> candidates;
+
+        Observation(int frameIndex, long timestampMs, String frameSha256, String ocrText,
+                    float ocrConfidence, YandexScreenParser.Result parsed, String reviewImagePath) {
+            this.frameIndex=frameIndex; this.timestampMs=timestampMs; this.frameSha256=frameSha256;
+            this.timestampBasis="requested_nearest_sync"; // retained for v1/v2 database compatibility
+            this.frameSelectionMethod="closest_frame";
+            this.ocrText=ocrText; this.ocrConfidence=ocrConfidence; this.screenType=parsed.screenType;
+            this.parseReason=parsed.reason; this.reviewRequired=parsed.reviewRequired;
+            this.reviewImagePath=reviewImagePath; this.candidates=parsed.candidates;
+        }
+    }
+
+    public static final class Result {
+        public final String sourceSha256;
+        public final long byteSize;
+        public final long durationMs;
+        public final List<Observation> observations;
+        public final int uniqueFramesOcr;
+        /** Original MP4 creation-time metadata, retained for date resolution only. */
+        public final String recordingDateMetadata;
+
+        Result(String sourceSha256, long byteSize, long durationMs, List<Observation> observations, int uniqueFramesOcr) {
+            this(sourceSha256,byteSize,durationMs,observations,uniqueFramesOcr,null);
+        }
+        Result(String sourceSha256, long byteSize, long durationMs, List<Observation> observations,
+               int uniqueFramesOcr,String recordingDateMetadata) {
+            this.sourceSha256=sourceSha256; this.byteSize=byteSize; this.durationMs=durationMs;
+            this.observations=observations; this.uniqueFramesOcr=uniqueFramesOcr;
+            this.recordingDateMetadata=recordingDateMetadata;
+        }
+        public int unknownScreenCount() {
+            int count=0; for(Observation row:observations) if(row.reviewRequired) count++; return count;
+        }
+        private static final class SupportedCandidate {
+            YandexScreenParser.Candidate candidate;
+            int frames;
+            final Set<String> frameHashes=new HashSet<>();
+            final Map<String,Integer> amountVotes=new HashMap<>();
+            SupportedCandidate(YandexScreenParser.Candidate candidate,String frameHash) {
+                this.candidate=candidate; frameHashes.add(frameHash); frames=1; recordAmount(candidate);
+            }
+            void add(YandexScreenParser.Candidate next,String frameHash) {
+                if(!frameHashes.add(frameHash)) return;
+                candidate=candidate.mergeMissingFields(next); frames++; recordAmount(next);
+            }
+            private void recordAmount(YandexScreenParser.Candidate value) {
+                for(YandexScreenParser.Field field:value.fields) if("amount_kopecks".equals(field.name))
+                    amountVotes.put(field.value,amountVotes.containsKey(field.value)?amountVotes.get(field.value)+1:1);
+            }
+            void resolveAmountConsensus() {
+                if(amountVotes.size()<2) return;
+                String winner=null; int best=0,ties=0;
+                for(Map.Entry<String,Integer> vote:amountVotes.entrySet()) {
+                    if(vote.getValue()>best) { winner=vote.getKey(); best=vote.getValue(); ties=1; }
+                    else if(vote.getValue()==best) ties++;
+                }
+                if(ties!=1) return;
+                List<YandexScreenParser.Field> fields=new ArrayList<>();
+                for(YandexScreenParser.Field field:candidate.fields) fields.add(
+                    "amount_kopecks".equals(field.name)?new YandexScreenParser.Field(field.name,field.valueType,winner):field);
+                candidate=new YandexScreenParser.Candidate(candidate.candidateType,candidate.ruleScore,fields);
+            }
+        }
+
+        private static final class CandidateEvidence {
+            final Map<String,YandexScreenParser.Candidate> slotCards;
+            final Map<Integer,List<YandexScreenParser.Candidate>> frameCandidates;
+            final LinkedHashMap<String,SupportedCandidate> unique;
+            CandidateEvidence(Map<String,YandexScreenParser.Candidate> slotCards,
+                    Map<Integer,List<YandexScreenParser.Candidate>> frameCandidates,
+                    LinkedHashMap<String,SupportedCandidate> unique) {
+                this.slotCards=slotCards; this.frameCandidates=frameCandidates; this.unique=unique;
+            }
+        }
+
+        private static final class ScanDirections {
+            final Set<String> ascendingSlots=new HashSet<>();
+            final Set<String> descendingSlots=new HashSet<>();
+        }
+
+        private static final class SlotOrderSnapshot {
+            final List<YandexScreenParser.Candidate> rows;
+            final long totalKopecks;
+            final boolean valid;
+            SlotOrderSnapshot(List<YandexScreenParser.Candidate> rows,long totalKopecks,boolean valid) {
+                this.rows=rows; this.totalKopecks=totalKopecks; this.valid=valid;
+            }
+        }
+
+        /**
+         * Deduplicates repeated OCR detections, keeping raw per-frame observations intact.
+         * Scrolling order lists are chronological; a one-frame time reversal and a
+         * low-support near-duplicate are treated as OCR variants, never as new orders.
+         */
+        public List<YandexScreenParser.Candidate> uniqueCandidates() {
+            CandidateEvidence evidence=collectCandidateEvidence();
+            Set<String> sequenceOutliers=identifyOneFrameSequenceOutliers(evidence);
+            ScanDirections directions=inferScanDirections(evidence,sequenceOutliers);
+            Set<String> discard=discardScanReversals(evidence,sequenceOutliers,directions);
+            Map<String,Set<String>> coObserved=coObservedRows(evidence);
+            discardWeakNearDuplicates(evidence,coObserved,discard);
+            List<YandexScreenParser.Candidate> result=materializeCandidates(evidence,discard);
+            reconcileWeakOrderOutliers(result,evidence.unique,evidence.frameCandidates,evidence.slotCards,coObserved);
+            return Collections.unmodifiableList(result);
+        }
+
+        private CandidateEvidence collectCandidateEvidence() {
+            Map<String,YandexScreenParser.Candidate> slotCards=slotCardsById();
+            Map<Integer,List<YandexScreenParser.Candidate>> frameCandidates=new HashMap<>();
+            LinkedHashMap<String,SupportedCandidate> unique=new LinkedHashMap<>();
+            String activeSlotId=null;
+            for(Observation observation:observations)
+                activeSlotId=normalizeFrameCandidates(observation,activeSlotId,slotCards,frameCandidates,unique);
+            for(SupportedCandidate supported:unique.values()) supported.resolveAmountConsensus();
+            return new CandidateEvidence(slotCards,frameCandidates,unique);
+        }
+
+        private Map<String,YandexScreenParser.Candidate> slotCardsById() {
+            Map<String,YandexScreenParser.Candidate> slotCards=new LinkedHashMap<>();
+            for(Observation observation:observations) for(YandexScreenParser.Candidate candidate:observation.candidates)
+                if("SLOT_DETAIL".equals(candidate.candidateType)) {
+                    String id=value(candidate,"slot_id"); if(id==null) continue;
+                    YandexScreenParser.Candidate prior=slotCards.get(id);
+                    slotCards.put(id,prior==null?candidate:prior.mergeMissingFields(candidate));
+                }
+            return slotCards;
+        }
+
+        /** Keep the active slot when list frames omit IDs; a unique time range wins over context. */
+        private String normalizeFrameCandidates(Observation observation,String activeSlotId,
+                Map<String,YandexScreenParser.Candidate> slotCards,
+                Map<Integer,List<YandexScreenParser.Candidate>> frameCandidates,
+                LinkedHashMap<String,SupportedCandidate> unique) {
+            Set<String> frameSlotIds=frameSlotIds(observation.candidates);
+            if(frameSlotIds.size()==1) activeSlotId=frameSlotIds.iterator().next();
+            String frameHash=observation.frameSha256==null
+                ?"frame-index:"+observation.frameIndex:observation.frameSha256;
+            List<YandexScreenParser.Candidate> normalized=new ArrayList<>();
+            for(YandexScreenParser.Candidate candidate:observation.candidates) {
+                YandexScreenParser.Candidate associated=candidate;
+                if("ORDER_LIST_ROW".equals(candidate.candidateType)) {
+                    String rowSlot=value(candidate,"slot_id");
+                    if(rowSlot!=null) activeSlotId=rowSlot;
+                    else rowSlot=inferSlotForRow(candidate,slotCards,frameSlotIds,activeSlotId);
+                    if(rowSlot!=null) associated=withSlotId(candidate,rowSlot);
+                }
+                normalized.add(associated);
+                addSupportedCandidate(associated,frameHash,unique);
+            }
+            frameCandidates.put(observation.frameIndex,normalized);
+            return activeSlotId;
+        }
+
+        private static Set<String> frameSlotIds(List<YandexScreenParser.Candidate> candidates) {
+            Set<String> ids=new HashSet<>();
+            for(YandexScreenParser.Candidate candidate:candidates)
+                if("SLOT_DETAIL".equals(candidate.candidateType)&&value(candidate,"slot_id")!=null)
+                    ids.add(value(candidate,"slot_id"));
+            return ids;
+        }
+
+        private static String inferSlotForRow(YandexScreenParser.Candidate candidate,
+                Map<String,YandexScreenParser.Candidate> slotCards,Set<String> frameSlotIds,String activeSlotId) {
+            int minute=orderMinute(candidate);
+            String inferred=slotForTime(slotCards,minute);
+            String context=frameSlotIds.size()==1?frameSlotIds.iterator().next():activeSlotId;
+            if(inferred!=null) return inferred;
+            if(context!=null&&slotMatchesTime(slotCards.get(context),minute)) return context;
+            if(slotCards.size()==1) return slotCards.keySet().iterator().next();
+            return null;
+        }
+
+        private static void addSupportedCandidate(YandexScreenParser.Candidate candidate,String frameHash,
+                LinkedHashMap<String,SupportedCandidate> unique) {
+            String key=candidate.mergeKey();
+            SupportedCandidate previous=unique.get(key);
+            if(previous==null) unique.put(key,new SupportedCandidate(candidate,frameHash));
+            else previous.add(candidate,frameHash);
+        }
+
+        /** A one-frame timestamp reversal is weak and must not define the list's scan direction. */
+        private Set<String> identifyOneFrameSequenceOutliers(CandidateEvidence evidence) {
+            Set<String> outliers=new HashSet<>();
+            for(Map.Entry<String,SupportedCandidate> entry:evidence.unique.entrySet())
+                if("ORDER_LIST_ROW".equals(entry.getValue().candidate.candidateType)
+                        &&entry.getValue().frames==1
+                        &&isOneFrameTimeReversal(entry.getValue().candidate,evidence.unique,evidence.frameCandidates))
+                    outliers.add(entry.getKey());
+            return outliers;
+        }
+
+        private ScanDirections inferScanDirections(CandidateEvidence evidence,Set<String> sequenceOutliers) {
+            Map<String,int[]> directionVotes=new HashMap<>();
+            for(Observation observation:observations) {
+                Map<String,Integer> previousBySlot=new HashMap<>();
+                for(YandexScreenParser.Candidate candidate:evidence.frameCandidates.get(observation.frameIndex)) {
+                    if(!eligibleRow(candidate,evidence.slotCards)) continue;
+                    String slotId=value(candidate,"slot_id"); if(slotId==null) continue;
+                    if(sequenceOutliers.contains(candidate.mergeKey())) continue;
+                    int minute=orderMinute(candidate);
+                    Integer previous=previousBySlot.put(slotId,minute);
+                    if(previous!=null) addDirectionVote(directionVotes,slotId,minute-previous.intValue());
+                }
+            }
+            return classifyScanDirections(evidence.slotCards,directionVotes);
+        }
+
+        private static void addDirectionVote(Map<String,int[]> votes,String slotId,int delta) {
+            if(delta>5||delta< -5) {
+                int[] direction=votes.computeIfAbsent(slotId,k->new int[2]);
+                if(delta>5) direction[0]++; else direction[1]++;
+            }
+        }
+
+        private static ScanDirections classifyScanDirections(Map<String,YandexScreenParser.Candidate> slotCards,
+                Map<String,int[]> directionVotes) {
+            ScanDirections directions=new ScanDirections();
+            for(Map.Entry<String,int[]> entry:directionVotes.entrySet()) {
+                YandexScreenParser.Candidate slot=slotCards.get(entry.getKey());
+                int start=slotStart(slot),end=slotEnd(slot);
+                if(start<0||end<=start) continue;
+                int forward=entry.getValue()[0],backward=entry.getValue()[1];
+                if(forward>=2&&forward>=backward*2) directions.ascendingSlots.add(entry.getKey());
+                if(backward>=2&&backward>=forward*2) directions.descendingSlots.add(entry.getKey());
+            }
+            return directions;
+        }
+
+        private Set<String> discardScanReversals(CandidateEvidence evidence,Set<String> sequenceOutliers,
+                ScanDirections directions) {
+            Set<String> discard=new HashSet<>();
+            if(directions.ascendingSlots.isEmpty()&&directions.descendingSlots.isEmpty()) return discard;
+            for(Observation observation:observations)
+                discardScanReversalsInFrame(evidence.frameCandidates.get(observation.frameIndex),
+                    evidence,sequenceOutliers,directions,discard);
+            return discard;
+        }
+
+        private static void discardScanReversalsInFrame(
+                List<YandexScreenParser.Candidate> frameCandidates,CandidateEvidence evidence,
+                Set<String> sequenceOutliers,ScanDirections directions,Set<String> discard) {
+            Map<String,Integer> extremeBySlot=new HashMap<>();
+            for(YandexScreenParser.Candidate candidate:frameCandidates) {
+                if(!eligibleRow(candidate,evidence.slotCards)) continue;
+                String slotId=value(candidate,"slot_id");
+                if(slotId==null) continue;
+                boolean ascending=directions.ascendingSlots.contains(slotId);
+                boolean descending=directions.descendingSlots.contains(slotId);
+                if(!ascending&&!descending) continue;
+                if(sequenceOutliers.contains(candidate.mergeKey())) continue;
+                if(discardIfScanReversal(candidate,slotId,ascending,evidence,extremeBySlot,discard)) continue;
+                updateScanExtreme(extremeBySlot,slotId,orderMinute(candidate),ascending);
+            }
+        }
+
+        private static void updateScanExtreme(Map<String,Integer> extremeBySlot,String slotId,
+                int minute,boolean ascending) {
+            Integer extreme=extremeBySlot.get(slotId);
+            int updated=extreme==null?minute:(ascending
+                ?Math.max(extreme.intValue(),minute):Math.min(extreme.intValue(),minute));
+            extremeBySlot.put(slotId,updated);
+        }
+
+        private static boolean discardIfScanReversal(YandexScreenParser.Candidate candidate,String slotId,
+                boolean ascending,CandidateEvidence evidence,Map<String,Integer> extremeBySlot,Set<String> discard) {
+            Integer extreme=extremeBySlot.get(slotId);
+            if(extreme==null) return false;
+            String key=candidate.mergeKey();
+            SupportedCandidate supported=evidence.unique.get(key);
+            int minute=orderMinute(candidate);
+            boolean reversal=ascending?minute<extreme.intValue()-5:minute>extreme.intValue()+5;
+            if(supported!=null&&supported.frames<=2&&reversal) {
+                discard.add(key);
+                return true;
+            }
+            return false;
+        }
+
+        private Map<String,Set<String>> coObservedRows(CandidateEvidence evidence) {
+            Map<String,Set<String>> coObserved=new HashMap<>();
+            for(Observation observation:observations) {
+                Set<String> frameRows=new HashSet<>();
+                for(YandexScreenParser.Candidate candidate:evidence.frameCandidates.get(observation.frameIndex))
+                    if(eligibleRow(candidate,evidence.slotCards)) frameRows.add(candidate.mergeKey());
+                for(String a:frameRows) for(String b:frameRows) if(!a.equals(b))
+                    coObserved.computeIfAbsent(a,k->new HashSet<>()).add(b);
+            }
+            return coObserved;
+        }
+
+        private void discardWeakNearDuplicates(CandidateEvidence evidence,
+                Map<String,Set<String>> coObserved,Set<String> discard) {
+            // A single blurry frame can shift an order time by one or two minutes.
+            // Collapse that reading only when the same amount and occurrence have
+            // substantially stronger support at the neighboring time. Two real
+            // orders with close times remain separate when both are observed.
+            List<Map.Entry<String,SupportedCandidate>> rows=supportedOrderRows(evidence,discard);
+            for(int i=0;i<rows.size();i++) for(int j=i+1;j<rows.size();j++)
+                discardWeakNearDuplicate(rows.get(i),rows.get(j),coObserved,discard);
+        }
+
+        private List<Map.Entry<String,SupportedCandidate>> supportedOrderRows(CandidateEvidence evidence,
+                Set<String> discard) {
+            List<Map.Entry<String,SupportedCandidate>> rows=new ArrayList<>();
+            for(Map.Entry<String,SupportedCandidate> entry:evidence.unique.entrySet())
+                if("ORDER_LIST_ROW".equals(entry.getValue().candidate.candidateType)
+                        &&!discard.contains(entry.getKey())
+                        &&eligibleRow(entry.getValue().candidate,evidence.slotCards)) rows.add(entry);
+            return rows;
+        }
+
+        private static void discardWeakNearDuplicate(Map.Entry<String,SupportedCandidate> a,
+                Map.Entry<String,SupportedCandidate> b,Map<String,Set<String>> coObserved,Set<String> discard) {
+            YandexScreenParser.Candidate ca=a.getValue().candidate,cb=b.getValue().candidate;
+            if(!same(value(ca,"slot_id"),value(cb,"slot_id"))) return;
+            if(!same(value(ca,"occurrence"),value(cb,"occurrence"))) return;
+            if(!same(value(ca,"amount_kopecks"),value(cb,"amount_kopecks"))) return;
+            int delta=Math.abs(orderMinute(ca)-orderMinute(cb));
+            if(delta==0||delta>2) return;
+            if(coObserved.getOrDefault(a.getKey(),Collections.<String>emptySet()).contains(b.getKey())) return;
+            SupportedCandidate low=a.getValue().frames<=b.getValue().frames?a.getValue():b.getValue();
+            SupportedCandidate high=low==a.getValue()?b.getValue():a.getValue();
+            String lowKey=low==a.getValue()?a.getKey():b.getKey();
+            if(low.frames<=2&&high.frames>=4&&high.frames>=low.frames*3) discard.add(lowKey);
+        }
+
+        private List<YandexScreenParser.Candidate> materializeCandidates(CandidateEvidence evidence,
+                Set<String> discard) {
+            List<YandexScreenParser.Candidate> result=new ArrayList<>();
+            for(Map.Entry<String,SupportedCandidate> entry:evidence.unique.entrySet()) {
+                YandexScreenParser.Candidate candidate=entry.getValue().candidate;
+                if(discard.contains(entry.getKey())) continue;
+                if("ORDER_LIST_ROW".equals(candidate.candidateType)
+                        &&!eligibleRow(candidate,evidence.slotCards)) continue;
+                result.add(candidate);
+            }
+            return result;
+        }
+
+        /**
+         * A one-frame OCR variant may add a false row even when all other rows
+         * are stable. Drop it only when the other rows independently repeat and
+         * removing exactly that candidate makes both the slot count and total match.
+         */
+        private void reconcileWeakOrderOutliers(List<YandexScreenParser.Candidate> candidates,
+                Map<String,SupportedCandidate> evidence,Map<Integer,List<YandexScreenParser.Candidate>> frames,
+                Map<String,YandexScreenParser.Candidate> slots,Map<String,Set<String>> coObserved) {
+            for(Map.Entry<String,YandexScreenParser.Candidate> slotEntry:slots.entrySet()) {
+                String slotId=slotEntry.getKey(); YandexScreenParser.Candidate slot=slotEntry.getValue();
+                Integer declared=parseInteger(value(slot,"slot_order_count"));
+                Long total=parseLong(value(slot,"slot_total_kopecks"));
+                if(!hasValidSlotOrderSummary(declared,total)) continue;
+                SlotOrderSnapshot snapshot=collectSlotOrderRows(candidates,slotId);
+                if(!needsWeakOrderReconciliation(snapshot,declared,total)) continue;
+
+                YandexScreenParser.Candidate singleWeakRow=singleWeakExtraRow(
+                    snapshot.rows,declared,total,snapshot.totalKopecks,evidence,frames);
+                if(singleWeakRow!=null) { candidates.remove(singleWeakRow); continue; }
+
+                // OCR can repeatedly misread 13:50 as 13:59. Only reconcile
+                // short-lived variants when the slot's independent count AND
+                // total require precisely those extra rows to be removed.
+                removeRepeatedTimeVariants(candidates,snapshot,declared,total,evidence,coObserved);
+            }
+        }
+
+        private static boolean hasValidSlotOrderSummary(Integer declared,Long total) {
+            return declared!=null&&declared>=1&&total!=null&&total>=0;
+        }
+
+        private SlotOrderSnapshot collectSlotOrderRows(List<YandexScreenParser.Candidate> candidates,
+                String slotId) {
+            List<YandexScreenParser.Candidate> rows=new ArrayList<>(); long sum=0;
+            for(YandexScreenParser.Candidate candidate:candidates)
+                if("ORDER_LIST_ROW".equals(candidate.candidateType)&&slotId.equals(value(candidate,"slot_id"))) {
+                    Long amount=parseLong(value(candidate,"amount_kopecks"));
+                    if(amount==null||amount<0) return new SlotOrderSnapshot(rows,sum,false);
+                    rows.add(candidate); sum+=amount;
+                }
+            return new SlotOrderSnapshot(rows,sum,true);
+        }
+
+        private static boolean needsWeakOrderReconciliation(SlotOrderSnapshot snapshot,
+                int declared,long total) {
+            return snapshot.valid&&snapshot.rows.size()>declared
+                &&snapshot.rows.size()<=declared+4&&snapshot.totalKopecks>total;
+        }
+
+        private YandexScreenParser.Candidate singleWeakExtraRow(
+                List<YandexScreenParser.Candidate> rows,int declared,long total,long sum,
+                Map<String,SupportedCandidate> evidence,
+                Map<Integer,List<YandexScreenParser.Candidate>> frames) {
+            if(rows.size()!=declared+1) return null;
+            YandexScreenParser.Candidate removable=null; int matches=0;
+            for(int i=0;i<rows.size();i++) {
+                YandexScreenParser.Candidate row=rows.get(i);
+                SupportedCandidate support=evidence.get(row.mergeKey());
+                if(support==null||support.frames>1) continue;
+                boolean allOtherRowsRepeat=allOtherRowsHaveMinimumSupport(rows,i,evidence,3);
+                boolean allOtherRowsSeenTwice=allOtherRowsHaveMinimumSupport(rows,i,evidence,2);
+                Long amount=parseLong(value(row,"amount_kopecks"));
+                if((allOtherRowsRepeat||allOtherRowsSeenTwice
+                        &&isOneFrameTimeReversal(row,evidence,frames))
+                        &&rows.size()-1==declared&&sum-amount==total) {
+                    removable=row; matches++;
+                }
+            }
+            return matches==1?removable:null;
+        }
+
+        private static boolean allOtherRowsHaveMinimumSupport(
+                List<YandexScreenParser.Candidate> rows,int excludedIndex,
+                Map<String,SupportedCandidate> evidence,int minimumFrames) {
+            for(int i=0;i<rows.size();i++) if(i!=excludedIndex) {
+                SupportedCandidate support=evidence.get(rows.get(i).mergeKey());
+                if(support==null||support.frames<minimumFrames) return false;
+            }
+            return true;
+        }
+
+        private void removeRepeatedTimeVariants(List<YandexScreenParser.Candidate> candidates,
+                SlotOrderSnapshot snapshot,int declared,long total,
+                Map<String,SupportedCandidate> evidence,Map<String,Set<String>> coObserved) {
+            List<YandexScreenParser.Candidate> variants=new ArrayList<>(); long variantTotal=0;
+            for(YandexScreenParser.Candidate row:snapshot.rows)
+                if(hasStrongAlternativeTime(row,snapshot.rows,evidence,coObserved)) {
+                    variants.add(row);
+                    variantTotal+=parseLong(value(row,"amount_kopecks"));
+                }
+            long surplus=snapshot.totalKopecks-total;
+            if(variants.size()==snapshot.rows.size()-declared&&variantTotal==surplus)
+                candidates.removeAll(variants);
+        }
+
+        private static boolean hasStrongAlternativeTime(YandexScreenParser.Candidate row,
+                List<YandexScreenParser.Candidate> rows,Map<String,SupportedCandidate> evidence,
+                Map<String,Set<String>> coObserved) {
+            SupportedCandidate weak=evidence.get(row.mergeKey());
+            if(weak==null||weak.frames>4) return false;
+            int minute=orderMinute(row);
+            for(YandexScreenParser.Candidate other:rows) {
+                if(other==row||!same(value(row,"occurrence"),value(other,"occurrence"))
+                        ||!same(value(row,"amount_kopecks"),value(other,"amount_kopecks"))) continue;
+                int difference=Math.abs(minute-orderMinute(other));
+                if(difference<1||difference>10) continue;
+                SupportedCandidate strong=evidence.get(other.mergeKey());
+                if(strong==null||strong.frames<Math.max(12,weak.frames*5)
+                        ||coObserved.getOrDefault(row.mergeKey(),Collections.<String>emptySet())
+                            .contains(other.mergeKey())) continue;
+                return true;
+            }
+            return false;
+        }
+
+
+        private boolean isOneFrameTimeReversal(YandexScreenParser.Candidate row,
+                Map<String,SupportedCandidate> evidence,Map<Integer,List<YandexScreenParser.Candidate>> frames) {
+            String slotId=value(row,"slot_id"),key=row.mergeKey();
+            int minute=orderMinute(row);
+            for(Observation observation:observations) {
+                List<YandexScreenParser.Candidate> frameRows=orderRowsForSlot(
+                    frames.get(observation.frameIndex),slotId);
+                if(hasStableNeighborReversal(frameRows,key,minute,evidence)) return true;
+            }
+            return false;
+        }
+
+        private static List<YandexScreenParser.Candidate> orderRowsForSlot(
+                List<YandexScreenParser.Candidate> candidates,String slotId) {
+            List<YandexScreenParser.Candidate> rows=new ArrayList<>();
+            for(YandexScreenParser.Candidate candidate:candidates)
+                if("ORDER_LIST_ROW".equals(candidate.candidateType)&&orderMinute(candidate)>=0
+                        &&same(slotId,value(candidate,"slot_id"))) rows.add(candidate);
+            return rows;
+        }
+
+        private static boolean hasStableNeighborReversal(List<YandexScreenParser.Candidate> frameRows,
+                String key,int minute,Map<String,SupportedCandidate> evidence) {
+            for(int i=1;i+1<frameRows.size();i++) {
+                if(!key.equals(frameRows.get(i).mergeKey())) continue;
+                YandexScreenParser.Candidate before=frameRows.get(i-1),after=frameRows.get(i+1);
+                if(!hasRepeatedSupport(before,evidence)||!hasRepeatedSupport(after,evidence)) continue;
+                if(timesAreOnSameSideOfCandidate(before,after,minute)) return true;
+            }
+            return false;
+        }
+
+        private static boolean hasRepeatedSupport(YandexScreenParser.Candidate candidate,
+                Map<String,SupportedCandidate> evidence) {
+            SupportedCandidate support=evidence.get(candidate.mergeKey());
+            return support!=null&&support.frames>=2;
+        }
+
+        private static boolean timesAreOnSameSideOfCandidate(
+                YandexScreenParser.Candidate before,YandexScreenParser.Candidate after,int minute) {
+            int left=orderMinute(before),right=orderMinute(after);
+            return left<minute-5&&right<minute-5 || left>minute+5&&right>minute+5;
+        }
+
+        private static Integer parseInteger(String value) {
+            try { return value==null?null:Integer.valueOf(value); } catch(Exception invalid) { return null; }
+        }
+        private static Long parseLong(String value) {
+            try { return value==null?null:Long.valueOf(value); } catch(Exception invalid) { return null; }
+        }
+
+        private static boolean eligibleRow(YandexScreenParser.Candidate candidate,
+                                           Map<String,YandexScreenParser.Candidate> slots) {
+            if(!"ORDER_LIST_ROW".equals(candidate.candidateType)) return false;
+            int minute=orderMinute(candidate);
+            // Keep a readable row even when the slot's own OCR time range may
+            // be wrong. The fact writer validates slot windows before writing;
+            // dropping the candidate here would hide the evidence from review.
+            return minute>=0;
+        }
+        private static YandexScreenParser.Candidate withSlotId(YandexScreenParser.Candidate candidate,String slotId) {
+            List<YandexScreenParser.Field> fields=new ArrayList<>(candidate.fields);
+            fields.add(new YandexScreenParser.Field("slot_id","text",slotId));
+            return new YandexScreenParser.Candidate(candidate.candidateType,candidate.ruleScore,fields);
+        }
+        private static String slotForTime(Map<String,YandexScreenParser.Candidate> slots,int minute) {
+            if(minute<0) return null;
+            String match=null;
+            for(Map.Entry<String,YandexScreenParser.Candidate> entry:slots.entrySet())
+                if(slotMatchesTime(entry.getValue(),minute)) {
+                    if(match!=null) return null;
+                    match=entry.getKey();
+                }
+            return match;
+        }
+        private static boolean slotMatchesTime(YandexScreenParser.Candidate slot,int minute) {
+            if(slot==null||minute<0) return false;
+            int start=slotStart(slot),end=slotEnd(slot);
+            return start>=0&&end>start&&minute>=start&&minute<=end;
+        }
+        private static int slotStart(YandexScreenParser.Candidate slot) {
+            int value=minuteOfDateTime(value(slot,"started_at"));
+            return value>=0?value:orderMinuteValue(value(slot,"slot_start_time"));
+        }
+        private static int slotEnd(YandexScreenParser.Candidate slot) {
+            int value=minuteOfDateTime(value(slot,"completed_at"));
+            return value>=0?value:orderMinuteValue(value(slot,"slot_end_time"));
+        }
+        private static int orderMinuteValue(String value) {
+            if(value==null||!value.matches("\\d{2}:\\d{2}")) return -1;
+            try { int hour=Integer.parseInt(value.substring(0,2)),minute=Integer.parseInt(value.substring(3,5));
+                return hour<24&&minute<60?hour*60+minute:-1;
+            } catch(Exception ignored) { return -1; }
+        }
+        private static int orderMinute(YandexScreenParser.Candidate candidate) {
+            String time=value(candidate,"order_time");
+            if(time==null||!time.matches("\\d{2}:\\d{2}")) return -1;
+            try { int hour=Integer.parseInt(time.substring(0,2)),minute=Integer.parseInt(time.substring(3,5));
+                return hour<24&&minute<60?hour*60+minute:-1;
+            } catch(Exception ignored) { return -1; }
+        }
+        private static int minuteOfDateTime(String value) {
+            if(value==null||value.length()<16||value.charAt(10)!='T') return -1;
+            try { int hour=Integer.parseInt(value.substring(11,13)),minute=Integer.parseInt(value.substring(14,16));
+                return hour<24&&minute<60?hour*60+minute:-1;
+            } catch(Exception ignored) { return -1; }
+        }
+        private static String value(YandexScreenParser.Candidate candidate,String name) {
+            if(candidate==null) return null;
+            for(YandexScreenParser.Field field:candidate.fields) if(name.equals(field.name)) return field.value;
+            return null;
+        }
+        private static boolean same(String a,String b) { return a==null?b==null:a.equals(b); }
+        public int uniqueCandidateCount() { return uniqueCandidates().size(); }
+        public int uniqueCandidateCount(String type) {
+            int count=0;
+            for(YandexScreenParser.Candidate candidate:uniqueCandidates())
+                if(type.equals(candidate.candidateType)) count++;
+            return count;
+        }
+    }
+
+    private static final class CachedRecognition {
+        final String text; final float confidence; final YandexScreenParser.Result parsed; final String reviewPath;
+        CachedRecognition(String text,float confidence,YandexScreenParser.Result parsed,String reviewPath){
+            this.text=text;this.confidence=confidence;this.parsed=parsed;this.reviewPath=reviewPath;
+        }
+    }
+
+    private static final class VideoInput {
+        final long size;
+        final String sourceHash;
+        VideoInput(long size,String sourceHash) { this.size=size; this.sourceHash=sourceHash; }
+    }
+
+    private static final class VideoMetadata {
+        final long durationMs;
+        final String recordingDate;
+        final long sampleSpacingMs;
+        final int estimatedFrames;
+        VideoMetadata(long durationMs,String recordingDate,long sampleSpacingMs,int estimatedFrames) {
+            this.durationMs=durationMs; this.recordingDate=recordingDate;
+            this.sampleSpacingMs=sampleSpacingMs; this.estimatedFrames=estimatedFrames;
+        }
+    }
+
+    private static final class FrameExtraction {
+        final List<Observation> observations;
+        final int ocrCount;
+        FrameExtraction(List<Observation> observations,int ocrCount) {
+            this.observations=observations; this.ocrCount=ocrCount;
+        }
+    }
+
+    private VideoImportProcessor() { }
+
+    static long samplingSpacingMs(long durationMs) {
+        if(durationMs<=0) throw new IllegalArgumentException("durationMs must be positive");
+        return Math.max(MIN_SAMPLE_SPACING_MS,(durationMs+MAX_FRAMES-1)/MAX_FRAMES);
+    }
+
+    static int estimatedFrameCount(long durationMs) {
+        long spacing=samplingSpacingMs(durationMs);
+        return (int)Math.min(MAX_FRAMES,(durationMs+spacing-1)/spacing);
+    }
+
+    public static Result processFile(Context context, File video, String mimeType, String displayName,
+                                     Ocr ocr, Progress progress) throws Exception {
+        VideoInput input=validateVideoInput(context,video,mimeType,displayName,ocr);
+        MediaMetadataRetriever retriever=new MediaMetadataRetriever();
+        List<File> previewFiles=new ArrayList<>();
+        boolean complete=false;
+        try {
+            VideoMetadata metadata=readVideoMetadata(retriever,video);
+            FrameExtraction extraction=extractFrames(context,retriever,input,metadata,ocr,progress,previewFiles);
+            if(extraction.observations.isEmpty()) throw new IllegalArgumentException("Из видео не удалось извлечь кадры");
+            Result result=new Result(input.sourceHash,input.size,metadata.durationMs,
+                extraction.observations,extraction.ocrCount,metadata.recordingDate);
+            complete=true;
+            return result;
+        } finally {
+            retriever.release();
+            if(!complete) for(File image:previewFiles) image.delete();
+        }
+    }
+
+    private static VideoInput validateVideoInput(Context context,File video,String mimeType,
+            String displayName,Ocr ocr) throws Exception {
+        if(context==null||video==null||ocr==null||!video.isFile())
+            throw new IllegalArgumentException("Видео недоступно");
+        long size=video.length();
+        if(size<=0||size>MAX_VIDEO_BYTES)
+            throw new IllegalArgumentException("Размер видео должен быть от 1 байта до 2 ГБ");
+        normalizedMime(mimeType,displayName);
+        return new VideoInput(size,sha256File(video));
+    }
+
+    private static VideoMetadata readVideoMetadata(MediaMetadataRetriever retriever,File video) {
+        retriever.setDataSource(video.getAbsolutePath());
+        String rawDuration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+        long duration=rawDuration==null?0:Long.parseLong(rawDuration);
+        if(duration<=0||duration>MAX_DURATION_MS)
+            throw new IllegalArgumentException("Поддерживаются видео длительностью до 30 минут");
+        String recordingDate=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE);
+        long spacing=samplingSpacingMs(duration);
+        int estimated=estimatedFrameCount(duration);
+        return new VideoMetadata(duration,recordingDate,spacing,estimated);
+    }
+
+    private static FrameExtraction extractFrames(Context context,MediaMetadataRetriever retriever,
+            VideoInput input,VideoMetadata metadata,Ocr ocr,Progress progress,List<File> previewFiles)
+            throws Exception {
+        List<Observation> observations=new ArrayList<>();
+        Map<String,CachedRecognition> uniqueFrames=new HashMap<>();
+        int ocrCount=0,index=0;
+        for(long timestamp=0;timestamp<metadata.durationMs&&index<MAX_FRAMES;
+                timestamp+=metadata.sampleSpacingMs,index++) {
+            Bitmap original=retriever.getFrameAtTime(timestamp*1000L,MediaMetadataRetriever.OPTION_CLOSEST);
+            if(original==null) continue;
+            Bitmap frame=scale(original,MAX_BITMAP_SIDE);
+            if(frame!=original) original.recycle();
+            try {
+                String frameHash=sha256Bitmap(frame);
+                CachedRecognition cached=uniqueFrames.get(frameHash);
+                if(cached==null) {
+                    cached=recognizeFrame(context,input.sourceHash,timestamp,frame,ocr);
+                    if(cached.reviewPath!=null)
+                        previewFiles.add(new File(context.getFilesDir(),cached.reviewPath));
+                    uniqueFrames.put(frameHash,cached);
+                    ocrCount++;
+                }
+                observations.add(new Observation(index,timestamp,frameHash,cached.text,cached.confidence,
+                    cached.parsed,cached.reviewPath));
+            } finally { frame.recycle(); }
+            if(progress!=null) progress.onProgress(index+1,metadata.estimatedFrames);
+        }
+        return new FrameExtraction(observations,ocrCount);
+    }
+
+    private static CachedRecognition recognizeFrame(Context context,String sourceHash,long timestamp,
+            Bitmap frame,Ocr ocr) throws Exception {
+        TesseractOcrEngine.Recognition recognized=ocr.recognize(frame);
+        YandexScreenParser.Result parsed=YandexScreenParser.parse(recognized.text,recognized.hocrText);
+        // The first OCR pass can miss the word "Детали" on exactly the frames
+        // where a second pass is needed. Always inspect the card region; the parser
+        // accepts only a complete order ID, completed status and chronological timestamp pair.
+        int top=Math.round(frame.getHeight()*0.30f);
+        int bottom=Math.round(frame.getHeight()*0.79f);
+        Bitmap focused=Bitmap.createBitmap(frame,0,top,frame.getWidth(),bottom-top);
+        try {
+            TesseractOcrEngine.Recognition detail=ocr.recognizeFocused(focused);
+            parsed=YandexScreenParser.withFocusedOrderDetail(parsed,detail.text,detail.hocrText);
+        } finally { focused.recycle(); }
+        String reviewPath=parsed.reviewRequired?saveUnknownFrame(context,sourceHash,timestamp,frame):null;
+        return new CachedRecognition(recognized.text,recognized.confidence,parsed,reviewPath);
+    }
+
+    public static String normalizedMime(String mimeType,String displayName) {
+        String mime=mimeType==null?"":mimeType.toLowerCase(Locale.ROOT);
+        String name=displayName==null?"":displayName.toLowerCase(Locale.ROOT);
+        if("video/mp4".equals(mime) || name.endsWith(".mp4")) return "video/mp4";
+        if("video/quicktime".equals(mime) || name.endsWith(".mov")) return "video/quicktime";
+        throw new IllegalArgumentException("Выберите видео MP4 или MOV");
+    }
+
+    private static Bitmap scale(Bitmap bitmap,int maxSide) {
+        Bitmap source=bitmap;
+        if(bitmap.getConfig()!=Bitmap.Config.ARGB_8888) {
+            source=bitmap.copy(Bitmap.Config.ARGB_8888,false);
+            if(source==null) throw new IllegalStateException("Video frame could not be converted to ARGB_8888");
+        }
+        int max=Math.max(source.getWidth(),source.getHeight());
+        if(max<=maxSide) return source;
+        float ratio=maxSide/(float)max;
+        Bitmap scaled=Bitmap.createScaledBitmap(source,Math.max(1,Math.round(source.getWidth()*ratio)),
+            Math.max(1,Math.round(source.getHeight()*ratio)),true);
+        if(source!=bitmap) source.recycle();
+        return scaled;
+    }
+
+    private static String saveUnknownFrame(Context context,String videoHash,long timestamp,Bitmap bitmap) throws Exception {
+        File directory=new File(context.getFilesDir(),"m4-review");
+        if(!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot save unknown screen for review");
+        String name="m4_"+videoHash.substring(0,16)+"_"+timestamp+".jpg";
+        File target=new File(directory,name);
+        try(FileOutputStream out=new FileOutputStream(target)) {
+            if(!bitmap.compress(Bitmap.CompressFormat.JPEG,85,out)) throw new IllegalStateException("Frame image encoding failed");
+            out.getFD().sync();
+        }
+        return "m4-review/"+name;
+    }
+
+    private static String sha256File(File file) throws Exception {
+        MessageDigest digest=MessageDigest.getInstance("SHA-256");
+        try(java.io.FileInputStream input=new java.io.FileInputStream(file)) {
+            byte[] buffer=new byte[64*1024]; int count;
+            while((count=input.read(buffer))!=-1) digest.update(buffer,0,count);
+        }
+        return hex(digest.digest());
+    }
+
+    private static String sha256Bitmap(Bitmap bitmap) throws Exception {
+        int[] pixels=new int[bitmap.getWidth()*bitmap.getHeight()];
+        bitmap.getPixels(pixels,0,bitmap.getWidth(),0,0,bitmap.getWidth(),bitmap.getHeight());
+        MessageDigest digest=MessageDigest.getInstance("SHA-256");
+        ByteBuffer buffer=ByteBuffer.allocate(4*1024);
+        for(int pixel:pixels) {
+            if(buffer.remaining()<4) { digest.update(buffer.array(),0,buffer.position()); buffer.clear(); }
+            buffer.putInt(pixel);
+        }
+        if(buffer.position()>0) digest.update(buffer.array(),0,buffer.position());
+        return hex(digest.digest());
+    }
+
+    private static String hex(byte[] bytes) {
+        StringBuilder result=new StringBuilder(bytes.length*2);
+        for(byte value:bytes) result.append(String.format(Locale.ROOT,"%02x",value&0xff));
+        return result.toString();
+    }
+}
