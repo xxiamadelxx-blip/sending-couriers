@@ -500,22 +500,43 @@ public final class VideoImportProcessor {
             String slotId=value(row,"slot_id"),key=row.mergeKey();
             int minute=orderMinute(row);
             for(Observation observation:observations) {
-                List<YandexScreenParser.Candidate> frameRows=new ArrayList<>();
-                for(YandexScreenParser.Candidate candidate:frames.get(observation.frameIndex))
-                    if("ORDER_LIST_ROW".equals(candidate.candidateType)&&orderMinute(candidate)>=0
-                            &&same(slotId,value(candidate,"slot_id")))
-                        frameRows.add(candidate);
-                for(int i=1;i+1<frameRows.size();i++) {
-                    if(!key.equals(frameRows.get(i).mergeKey())) continue;
-                    YandexScreenParser.Candidate before=frameRows.get(i-1),after=frameRows.get(i+1);
-                    SupportedCandidate beforeSupport=evidence.get(before.mergeKey());
-                    SupportedCandidate afterSupport=evidence.get(after.mergeKey());
-                    if(beforeSupport==null||beforeSupport.frames<2||afterSupport==null||afterSupport.frames<2) continue;
-                    int left=orderMinute(before),right=orderMinute(after);
-                    if(left<minute-5&&right<minute-5 || left>minute+5&&right>minute+5) return true;
-                }
+                List<YandexScreenParser.Candidate> frameRows=orderRowsForSlot(
+                    frames.get(observation.frameIndex),slotId);
+                if(hasStableNeighborReversal(frameRows,key,minute,evidence)) return true;
             }
             return false;
+        }
+
+        private static List<YandexScreenParser.Candidate> orderRowsForSlot(
+                List<YandexScreenParser.Candidate> candidates,String slotId) {
+            List<YandexScreenParser.Candidate> rows=new ArrayList<>();
+            for(YandexScreenParser.Candidate candidate:candidates)
+                if("ORDER_LIST_ROW".equals(candidate.candidateType)&&orderMinute(candidate)>=0
+                        &&same(slotId,value(candidate,"slot_id"))) rows.add(candidate);
+            return rows;
+        }
+
+        private static boolean hasStableNeighborReversal(List<YandexScreenParser.Candidate> frameRows,
+                String key,int minute,Map<String,SupportedCandidate> evidence) {
+            for(int i=1;i+1<frameRows.size();i++) {
+                if(!key.equals(frameRows.get(i).mergeKey())) continue;
+                YandexScreenParser.Candidate before=frameRows.get(i-1),after=frameRows.get(i+1);
+                if(!hasRepeatedSupport(before,evidence)||!hasRepeatedSupport(after,evidence)) continue;
+                if(timesAreOnSameSideOfCandidate(before,after,minute)) return true;
+            }
+            return false;
+        }
+
+        private static boolean hasRepeatedSupport(YandexScreenParser.Candidate candidate,
+                Map<String,SupportedCandidate> evidence) {
+            SupportedCandidate support=evidence.get(candidate.mergeKey());
+            return support!=null&&support.frames>=2;
+        }
+
+        private static boolean timesAreOnSameSideOfCandidate(
+                YandexScreenParser.Candidate before,YandexScreenParser.Candidate after,int minute) {
+            int left=orderMinute(before),right=orderMinute(after);
+            return left<minute-5&&right<minute-5 || left>minute+5&&right>minute+5;
         }
 
         private static Integer parseInteger(String value) {
