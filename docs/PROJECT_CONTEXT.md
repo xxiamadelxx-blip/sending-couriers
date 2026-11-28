@@ -3,7 +3,7 @@
 ## Canonical line
 - Active branch: `refactor/deep-cleanup-20261104-recovered`; draft PR [#19](https://github.com/xxiamadelxx-blip/sending-couriers/pull/19) targets `main`. Keep one branch; do not merge before acceptance.
 - App identity: **1.7.36 / versionCode 50**, package `ru.courier.finance.transfer`.
-- Latest fully verified app source: `fb4cacf746e8b8eea5447bcc871407123b9e94a2`; tested PR merge SHA: `535d9be6e01cf5a8eb067b3bf38246a8123e335d`.
+- Latest app source checkpoint: `35da0f839ac444fb9fc21477cda36c9ffba20a89`; draft PR #19 remains open. The source-built UI audit [#46067506056](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/46067506056) ran `npm test`, the full Python suite, code-quality and Android 35 UI gates successfully. `android-qa.yml` uses older APK fixtures and is not source-SHA evidence.
 
 ## Product and architecture
 - Courier shift and income tracker with history, bonuses, forecast, XLSX/JSON import and export.
@@ -12,17 +12,15 @@
 - See [README](../README.md) and [ARCHITECTURE](ARCHITECTURE.md).
 
 ## Confirmed cleanup state
-- Refactors through `readDayFactInput` preserve validation order, saved facts, and active work time versus full-slot duration.
+- Refactors through `countForecast` preserve validation order, saved facts, and active work time versus full-slot duration. `countForecast` now separates history aggregation, model evaluation, confidence/reason shaping and fallback result construction. Its peak CC fell from 39 to 18; aggregate complexity increased by 5.
 - `history` moved its existing card markup and event binding into focused helpers; the HTML and handlers matched the parent source.
 - At `fb4cacf`, `WorkbookReader.read` was split into package loading, shared strings, relationship parsing, sheet rows and cell values. Limits, parse order, allowed sheets, formula markers and JSON output were retained.
 - The workbook change leaves financial formulas, schema, import mapping, UI copy/styles and Android bridge contracts untouched.
 
 ## Verification
-- Source-built UI audit [#46054348428](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/46054348428) passed on the exact source SHA: JavaScript 281/281, Python 99/99, code-quality, and critical finance mutations 28/28.
-- All Android 35 gates passed: `ui_matrix`, `action_layout`, `field_labels`, `xlsx_import`, `large_font_form`, `transfer_upgrade`. XLSX import twice retained the same two order facts; same-signer update retained one record (4 h / 8 orders / 1,200 ₽).
-- Evidence: [UI and emulator captures](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/46054348428/artifacts/15227629650), [test-only APK](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/46054348428/artifacts/15226410652), [unsigned transfer package](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/46054348428/artifacts/15228820155).
-- Those APKs use temporary test signing or are unsigned. No owner-signed APK/upgrade was tested. `android-qa.yml` uses old APK fixtures and is not current-source evidence.
+- At `35da0f8`, npm, Python, code-quality, financial mutation checks (28/28), APK builds, and all six source-built Android 35 gates passed. UI audit evidence: [run #46067506056](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/46067506056); Android smoke run: [#46067505944](https://github.com/xxiamadelxx-blip/sending-couriers/actions/runs/46067505944).
+- The transfer-upgrade gate uses temporary test signing. CI outputs a test-only APK and unsigned transfer package; no owner-signed production APK or production-key upgrade was tested. `android-qa.yml` uses older APK fixtures and is not current-source evidence.
 
 ## Current change
-- `renderSlotWorkingEditor` (CC 25) is being separated into its existing markup and interaction responsibilities in `web/app.mjs`. The template and event block were compared with the verified parent and copied byte-for-byte. Tests assert the same accessible choices, mode field, delegation order and dirty-state tracking.
-- This candidate is not yet verified. Run current-source Node/Python regressions, code-quality, APK build and Android 35 gates before calling it complete. No visual change is intended.
+- Next target: `VideoImportProcessor.Result.uniqueCandidates()` (CC 86 at `35da0f8`). The function normalizes slot context, merges repeated OCR candidates, identifies scan direction and reconciles weak OCR variants. Keep raw per-frame evidence, candidate ordering, amounts and count/total reconciliation unchanged.
+- A regression now asserts that deduplication does not mutate frame evidence, returns an immutable result and preserves the two distinct same-time order rows in order. M4 unit tests were not part of the `35da0f8` UI audit; this active branch is added to the existing M4 workflow trigger so the test suite can verify the baseline before refactoring.

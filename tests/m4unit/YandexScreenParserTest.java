@@ -351,13 +351,23 @@ public final class YandexScreenParserTest {
                 new VideoImportProcessor.Observation(0,0,"frame1",screen,1f,parsed,null),
                 new VideoImportProcessor.Observation(1,1500,"frame2",screen,1f,parsed,null)),2);
         assertEquals(2,video.uniqueCandidateCount("ORDER_LIST_ROW"));
+        java.util.List<YandexScreenParser.Candidate> rawFrame=video.observations.get(0).candidates;
+        int rawCandidateCount=rawFrame.size();
+        java.util.List<YandexScreenParser.Candidate> unique=video.uniqueCandidates();
+        assertEquals(rawCandidateCount,rawFrame.size());
+        assertTrue(rawFrame.get(0)==parsed.candidates.get(0));
+        try { unique.clear(); fail("deduplicated candidates must be immutable"); }
+        catch(UnsupportedOperationException expected) { }
         int occurrences=0;
-        for(YandexScreenParser.Candidate row:video.uniqueCandidates()) if("ORDER_LIST_ROW".equals(row.candidateType)) {
+        java.util.List<String> rowOrder=new java.util.ArrayList<>();
+        for(YandexScreenParser.Candidate row:unique) if("ORDER_LIST_ROW".equals(row.candidateType)) {
             String ordinal=field(row,"occurrence");
             assertTrue("1".equals(ordinal)||"2".equals(ordinal));
             occurrences+=Integer.parseInt(ordinal);
+            rowOrder.add(field(row,"order_time")+"#"+ordinal);
         }
         assertEquals(3,occurrences);
+        assertEquals(java.util.Arrays.asList("18:57#1","18:57#2"),rowOrder);
     }
 
     @Test public void keepsEveningThenMorningSlotsSeparateInOneContinuousVideo() {
