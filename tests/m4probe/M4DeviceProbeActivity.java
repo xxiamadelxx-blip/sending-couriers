@@ -68,6 +68,8 @@ public final class M4DeviceProbeActivity extends Activity {
             retriever.release();
             if(duration==null) throw new AssertionError("fixture video has no duration metadata");
 
+            stage("verify cleanup after a failed import");
+            verifyReviewCleanupAfterFailure(video);
             stage("extract frames and run local OCR");
             VideoImportProcessor.Result result;
             try(TesseractOcrEngine ocr=new TesseractOcrEngine(this)) {
@@ -167,6 +169,28 @@ public final class M4DeviceProbeActivity extends Activity {
         if(focusedReads.get()<1||result.uniqueCandidateCount("ORDER_DETAIL")!=1)
             throw new AssertionError("focused OCR was gated by unreadable full-frame text: calls="
                 +focusedReads.get()+", details="+result.uniqueCandidateCount("ORDER_DETAIL"));
+    }
+
+    private void verifyReviewCleanupAfterFailure(File video) throws Exception {
+        File reviewDirectory=new File(getFilesDir(),"m4-review");
+        java.util.Set<String> existing=reviewFileNames(reviewDirectory);
+        try {
+            VideoImportProcessor.processFile(this,video,"video/mp4","failed-import-test.mp4",
+                bitmap->new TesseractOcrEngine.Recognition("",0f,""),
+                (completed,estimated)->{ throw new IllegalStateException("synthetic progress stop"); });
+            throw new AssertionError("expected synthetic progress failure");
+        } catch(IllegalStateException expected) {
+            if(!"synthetic progress stop".equals(expected.getMessage())) throw expected;
+        }
+        if(!existing.equals(reviewFileNames(reviewDirectory)))
+            throw new AssertionError("failed import left a temporary review image");
+    }
+
+    private static java.util.Set<String> reviewFileNames(File directory) {
+        java.util.Set<String> names=new java.util.HashSet<>();
+        File[] files=directory.listFiles();
+        if(files!=null) for(File file:files) if(file.isFile()) names.add(file.getName());
+        return names;
     }
 
     private void verifyAmountIndependentTimePersistence() throws Exception {

@@ -603,6 +603,31 @@ public final class VideoImportProcessor {
         }
     }
 
+    private static final class VideoInput {
+        final long size;
+        final String sourceHash;
+        VideoInput(long size,String sourceHash) { this.size=size; this.sourceHash=sourceHash; }
+    }
+
+    private static final class VideoMetadata {
+        final long durationMs;
+        final String recordingDate;
+        final long sampleSpacingMs;
+        final int estimatedFrames;
+        VideoMetadata(long durationMs,String recordingDate,long sampleSpacingMs,int estimatedFrames) {
+            this.durationMs=durationMs; this.recordingDate=recordingDate;
+            this.sampleSpacingMs=sampleSpacingMs; this.estimatedFrames=estimatedFrames;
+        }
+    }
+
+    private static final class FrameExtraction {
+        final List<Observation> observations;
+        final int ocrCount;
+        FrameExtraction(List<Observation> observations,int ocrCount) {
+            this.observations=observations; this.ocrCount=ocrCount;
+        }
+    }
+
     private VideoImportProcessor() { }
 
     static long samplingSpacingMs(long durationMs) {
@@ -617,66 +642,93 @@ public final class VideoImportProcessor {
 
     public static Result processFile(Context context, File video, String mimeType, String displayName,
                                      Ocr ocr, Progress progress) throws Exception {
-        if (context==null || video==null || ocr==null || !video.isFile()) throw new IllegalArgumentException("Видео недоступно");
-        long size=video.length();
-        if(size<=0 || size>MAX_VIDEO_BYTES) throw new IllegalArgumentException("Размер видео должен быть от 1 байта до 2 ГБ");
-        normalizedMime(mimeType,displayName);
-        String sourceHash=sha256File(video);
+        VideoInput input=validateVideoInput(context,video,mimeType,displayName,ocr);
         MediaMetadataRetriever retriever=new MediaMetadataRetriever();
-        List<Observation> rows=new ArrayList<>();
         List<File> previewFiles=new ArrayList<>();
-        Map<String,CachedRecognition> uniqueFrames=new HashMap<>();
-        int ocrCount=0;
         boolean complete=false;
         try {
-            retriever.setDataSource(video.getAbsolutePath());
-            String rawDuration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-            long duration=rawDuration==null?0:Long.parseLong(rawDuration);
-            if(duration<=0 || duration>MAX_DURATION_MS) throw new IllegalArgumentException("Поддерживаются видео длительностью до 30 минут");
-            String recordingDateMetadata=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE);
-            long spacing=samplingSpacingMs(duration);
-            int estimated=estimatedFrameCount(duration);
-            int index=0;
-            for(long timestamp=0;timestamp<duration && index<MAX_FRAMES;timestamp+=spacing,index++) {
-                Bitmap original=retriever.getFrameAtTime(timestamp*1000L,MediaMetadataRetriever.OPTION_CLOSEST);
-                if(original==null) continue;
-                Bitmap frame=scale(original,MAX_BITMAP_SIDE);
-                if(frame!=original) original.recycle();
-                try {
-                    String frameHash=sha256Bitmap(frame);
-                    CachedRecognition cached=uniqueFrames.get(frameHash);
-                    if(cached==null) {
-                        TesseractOcrEngine.Recognition recognized=ocr.recognize(frame);
-                        YandexScreenParser.Result parsed=YandexScreenParser.parse(recognized.text,recognized.hocrText);
-                        // The first OCR pass can miss the word "Детали" on exactly
-                        // the frames where a second pass is needed. Always inspect
-                        // the card region; the parser accepts only a complete order
-                        // ID, completed status and chronological timestamp pair.
-                        int top=Math.round(frame.getHeight()*0.30f);
-                        int bottom=Math.round(frame.getHeight()*0.79f);
-                        Bitmap focused=Bitmap.createBitmap(frame,0,top,frame.getWidth(),bottom-top);
-                        try {
-                            TesseractOcrEngine.Recognition detail=ocr.recognizeFocused(focused);
-                            parsed=YandexScreenParser.withFocusedOrderDetail(parsed,detail.text,detail.hocrText);
-                        } finally { focused.recycle(); }
-                        String reviewPath=parsed.reviewRequired?saveUnknownFrame(context,sourceHash,timestamp,frame):null;
-                        if(reviewPath!=null) previewFiles.add(new File(context.getFilesDir(),reviewPath));
-                        cached=new CachedRecognition(recognized.text,recognized.confidence,parsed,reviewPath);
-                        uniqueFrames.put(frameHash,cached);
-                        ocrCount++;
-                    }
-                    rows.add(new Observation(index,timestamp,frameHash,cached.text,cached.confidence,cached.parsed,cached.reviewPath));
-                } finally { frame.recycle(); }
-                if(progress!=null) progress.onProgress(index+1,estimated);
-            }
-            if(rows.isEmpty()) throw new IllegalArgumentException("Из видео не удалось извлечь кадры");
-            Result result=new Result(sourceHash,size,duration,rows,ocrCount,recordingDateMetadata);
+            VideoMetadata metadata=readVideoMetadata(retriever,video);
+            FrameExtraction extraction=extractFrames(context,retriever,input,metadata,ocr,progress,previewFiles);
+            if(extraction.observations.isEmpty()) throw new IllegalArgumentException("Из видео не удалось извлечь кадры");
+            Result result=new Result(input.sourceHash,input.size,metadata.durationMs,
+                extraction.observations,extraction.ocrCount,metadata.recordingDate);
             complete=true;
             return result;
         } finally {
             retriever.release();
             if(!complete) for(File image:previewFiles) image.delete();
         }
+    }
+
+    private static VideoInput validateVideoInput(Context context,File video,String mimeType,
+            String displayName,Ocr ocr) throws Exception {
+        if(context==null||video==null||ocr==null||!video.isFile())
+            throw new IllegalArgumentException("Видео недоступно");
+        long size=video.length();
+        if(size<=0||size>MAX_VIDEO_BYTES)
+            throw new IllegalArgumentException("Размер видео должен быть от 1 байта до 2 ГБ");
+        normalizedMime(mimeType,displayName);
+        return new VideoInput(size,sha256File(video));
+    }
+
+    private static VideoMetadata readVideoMetadata(MediaMetadataRetriever retriever,File video) {
+        retriever.setDataSource(video.getAbsolutePath());
+        String rawDuration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+        long duration=rawDuration==null?0:Long.parseLong(rawDuration);
+        if(duration<=0||duration>MAX_DURATION_MS)
+            throw new IllegalArgumentException("Поддерживаются видео длительностью до 30 минут");
+        String recordingDate=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE);
+        long spacing=samplingSpacingMs(duration);
+        int estimated=estimatedFrameCount(duration);
+        return new VideoMetadata(duration,recordingDate,spacing,estimated);
+    }
+
+    private static FrameExtraction extractFrames(Context context,MediaMetadataRetriever retriever,
+            VideoInput input,VideoMetadata metadata,Ocr ocr,Progress progress,List<File> previewFiles)
+            throws Exception {
+        List<Observation> observations=new ArrayList<>();
+        Map<String,CachedRecognition> uniqueFrames=new HashMap<>();
+        int ocrCount=0,index=0;
+        for(long timestamp=0;timestamp<metadata.durationMs&&index<MAX_FRAMES;
+                timestamp+=metadata.sampleSpacingMs,index++) {
+            Bitmap original=retriever.getFrameAtTime(timestamp*1000L,MediaMetadataRetriever.OPTION_CLOSEST);
+            if(original==null) continue;
+            Bitmap frame=scale(original,MAX_BITMAP_SIDE);
+            if(frame!=original) original.recycle();
+            try {
+                String frameHash=sha256Bitmap(frame);
+                CachedRecognition cached=uniqueFrames.get(frameHash);
+                if(cached==null) {
+                    cached=recognizeFrame(context,input.sourceHash,timestamp,frame,ocr);
+                    if(cached.reviewPath!=null)
+                        previewFiles.add(new File(context.getFilesDir(),cached.reviewPath));
+                    uniqueFrames.put(frameHash,cached);
+                    ocrCount++;
+                }
+                observations.add(new Observation(index,timestamp,frameHash,cached.text,cached.confidence,
+                    cached.parsed,cached.reviewPath));
+            } finally { frame.recycle(); }
+            if(progress!=null) progress.onProgress(index+1,metadata.estimatedFrames);
+        }
+        return new FrameExtraction(observations,ocrCount);
+    }
+
+    private static CachedRecognition recognizeFrame(Context context,String sourceHash,long timestamp,
+            Bitmap frame,Ocr ocr) throws Exception {
+        TesseractOcrEngine.Recognition recognized=ocr.recognize(frame);
+        YandexScreenParser.Result parsed=YandexScreenParser.parse(recognized.text,recognized.hocrText);
+        // The first OCR pass can miss the word "Детали" on exactly the frames
+        // where a second pass is needed. Always inspect the card region; the parser
+        // accepts only a complete order ID, completed status and chronological timestamp pair.
+        int top=Math.round(frame.getHeight()*0.30f);
+        int bottom=Math.round(frame.getHeight()*0.79f);
+        Bitmap focused=Bitmap.createBitmap(frame,0,top,frame.getWidth(),bottom-top);
+        try {
+            TesseractOcrEngine.Recognition detail=ocr.recognizeFocused(focused);
+            parsed=YandexScreenParser.withFocusedOrderDetail(parsed,detail.text,detail.hocrText);
+        } finally { focused.recycle(); }
+        String reviewPath=parsed.reviewRequired?saveUnknownFrame(context,sourceHash,timestamp,frame):null;
+        return new CachedRecognition(recognized.text,recognized.confidence,parsed,reviewPath);
     }
 
     public static String normalizedMime(String mimeType,String displayName) {
