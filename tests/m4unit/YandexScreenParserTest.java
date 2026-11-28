@@ -772,8 +772,11 @@ public final class YandexScreenParserTest {
     }
 
     @Test public void removesWeakBackwardRowAtEndOfAscendingScan() {
-        String slot="Слот: 301,00 ₽\\n341681811\\n3 заказа · 3 км\\n"
-            +"Начало\\n2026.10.18 07:30\\nЗавершение\\n2026.10.18 22:00";
+        String slot="Слот: 301,00 ₽\\n341681811\\n3 заказа · 3 км\\n07:30 — 22:00";
+        YandexScreenParser.Candidate parsedSlot=find(YandexScreenParser.parse(slot),"SLOT_DETAIL");
+        assertNotNull(parsedSlot);
+        assertEquals("07:30",field(parsedSlot,"slot_start_time"));
+        assertEquals("22:00",field(parsedSlot,"slot_end_time"));
         String stable="Яндекс Про\\nЗаказы\\n10:00 100,00 ₽ >\\n10:30 100,00 ₽ >\\n11:00 100,00 ₽ >";
         String reversed="Яндекс Про\\nЗаказы\\n10:00 100,00 ₽ >\\n10:30 100,00 ₽ >\\n09:58 100,00 ₽ >";
         VideoImportProcessor.Result video=new VideoImportProcessor.Result("source",1,6000,
